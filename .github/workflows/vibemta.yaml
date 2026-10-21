@@ -1,0 +1,150 @@
+# VibeMTA: builds the branded client (Windows) and the matching servers (Windows x64, Linux x64),
+# then publishes them as a GitHub release. The launcher downloads the client from the latest release.
+name: VibeMTA build
+
+on:
+  push:
+    branches: [vibemta]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  BDATA: https://mirror-cdn.multitheftauto.com/bdata
+
+jobs:
+  windows:
+    name: Windows (client + server x64)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        id: cache-dxfiles
+        with:
+          path: utils/DXFiles
+          key: dxfiles-0001
+
+      - name: Download DirectX
+        if: steps.cache-dxfiles.outputs.cache-hit != 'true'
+        run: Invoke-WebRequest "$env:BDATA/DXFiles.zip" -OutFile utils/DXFiles.zip
+        shell: powershell
+
+      - name: Extract DirectX
+        if: steps.cache-dxfiles.outputs.cache-hit != 'true'
+        run: Expand-Archive -Path utils/DXFiles.zip -DestinationPath utils/DXFiles
+        shell: powershell
+
+      - name: Install CEF
+        run: utils\premake5 install_cef
+
+      - name: Install data files
+        run: utils\premake5 install_data
+
+      - name: Fork net modules (client netc + 64-bit server net)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest "$env:BDATA/fork-support/netc.dll" -OutFile Bin/MTA/netc.dll
+          Copy-Item Bin/MTA/netc.dll Bin/MTA/netc_d.dll -Force
+          try {
+            Invoke-WebRequest "$env:BDATA/fork-support/net_64.dll" -OutFile Bin/server/x64/net.dll
+            Copy-Item Bin/server/x64/net.dll Bin/server/x64/net_d.dll -Force
+            Write-Host "fork-support server net module installed"
+          } catch {
+            Write-Warning "No fork-support net_64.dll on the mirror, keeping the regular developer server net module"
+          }
+
+      - name: Build win32 (client)
+        run: win-build.bat release win32
+        shell: cmd
+        env:
+          DXSDK_DIR: './utils/DXFiles/'
+          CI: 'true'
+
+      - name: Build x64 (server)
+        run: win-build.bat release x64
+        shell: cmd
+        env:
+          DXSDK_DIR: './utils/DXFiles/'
+          CI: 'true'
+
+      - name: Compose files
+        run: utils\premake5 compose_files
+
+      - name: Package
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force out, pkg/client, pkg/server | Out-Null
+          # kliens: minden, ami nem a szerver
+          Get-ChildItem InstallFiles | Where-Object { $_.Name -ne 'server' } | ForEach-Object { Copy-Item $_.FullName pkg/client -Recurse -Force }
+          Copy-Item LICENSE pkg/client/LICENSE.txt
+          Compress-Archive -Path pkg/client/* -DestinationPath out/VibeMTA-Kliens.zip -CompressionLevel Optimal
+          # szerver (Windows, 64 bit)
+          Copy-Item InstallFiles/server/* pkg/server -Recurse -Force
+          Copy-Item LICENSE pkg/server/LICENSE.txt
+          Compress-Archive -Path pkg/server/* -DestinationPath out/VibeMTA-Szerver-win64.zip -CompressionLevel Optimal
+          Get-ChildItem out | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: out/
+
+  linux:
+    name: Linux server x64
+    runs-on: ubuntu-latest
+    container:
+      image: docker://ghcr.io/multitheftauto/mtasa-blue-build:1.6.0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: ./linux-build.sh --arch=x64
+
+      - name: Data + fork net module
+        run: |
+          utils/premake5 install_data
+          if curl -fsSL "$BDATA/fork-support/net_64.so" -o /tmp/net_64.so; then
+            cp /tmp/net_64.so Bin/server/x64/net.so
+            cp /tmp/net_64.so Bin/server/x64/net_d.so
+            echo "fork-support server net module installed"
+          else
+            echo "::warning::No fork-support net_64.so on the mirror, keeping the regular developer server net module"
+          fi
+
+      - name: Package
+        run: |
+          mkdir -p out
+          cp LICENSE Bin/server/LICENSE.txt
+          tar -C Bin -czf out/VibeMTA-Szerver-linux64.tar.gz server
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: out/
+
+  release:
+    name: Release
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="build-${{ github.run_number }}"
+          gh release create "$TAG" dist/* \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "VibeMTA kliens #${{ github.run_number }}" \
+            --notes "Automatikus build ($GITHUB_SHA). A kliens forráskódja ebben a repóban (GPLv3)." \
+            --latest
