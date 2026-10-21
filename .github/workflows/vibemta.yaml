@@ -42,19 +42,14 @@ jobs:
       - name: Install data files
         run: utils\premake5 install_data
 
-      - name: Fork net modules (client netc + 64-bit server net)
+      - name: Fork net module (client netc)
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           Invoke-WebRequest "$env:BDATA/fork-support/netc.dll" -OutFile Bin/MTA/netc.dll
           Copy-Item Bin/MTA/netc.dll Bin/MTA/netc_d.dll -Force
-          try {
-            Invoke-WebRequest "$env:BDATA/fork-support/net_64.dll" -OutFile Bin/server/x64/net.dll
-            Copy-Item Bin/server/x64/net.dll Bin/server/x64/net_d.dll -Force
-            Write-Host "fork-support server net module installed"
-          } catch {
-            Write-Warning "No fork-support net_64.dll on the mirror, keeping the regular developer server net module"
-          }
+          # szerver: a "Forks Full AC" leírás szerint a sima fejlesztői 64 bites net modul kell (bdata/net_64.dll) - ezt az install_data már letöltötte
+          (Get-Item Bin/server/x64/net.dll).VersionInfo | Format-List FileVersion, ProductVersion
 
       - name: Build win32 (client)
         run: |
@@ -145,10 +140,9 @@ jobs:
           cp -n Server/mods/deathmatch/*.conf Server/mods/deathmatch/*.xml Bin/server/mods/deathmatch/ 2>/dev/null || true
           cp -n Server/mods/deathmatch/mtaserver.conf.template Bin/server/mods/deathmatch/ 2>/dev/null || true
           # szerver net modul: fork-support, különben a sima fejlesztői
-          if get "$BDATA/fork-support/net_64.so" Bin/server/x64/net.so; then
-            note "fork-support net_64.so installed"
-          elif get "$BDATA/net_64.so" Bin/server/x64/net.so; then
-            echo "::warning::No fork-support net_64.so on the mirror, using the regular developer server net module"
+          # a "Forks Full AC" leírás szerint a szerverre a sima fejlesztői 64 bites net modul kell
+          if get "$BDATA/net_64.so" Bin/server/x64/net.so; then
+            note "developer net_64.so installed"
           else
             fail "could not download any server net module"
           fi
