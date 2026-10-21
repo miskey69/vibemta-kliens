@@ -4,7 +4,6 @@ project "Client Launcher"
 	targetname "Multi Theft Auto"
 	targetdir(buildpath("."))
 	debugdir(buildpath("."))
-	clangtidy "On"
 
 	includedirs {
 		"../../Shared/sdk",

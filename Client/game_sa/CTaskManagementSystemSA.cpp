@@ -114,7 +114,7 @@ CTaskSA* CTaskManagementSystemSA::GetTask(CTaskSAInterface* pTaskInterface)
     // GTA SA base is around 0x400000-0x900000 range
     constexpr DWORD GTA_BASE_MIN = 0x400000;
     constexpr DWORD GTA_BASE_MAX = 0x900000;
-    DWORD           dwVTableAddr = reinterpret_cast<DWORD>(pVTBL);
+    DWORD dwVTableAddr = reinterpret_cast<DWORD>(pVTBL);
     if (dwVTableAddr < GTA_BASE_MIN || dwVTableAddr > GTA_BASE_MAX)
         return nullptr;
 
@@ -138,14 +138,12 @@ CTaskSA* CTaskManagementSystemSA::GetTask(CTaskSAInterface* pTaskInterface)
     DWORD dwFunc = pVTBL->GetTaskType;
     if (dwFunc && dwFunc != 0x82263A)
     {
-        // clang-format off
         __asm
         {
             mov     ecx, pTaskInterface
             call    dwFunc
             mov     iTaskType, eax
         }
-        // clang-format on
     }
 
     // Create it and add it to our list
@@ -283,7 +281,6 @@ static void __declspec(naked) HOOK_CTask_Operator_Delete()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -298,5 +295,4 @@ static void __declspec(naked) HOOK_CTask_Operator_Delete()
         add     eax, 6
         jmp     eax
     }
-    // clang-format on
 }

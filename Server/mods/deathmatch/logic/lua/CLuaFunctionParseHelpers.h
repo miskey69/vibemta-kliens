@@ -15,10 +15,11 @@
 #include "CEasingCurve.h"
 #include "CAccessControlListRight.h"
 #include <type_traits>
-#include "lua/CLuaVector2.h"
-#include "lua/CLuaVector3.h"
-#include "lua/CLuaVector4.h"
-#include "lua/CLuaMatrix.h"
+
+class CLuaVector2D;
+class CLuaVector3D;
+class CLuaVector4D;
+class CLuaMatrix;
 
 // Forward declare enum reflection stuff
 enum eLuaType
@@ -55,8 +56,8 @@ enum eHudComponent
     HUD_WANTED,
     HUD_CROSSHAIR,
     HUD_ALL,
-    HUD_VITAL_STATS,  // Unused on server, but used on client side
-    HUD_HELP_TEXT,    // Unused on server, but used on client side
+    HUD_VITAL_STATS,    // Unused on server, but used on client side
+    HUD_HELP_TEXT,      // Unused on server, but used on client side
     HUD_RADAR_MAP,
     HUD_RADAR_BLIPS,
     HUD_RADAR_ALTIMETER,
@@ -310,6 +311,26 @@ CTextDisplay* UserDataCast(CTextDisplay* ptr, lua_State* luaState);
 // CBan from userdata
 //
 CBan* UserDataCast(CBan* ptr, lua_State* luaState);
+
+//
+// CLuaVector2D from userdata
+//
+CLuaVector2D* UserDataCast(CLuaVector2D* ptr, lua_State* luaState);
+
+//
+// CLuaVector3D from userdata
+//
+CLuaVector3D* UserDataCast(CLuaVector3D* ptr, lua_State* luaState);
+
+//
+// CLuaVector4D from userdata
+//
+CLuaVector4D* UserDataCast(CLuaVector4D* ptr, lua_State* luaState);
+
+//
+// CLuaMatrix from userdata
+//
+CLuaMatrix* UserDataCast(CLuaMatrix* ptr, lua_State* luaState);
 
 //
 // CElement from userdata

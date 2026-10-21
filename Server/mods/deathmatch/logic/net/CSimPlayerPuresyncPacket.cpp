@@ -13,14 +13,13 @@
 #include "CWeaponNames.h"
 
 CSimPlayerPuresyncPacket::CSimPlayerPuresyncPacket(ElementID PlayerID, ushort PlayerLatency, uchar PlayerSyncTimeContext, uchar PlayerGotWeaponType,
-                                                   float WeaponRange, float PlayerMaxHealth, CControllerState& sharedControllerState)
+                                                   float WeaponRange, CControllerState& sharedControllerState)
 
     : m_PlayerID(PlayerID),
       m_PlayerLatency(PlayerLatency),
       m_PlayerSyncTimeContext(PlayerSyncTimeContext),
       m_PlayerGotWeaponType(PlayerGotWeaponType),
       m_WeaponRange(WeaponRange),
-      m_PlayerMaxHealth(PlayerMaxHealth),
       m_sharedControllerState(sharedControllerState)
 {
 }
@@ -84,14 +83,14 @@ bool CSimPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
     SPlayerHealthSync health;
     if (!BitStream.Read(&health))
         return false;
-    m_Cache.fHealth = std::clamp(health.data.fValue, 0.0f, m_PlayerMaxHealth);
+    m_Cache.fHealth = health.data.fValue;
 
     // Armor
     SPlayerArmorSync armor;
     if (!BitStream.Read(&armor))
         return false;
 
-    m_Cache.fArmor = std::clamp(armor.data.fValue, 0.0f, 100.0f);
+    m_Cache.fArmor = armor.data.fValue;
 
     // Read out the camera rotation
     SCameraRotationSync camRotation;
@@ -116,8 +115,8 @@ bool CSimPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
 
         if (m_PlayerGotWeaponType != ucClientWeaponType)
         {
-            bWeaponCorrect = false;                // Possibly old weapon data.
-            ucUseWeaponType = ucClientWeaponType;  // Use the packet supplied weapon type to skip over the correct amount of data
+            bWeaponCorrect = false;                          // Possibly old weapon data.
+            ucUseWeaponType = ucClientWeaponType;            // Use the packet supplied weapon type to skip over the correct amount of data
         }
 
         // Update check counts
@@ -232,7 +231,7 @@ bool CSimPlayerPuresyncPacket::Write(NetBitStreamInterface& BitStream) const
 
     if (m_Cache.flags.data.bHasAWeapon)
     {
-        unsigned int    uiSlot = m_Cache.ucWeaponSlot;  // check m_Cache.bWeaponCorrect !
+        unsigned int    uiSlot = m_Cache.ucWeaponSlot;            // check m_Cache.bWeaponCorrect !
         SWeaponSlotSync slot;
         slot.data.uiSlot = uiSlot;
         BitStream.Write(&slot);

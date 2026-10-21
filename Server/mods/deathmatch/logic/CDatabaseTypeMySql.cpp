@@ -198,11 +198,8 @@ CDatabaseConnection* CDatabaseTypeMySql::CallNewDatabaseConnectionMySql(CDatabas
     {
         SString strServerPath = g_pServerInterface->GetModManager()->GetServerPath();
         m_DbconmyLib.Load(PathJoin(strServerPath, SERVER_BIN_PATH_MOD, LIB_DBCONMY));
-        {
-            const auto procAddr = m_DbconmyLib.GetProcedureAddress("NewDatabaseConnectionMySql");
-            static_assert(sizeof(m_pfnNewDatabaseConnection) == sizeof(procAddr), "Unexpected function pointer size");
-            std::memcpy(&m_pfnNewDatabaseConnection, &procAddr, sizeof(m_pfnNewDatabaseConnection));
-        }
+        m_pfnNewDatabaseConnection =
+            reinterpret_cast<NewDatabaseConnectionMySql_t*>(m_DbconmyLib.GetProcedureAddress("NewDatabaseConnectionMySql"));
     }
 
     if (!m_pfnNewDatabaseConnection)

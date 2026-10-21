@@ -10,9 +10,8 @@
  *****************************************************************************/
 
 #include "StdInc.h"
-using namespace tinyxml2;
 
-CXMLAttributesImpl::CXMLAttributesImpl(XMLElement& Node, bool bUseIDs) : m_bUsingIDs(bUseIDs), m_Node(Node)
+CXMLAttributesImpl::CXMLAttributesImpl(TiXmlElement& Node, bool bUseIDs) : m_bUsingIDs(bUseIDs), m_Node(Node)
 {
     // Init
     m_bCanRemoveFromList = true;
@@ -118,7 +117,7 @@ void CXMLAttributesImpl::DeleteAll()
     m_bCanRemoveFromList = true;
 }
 
-XMLElement& CXMLAttributesImpl::GetNode()
+TiXmlElement& CXMLAttributesImpl::GetNode()
 {
     return m_Node;
 }
@@ -141,7 +140,7 @@ void CXMLAttributesImpl::RemoveFromList(CXMLAttribute* pAttribute)
 void CXMLAttributesImpl::CreateAttributes()
 {
     // Grab the first attribute and iterate from there
-    const XMLAttribute* pAttrib = m_Node.FirstAttribute();
+    TiXmlAttribute* pAttrib = m_Node.FirstAttribute();
     if (pAttrib)
     {
         do

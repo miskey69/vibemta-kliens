@@ -21,9 +21,9 @@ public:
     CClientTXD(class CClientManager* pManager, ElementID ID);
     ~CClientTXD();
 
-    void Unlink() {};
+    void Unlink(){};
     void GetPosition(CVector& vecPosition) const {};
-    void SetPosition(const CVector& vecPosition) {};
+    void SetPosition(const CVector& vecPosition){};
 
     eClientEntityType GetType() const { return CCLIENTTXD; }
     bool              Load(bool isRaw, SString input, bool enableFiltering);
@@ -31,6 +31,7 @@ public:
     bool              Import(unsigned short usModelID);
     static bool       IsImportableModel(unsigned short usModelID);
     static bool       IsTXDData(const SString& strData);
+    const SString&    GetLastError() const { return m_strLastError; }
 
 private:
     bool LoadFromFile(SString filePath);
@@ -40,9 +41,10 @@ private:
     bool GetFilenameToUse(SString& strOutFilename);
 
     SString              m_strFilename;
-    bool                 m_bFilteringEnabled{false};
-    bool                 m_bIsRawData{false};
-    bool                 m_bUsingFileDataForClothes{false};
+    SString              m_strLastError;
+    bool                 m_bFilteringEnabled;
+    bool                 m_bIsRawData;
+    bool                 m_bUsingFileDataForClothes;
     SString              m_FileData;
     SReplacementTextures m_ReplacementTextures;
 };

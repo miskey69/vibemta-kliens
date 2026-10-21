@@ -12,14 +12,10 @@
 #pragma once
 
 #ifdef WIN32
-    #include <windows.h>
+#include <windows.h>
 #endif
 
-#ifdef WIN32
-using FuncPtr_t = FARPROC;
-#else
 typedef void (*FuncPtr_t)();
-#endif
 
 class CDynamicLibrary
 {
@@ -35,9 +31,9 @@ public:
     bool      CheckMtaVersion(const char* szLibName);
 
 private:
-#ifdef WIN32
+    #ifdef WIN32
     HMODULE m_hModule;
-#else
+    #else
     void* m_hModule;
-#endif
+    #endif
 };

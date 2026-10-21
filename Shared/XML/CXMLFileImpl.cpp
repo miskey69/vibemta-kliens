@@ -11,7 +11,6 @@
 
 #include "StdInc.h"
 SString CXMLFileImpl::ms_strSaveFlagFile;
-using namespace tinyxml2;
 
 CXMLFileImpl::CXMLFileImpl(const char* szFilename, bool bUseIDs, bool bReadOnly) : m_ulID(INVALID_XML_ID), m_bUsingIDs(bUseIDs), m_bReadOnly(bReadOnly)
 {
@@ -21,7 +20,7 @@ CXMLFileImpl::CXMLFileImpl(const char* szFilename, bool bUseIDs, bool bReadOnly)
     ResetLastError();
 
     // Create the document
-    m_pDocument = new XMLDocument;
+    m_pDocument = new TiXmlDocument;
 
     // Set the filename
     if (szFilename)
@@ -70,13 +69,22 @@ bool CXMLFileImpl::Parse(std::vector<char>* pOutFileContents)
         Reset();
 
         // Parse from the current file
-        if (m_pDocument->LoadFile(m_strFilename.c_str()) == XML_SUCCESS)
+        FILE* file;
+        if (m_pDocument->LoadFile(m_strFilename.c_str(), TIXML_DEFAULT_ENCODING, &file))
         {
             // Also read the file bytes to a buffer if requested
             if (pOutFileContents)
             {
-                FileLoad(m_strFilename, *pOutFileContents);
+                fseek(file, 0, SEEK_END);
+                long size = ftell(file);
+                fseek(file, 0, SEEK_SET);
+                if (size > 0)
+                {
+                    pOutFileContents->resize(size);
+                    fread(&pOutFileContents->at(0), 1, size, file);
+                }
             }
+            fclose(file);
 
             // Build our wrapper
             if (BuildWrapperTree())
@@ -93,7 +101,7 @@ bool CXMLFileImpl::Parse(std::vector<char>* pOutFileContents)
 
         SString strErrorDesc;
         if (m_pDocument->Error())
-            strErrorDesc = SString("Line %d: %s", m_pDocument->ErrorLineNum(), m_pDocument->ErrorStr());
+            strErrorDesc = SString("Line %d: %s", m_pDocument->ErrorRow(), m_pDocument->ErrorDesc());
         else
             strErrorDesc = "Invalid file";
         SetLastError(CXMLErrorCodes::OtherError, strErrorDesc);
@@ -118,7 +126,7 @@ bool CXMLFileImpl::Write()
         {
             return true;
         }
-        if (m_pDocument->SaveFile(m_strFilename.c_str()) == XML_SUCCESS)
+        if (m_pDocument->SaveFile(m_strFilename.c_str()))
         {
             return true;
         }
@@ -137,7 +145,7 @@ bool CXMLFileImpl::WriteSafer()
         SString strBackup = strFilename + "_old_";
 
         // Save to temp
-        if (m_pDocument->SaveFile(strTemp) != XML_SUCCESS)
+        if (!m_pDocument->SaveFile(strTemp))
         {
             SetLastError(CXMLErrorCodes::OtherError, "Could not save temporary file");
             return false;
@@ -187,7 +195,7 @@ void CXMLFileImpl::Reset()
 
     // Delete our document and recreate it
     delete m_pDocument;
-    m_pDocument = new XMLDocument;
+    m_pDocument = new TiXmlDocument;
 }
 
 CXMLNode* CXMLFileImpl::CreateRootNode(const std::string& strTagName)
@@ -195,12 +203,12 @@ CXMLNode* CXMLFileImpl::CreateRootNode(const std::string& strTagName)
     // Make sure we always have a root node
     if (!m_pRootNode)
     {
-        // Grab the document's root, create it if necessary
-        XMLElement* pRootNode = m_pDocument->RootElement();
+        // Grab the document's root, create it if neccessary
+        TiXmlElement* pRootNode = m_pDocument->RootElement();
         if (!pRootNode)
         {
-            pRootNode = m_pDocument->NewElement(strTagName.c_str());
-            m_pDocument->InsertEndChild(pRootNode);
+            pRootNode = new TiXmlElement(strTagName);
+            m_pDocument->LinkEndChild(pRootNode);
         }
 
         m_pRootNode = new CXMLNodeImpl(this, NULL, *pRootNode);
@@ -238,7 +246,7 @@ void CXMLFileImpl::SetLastError(CXMLErrorCodes::Code errCode, const std::string&
     m_strLastError = strDescription;
 }
 
-XMLDocument* CXMLFileImpl::GetDocument()
+TiXmlDocument* CXMLFileImpl::GetDocument()
 {
     return m_pDocument;
 }
@@ -249,7 +257,7 @@ bool CXMLFileImpl::BuildWrapperTree()
     ClearWrapperTree();
 
     // Grab the root element
-    XMLElement* pRootNode = m_pDocument->RootElement();
+    TiXmlElement* pRootNode = m_pDocument->RootElement();
     if (pRootNode)
     {
         // Create an XML node for it
@@ -269,13 +277,13 @@ bool CXMLFileImpl::BuildWrapperTree()
 bool CXMLFileImpl::BuildSubElements(CXMLNodeImpl* pNode)
 {
     // Grab the node
-    XMLElement* pRawNode = pNode->GetNode();
+    TiXmlElement* pRawNode = pNode->GetNode();
     if (pRawNode)
     {
         // Iterate the children
-        XMLNode*    pChild = pRawNode->FirstChild();
-        XMLElement* pElement;
-        while (pChild)
+        TiXmlNode*    pChild = NULL;
+        TiXmlElement* pElement;
+        while ((pChild = pRawNode->IterateChildren(pChild)))
         {
             // If it's not a comment or something else, build it to our tree
             // TODO: Support comments
@@ -297,7 +305,6 @@ bool CXMLFileImpl::BuildSubElements(CXMLNodeImpl* pNode)
                     return false;
                 }
             }
-            pChild = pChild->NextSibling();
         }
     }
     return true;

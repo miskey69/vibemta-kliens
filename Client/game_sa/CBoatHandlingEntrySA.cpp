@@ -24,9 +24,6 @@ CBoatHandlingEntrySA::CBoatHandlingEntrySA(tBoatHandlingDataSA* pOriginal)
 
 void CBoatHandlingEntrySA::Assign(const CBoatHandlingEntry* pData)
 {
-    if (!pData)
-        return;
-
-    const auto* pEntrySA = static_cast<const CBoatHandlingEntrySA*>(pData);
+    const CBoatHandlingEntrySA* pEntrySA = static_cast<const CBoatHandlingEntrySA*>(pData);
     m_pBoatHandlingSA = pEntrySA->m_pBoatHandlingSA;
 }

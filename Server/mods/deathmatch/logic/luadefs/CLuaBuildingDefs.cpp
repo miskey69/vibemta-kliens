@@ -36,7 +36,7 @@ void CLuaBuildingDefs::AddClass(lua_State* luaVM)
 }
 
 CBuilding* CLuaBuildingDefs::CreateBuilding(lua_State* const luaVM, std::uint16_t modelId, CVector pos, std::optional<CVector> rot,
-                                            std::optional<std::uint8_t> interior)
+                                                  std::optional<std::uint8_t> interior)
 {
     CLuaMain* pLuaMain = m_pLuaManager->GetVirtualMachine(luaVM);
 
@@ -61,20 +61,9 @@ CBuilding* CLuaBuildingDefs::CreateBuilding(lua_State* const luaVM, std::uint16_
     if (!pBuilding)
         return nullptr;
 
-    CElementGroup* pGroup = pResource->GetElementGroup();
-    if (pGroup)
-    {
-        pGroup->Add(pBuilding);
-    }
-
     pBuilding->SetPosition(pos);
     pBuilding->SetRotation(rot.value());
     pBuilding->SetModel(modelId);
-
-    if (interior.has_value())
-    {
-        pBuilding->SetInterior(interior.value());
-    }
 
     if (pResource->IsClientSynced())
     {

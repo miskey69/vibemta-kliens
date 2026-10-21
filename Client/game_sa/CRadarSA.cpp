@@ -63,7 +63,6 @@ void CRadarSA::DrawAreaOnRadar(float fX1, float fY1, float fX2, float fY2, const
     unsigned long abgr = color.A << 24 | color.B << 16 | color.G << 8 | color.R;
     CRect         myRect(fX1, fY2, fX2, fY1);
     DWORD         dwFunc = FUNC_DrawAreaOnRadar;
-    // clang-format off
     __asm
     {
         push    eax
@@ -78,5 +77,4 @@ void CRadarSA::DrawAreaOnRadar(float fX1, float fY1, float fX2, float fY2, const
 
         pop     eax
     }
-    // clang-format on
 }

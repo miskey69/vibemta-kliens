@@ -146,8 +146,7 @@ HRESULT CProxyDirectInputDevice8::GetDeviceData(DWORD a, LPDIDEVICEOBJECTDATA b,
             }
 
             // Clear strucutre(s).
-            if (b)
-                memset(b, 0, a * (*c));
+            memset(b, 0, a * (*c));
             return hResult;
         }
     }

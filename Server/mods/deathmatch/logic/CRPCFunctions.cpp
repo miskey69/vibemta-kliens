@@ -165,11 +165,7 @@ void CRPCFunctions::PlayerWeapon(NetBitStreamInterface& bitStream)
 
         SWeaponSlotSync slot;
         bitStream.Read(&slot);
-
-        if (slot.data.uiSlot > 0xFF)
-            return;
-
-        const unsigned char ucSlot = static_cast<unsigned char>(slot.data.uiSlot);
+        auto ucSlot = static_cast<unsigned char>(slot.data.uiSlot);
 
         if (ucSlot != ucPrevSlot)
         {
@@ -355,10 +351,10 @@ void CRPCFunctions::RequestStealthKill(NetBitStreamInterface& bitStream)
                     // You shouldn't be able to get here without cheating to get a knife.
                     if (!g_pGame->GetConfig()->IsDisableAC("2"))
                     {
-// Kick disabled as sometimes causing false positives due weapon slot sync problems
-#if 0
+                        // Kick disabled as sometimes causing false positives due weapon slot sync problems
+                        #if 0
                         CStaticFunctionDefinitions::KickPlayer ( m_pSourcePlayer, NULL, "AC #2: You were kicked from the game" );
-#endif
+                        #endif
                     }
                 }
             }

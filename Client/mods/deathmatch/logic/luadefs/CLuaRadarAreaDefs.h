@@ -11,8 +11,6 @@
 #pragma once
 #include "CLuaDefs.h"
 
-class CClientRadarArea;
-
 class CLuaRadarAreaDefs : public CLuaDefs
 {
 public:
@@ -21,8 +19,7 @@ public:
 
     LUA_DECLARE(CreateRadarArea);
     LUA_DECLARE(GetRadarAreaColor);
-    LUA_DECLARE(GetRadarAreaSize);
-    static std::variant<CLuaMultiReturn<float, float>, CVector2D, bool> OOP_GetRadarAreaSize(lua_State* luaVM, CClientRadarArea* radarArea);
+    LUA_DECLARE_OOP(GetRadarAreaSize);
     LUA_DECLARE(IsRadarAreaFlashing);
     LUA_DECLARE(SetRadarAreaColor);
     LUA_DECLARE(SetRadarAreaFlashing);

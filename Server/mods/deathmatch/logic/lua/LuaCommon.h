@@ -13,9 +13,9 @@
 
 extern "C"
 {
-#include "lua.h"
-#include "lualib.h"
-#include "lauxlib.h"
+    #include "lua.h"
+    #include "lualib.h"
+    #include "lauxlib.h"
 }
 
 #include "CLuaFunctionRef.h"
@@ -57,7 +57,6 @@ void lua_initclasses(lua_State* luaVM);
 
 void lua_newclass(lua_State* luaVM);
 void lua_getclass(lua_State* luaVM, const char* szName);
-bool lua_isclass(lua_State* luaVM, int index, const char* szName);
 void lua_registerclass(lua_State* luaVM, const char* szName, const char* szParent = NULL, bool bRegisterWithEnvironment = true);
 void lua_registerstaticclass(lua_State* luaVM, const char* szName);
 void lua_classfunction(lua_State* luaVM, const char* szFunction, const char* szACLName, lua_CFunction fn);

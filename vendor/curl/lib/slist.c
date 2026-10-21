@@ -21,14 +21,21 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
+
 #include "curl_setup.h"
 
+#include <curl/curl.h>
+
 #include "slist.h"
+
+/* The last #include files should be: */
+#include "curl_memory.h"
+#include "memdebug.h"
 
 /* returns last node in linked list */
 static struct curl_slist *slist_get_last(struct curl_slist *list)
 {
-  struct curl_slist *item;
+  struct curl_slist     *item;
 
   /* if caller passed us a NULL, return now */
   if(!list)
@@ -51,20 +58,19 @@ static struct curl_slist *slist_get_last(struct curl_slist *list)
  * If an error occurs, NULL is returned and the string argument is NOT
  * released.
  */
-struct curl_slist *Curl_slist_append_nodup(struct curl_slist *list,
-                                           const char *data)
+struct curl_slist *Curl_slist_append_nodup(struct curl_slist *list, char *data)
 {
-  struct curl_slist *last;
-  struct curl_slist *new_item;
+  struct curl_slist     *last;
+  struct curl_slist     *new_item;
 
   DEBUGASSERT(data);
 
-  new_item = curlx_malloc(sizeof(struct curl_slist));
+  new_item = malloc(sizeof(struct curl_slist));
   if(!new_item)
     return NULL;
 
   new_item->next = NULL;
-  new_item->data = CURL_UNCONST(data);
+  new_item->data = data;
 
   /* if this is the first item, then new_item *is* the list */
   if(!list)
@@ -79,19 +85,20 @@ struct curl_slist *Curl_slist_append_nodup(struct curl_slist *list,
  * curl_slist_append() appends a string to the linked list. It always returns
  * the address of the first record, so that you can use this function as an
  * initialization function as well as an append function. If you find this
- * bothersome, then create a separate _init function and call it
+ * bothersome, then simply create a separate _init function and call it
  * appropriately from within the program.
  */
-struct curl_slist *curl_slist_append(struct curl_slist *list, const char *data)
+struct curl_slist *curl_slist_append(struct curl_slist *list,
+                                     const char *data)
 {
-  char *dupdata = curlx_strdup(data);
+  char *dupdata = strdup(data);
 
   if(!dupdata)
     return NULL;
 
   list = Curl_slist_append_nodup(list, dupdata);
   if(!list)
-    curlx_free(dupdata);
+    free(dupdata);
 
   return list;
 }
@@ -123,8 +130,8 @@ struct curl_slist *Curl_slist_duplicate(struct curl_slist *inlist)
 /* be nice and clean up resources */
 void curl_slist_free_all(struct curl_slist *list)
 {
-  struct curl_slist *next;
-  struct curl_slist *item;
+  struct curl_slist     *next;
+  struct curl_slist     *item;
 
   if(!list)
     return;
@@ -132,8 +139,8 @@ void curl_slist_free_all(struct curl_slist *list)
   item = list;
   do {
     next = item->next;
-    curlx_safefree(item->data);
-    curlx_free(item);
+    Curl_safefree(item->data);
+    free(item);
     item = next;
   } while(next);
 }

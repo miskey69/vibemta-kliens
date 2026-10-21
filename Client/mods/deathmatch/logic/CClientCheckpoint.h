@@ -81,8 +81,6 @@ public:
     float  GetTargetArrowSize() const noexcept { return m_TargetArrowSize; };
     void   SetTargetArrowProperties(const SColor& arrowColor, float size) noexcept;
 
-    class RpAtomic* GetAtomic() const override;
-
 protected:
     bool IsStreamedIn() { return m_bStreamedIn; };
     void StreamIn();

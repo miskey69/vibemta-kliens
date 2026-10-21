@@ -26,13 +26,11 @@ public:
     size_t GetCaretIndex();
     void   SetCaretIndex(size_t Index);
 
-    float        GetVerticalScrollPosition();
-    void         SetVerticalScrollPosition(float fPosition);
-    float        GetMaxVerticalScrollPosition();
-    float        GetScrollbarDocumentSize();
-    float        GetScrollbarPageSize();
-    unsigned int GetUTF8CharacterCount(const char* szText);
-    float        GetVerticalOffsetForCharacterIndex(unsigned int uiIndex);
+    float GetVerticalScrollPosition();
+    void  SetVerticalScrollPosition(float fPosition);
+    float GetMaxVerticalScrollPosition();
+    float GetScrollbarDocumentSize();
+    float GetScrollbarPageSize();
 
     void         SetSelection(unsigned int uiStart, unsigned int uiEnd);
     unsigned int GetSelectionStart();
@@ -47,7 +45,7 @@ public:
 
     eCGUIType GetType() { return CGUI_MEMO; };
 
-#include "CGUIElement_Inc.h"
+    #include "CGUIElement_Inc.h"
 
 private:
     bool Event_TextChanged(const CEGUI::EventArgs& e);

@@ -34,36 +34,50 @@ BYTE CDamageManagerSA::GetDoorStatus(eDoors bDoor)
 
 void CDamageManagerSA::SetDoorStatus(eDoors bDoor, BYTE bDoorStatus, bool spawnFlyingComponent)
 {
-    if (bDoor >= MAX_DOORS)
-        return;
-
-    auto* pAutomobile = reinterpret_cast<CAutomobileSAInterface*>(internalEntityInterface);
-
-    // A boot that can't swing has no state 1, the game would turn it into 2 or 4
-    if (bDoor == BOOT && bDoorStatus == DT_DOOR_SWINGING_FREE && (pAutomobile->pHandlingData->uiModelFlags & MODELFLAGS_NOSWING_BOOT))
-        bDoorStatus = DT_DOOR_INTACT;
-
-    BYTE bOldStatus = internalInterface->Door[bDoor];
-    if (bOldStatus == bDoorStatus)
-        return;
-
-    static const eCarNodes s_doorNodes[MAX_DOORS] = {eCarNodes::BONNET,  eCarNodes::BOOT,    eCarNodes::DOOR_LF,
-                                                     eCarNodes::DOOR_RF, eCarNodes::DOOR_LR, eCarNodes::DOOR_RR};
-
-    // Only FixDoor shows a hidden door again, SetDoorDamage applies the stored state
-    if (bDoorStatus == DT_DOOR_INTACT || bDoorStatus == DT_DOOR_SWINGING_FREE || bOldStatus == DT_DOOR_MISSING)
-        pAutomobile->FixDoor(s_doorNodes[bDoor], bDoor);
-
-    // State 3 only sets the swing flag, the damaged part comes from state 2
-    if (bDoorStatus == DT_DOOR_BASHED_AND_SWINGING_FREE && bOldStatus != DT_DOOR_BASHED)
+    if (bDoor < MAX_DOORS)
     {
-        internalInterface->Door[bDoor] = DT_DOOR_BASHED;
-        pAutomobile->SetDoorDamage(bDoor, !spawnFlyingComponent);
-    }
+        // Different from before?
+        if (internalInterface->Door[bDoor] != bDoorStatus)
+        {
+            // Set it
+            internalInterface->Door[bDoor] = bDoorStatus;
 
-    internalInterface->Door[bDoor] = bDoorStatus;
-    if (bDoorStatus != DT_DOOR_INTACT)
-        pAutomobile->SetDoorDamage(bDoor, !spawnFlyingComponent);
+            // Are we making it intact?
+            if (bDoorStatus == DT_DOOR_INTACT || bDoorStatus == DT_DOOR_SWINGING_FREE)
+            {
+                // Grab the car node index for the given door id
+                static int s_iCarNodeIndexes[6] = {0x10, 0x11, 0x0A, 0x08, 0x0B, 0x09};
+
+                // Call CAutomobile::FixDoor to update the model
+                DWORD dwFunc = 0x6A35A0;
+                DWORD dwThis = (DWORD)internalEntityInterface;
+                int   iCarNodeIndex = s_iCarNodeIndexes[bDoor];
+                DWORD dwDoor = (DWORD)bDoor;
+                __asm
+                {
+                    mov     ecx, dwThis
+                    push    dwDoor
+                    push    iCarNodeIndex
+                    call    dwFunc
+                }
+            }
+            else
+            {
+                // Call CAutomobile::SetDoorDamage to update the model
+                DWORD dwFunc = 0x6B1600;
+                DWORD dwThis = (DWORD)internalEntityInterface;
+                DWORD dwDoor = (DWORD)bDoor;
+                bool  bQuiet = !spawnFlyingComponent;
+                __asm
+                {
+                    mov     ecx, dwThis
+                    push    bQuiet
+                    push    dwDoor
+                    call    dwFunc
+                }
+            }
+        }
+    }
 }
 
 BYTE CDamageManagerSA::GetWheelStatus(eWheelPosition bWheel)
@@ -98,7 +112,6 @@ void CDamageManagerSA::SetPanelStatus(BYTE bPanel, BYTE bPanelStatus, bool spawn
             DWORD dwThis = (DWORD)internalInterface;
             DWORD dwPanel = bPanel;
             DWORD dwStatus = bPanelStatus;
-            // clang-format off
             __asm
             {
                 mov     ecx, dwThis
@@ -106,7 +119,6 @@ void CDamageManagerSA::SetPanelStatus(BYTE bPanel, BYTE bPanelStatus, bool spawn
                 push    dwPanel
                 call    dwFunction
             }
-            // clang-format on
 
             // Intact?
             if (bPanelStatus == DT_PANEL_INTACT)
@@ -118,7 +130,6 @@ void CDamageManagerSA::SetPanelStatus(BYTE bPanel, BYTE bPanelStatus, bool spawn
                 if (carNodeIndex < 0)
                     return;
 
-                // clang-format off
                 __asm
                 {
                     mov     ecx, dwThis
@@ -126,19 +137,20 @@ void CDamageManagerSA::SetPanelStatus(BYTE bPanel, BYTE bPanelStatus, bool spawn
                     push    carNodeIndex
                     call    dwFunction
                 }
-                // clang-format on
             }
-            else reinterpret_cast<CAutomobileSAInterface*>(internalEntityInterface)->SetPanelDamage(bPanel, breakGlass, spawnFlyingComponent);
+            else
+                reinterpret_cast<CAutomobileSAInterface*>(internalEntityInterface)->SetPanelDamage(bPanel, breakGlass, spawnFlyingComponent);
         }
     }
 }
 
 void CDamageManagerSA::SetPanelStatus(unsigned long ulStatus, bool spawnFlyingComponent, bool breakGlass)
 {
-    for (unsigned int uiIndex = 0; uiIndex < MAX_PANELS; ++uiIndex)
+    unsigned int uiIndex;
+
+    for (uiIndex = 0; uiIndex < MAX_PANELS; uiIndex++)
     {
-        const BYTE bPanelStatus = static_cast<BYTE>(ulStatus & 0x0F);
-        SetPanelStatus(static_cast<BYTE>(uiIndex), bPanelStatus, spawnFlyingComponent, breakGlass);
+        SetPanelStatus(static_cast<eDoors>(uiIndex), static_cast<unsigned char>(ulStatus), spawnFlyingComponent, breakGlass);
         ulStatus >>= 4;
     }
 }
@@ -159,7 +171,6 @@ void CDamageManagerSA::SetLightStatus(BYTE bLight, BYTE bLightStatus)
     DWORD dwPointer = (DWORD)internalInterface;
     DWORD dwLight = bLight;
     DWORD dwStatus = bLightStatus;
-    // clang-format off
     __asm
     {
         mov     ecx, dwPointer
@@ -167,7 +178,6 @@ void CDamageManagerSA::SetLightStatus(BYTE bLight, BYTE bLightStatus)
         push    dwLight
         call    dwFunction
     }
-    // clang-format on
 }
 
 void CDamageManagerSA::SetLightStatus(unsigned char ucStatus)
@@ -181,7 +191,6 @@ BYTE CDamageManagerSA::GetLightStatus(BYTE bLight)
     DWORD dwPointer = (DWORD)internalInterface;
     BYTE  bReturn = 0;
     DWORD dwLight = bLight;
-    // clang-format off
     __asm
     {
         mov     ecx, dwPointer
@@ -189,7 +198,6 @@ BYTE CDamageManagerSA::GetLightStatus(BYTE bLight)
         call    dwFunction
         mov     bReturn, al
     }
-    // clang-format on
     return bReturn;
 }
 
@@ -203,7 +211,6 @@ void CDamageManagerSA::SetAeroplaneCompStatus(BYTE CompID, BYTE Status)
     DWORD dwFunction = FUNC_SetAeroplaneCompStatus;
     DWORD dwPointer = (DWORD)internalInterface;
     DWORD dwPannel = CompID;
-    // clang-format off
     __asm
     {
         mov     ecx, dwPointer
@@ -211,7 +218,6 @@ void CDamageManagerSA::SetAeroplaneCompStatus(BYTE CompID, BYTE Status)
         push    dwPannel
         call    dwFunction
     }
-    // clang-format on
 }
 
 BYTE CDamageManagerSA::GetAeroplaneCompStatus(BYTE CompID)
@@ -220,7 +226,6 @@ BYTE CDamageManagerSA::GetAeroplaneCompStatus(BYTE CompID)
     DWORD dwPointer = (DWORD)internalInterface;
     BYTE  bReturn = 0;
     DWORD dwPannel = CompID;
-    // clang-format off
     __asm
     {
         mov     ecx, dwPointer
@@ -228,7 +233,6 @@ BYTE CDamageManagerSA::GetAeroplaneCompStatus(BYTE CompID)
         call    dwFunction
         mov     bReturn, al
     }
-    // clang-format on
     return bReturn;
 }
 
@@ -236,14 +240,12 @@ void CDamageManagerSA::FuckCarCompletely(bool bKeepWheels)
 {
     DWORD dwFunc = FUNC_FuckCarCompletely;
     DWORD dwPointer = (DWORD)internalInterface;
-    // clang-format off
     __asm
     {
         mov     ecx, dwPointer
         push    bKeepWheels
         call    dwFunc
     }
-    // clang-format on
 }
 
 int CDamageManagerSA::GetCarNodeIndexFromPanel(std::uint8_t panelId) noexcept
@@ -253,19 +255,19 @@ int CDamageManagerSA::GetCarNodeIndexFromPanel(std::uint8_t panelId) noexcept
     switch (panelId)
     {
         case 0:
-            index = 15;  // PANEL_WING_LF
+            index = 15; // PANEL_WING_LF
             break;
         case 1:
-            index = 14;  // PANEL_WING_RF
+            index = 14; // PANEL_WING_RF
             break;
         case 4:
-            index = 18;  // PANEL_WINDSCREEN
+            index = 18; // PANEL_WINDSCREEN
             break;
         case 5:
-            index = 12;  // BUMP_FRONT
+            index = 12; // BUMP_FRONT
             break;
         case 6:
-            index = 13;  // BUMP_REAR
+            index = 13; // BUMP_REAR
             break;
     }
 

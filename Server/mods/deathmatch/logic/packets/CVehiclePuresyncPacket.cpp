@@ -62,6 +62,7 @@ bool CVehiclePuresyncPacket::Read(NetBitStreamInterface& BitStream)
             BitStream.Read(iRemoteModelID);
 
             eVehicleType vehicleType = pVehicle->GetVehicleType();
+            // TODO: GetVehicleType does not support the range of 'int'.
             eVehicleType remoteVehicleType = CVehicleManager::GetVehicleType(static_cast<unsigned short>(iRemoteModelID));
 
             // Read out its position
@@ -86,7 +87,7 @@ bool CVehiclePuresyncPacket::Read(NetBitStreamInterface& BitStream)
                 // Note: here we use a uchar, in the CTT branch this is a uint. Just don't forget that, it might be important
                 uchar trackIndex;
                 BitStream.Read(trackIndex);
-                pTrainTrack = g_pGame->GetTrainTrackManager()->GetDefaultTrackByIndex(trackIndex);
+                pTrainTrack = g_pGame->GetTrainTrackManager()->GetTrainTrackByIndex(trackIndex);
 
                 // But we should only actually apply that train-specific data if that vehicle is train on our side
                 if (vehicleType == VEHICLE_TRAIN)
@@ -162,9 +163,6 @@ bool CVehiclePuresyncPacket::Read(NetBitStreamInterface& BitStream)
                         CLuaArguments Arguments;
                         Arguments.PushNumber(fDeltaHealth);
                         pVehicle->CallEvent("onVehicleDamage", Arguments);
-                        // Skip health write if the event destroyed this vehicle.
-                        if (pVehicle->IsBeingDeleted())
-                            return false;
                     }
                 }
                 pVehicle->SetHealth(fHealth);
@@ -219,8 +217,6 @@ bool CVehiclePuresyncPacket::Read(NetBitStreamInterface& BitStream)
                                 CLuaArguments Arguments;
                                 Arguments.PushElement(pTowedByVehicle);
                                 pCurrentTrailer->CallEvent("onTrailerDetach", Arguments);
-                                if (pTowedByVehicle->IsBeingDeleted() || pTrailer->IsBeingDeleted())
-                                    return false;
                             }
 
                             // If something else is towing this trailer
@@ -238,8 +234,6 @@ bool CVehiclePuresyncPacket::Read(NetBitStreamInterface& BitStream)
                                 CLuaArguments Arguments;
                                 Arguments.PushElement(pCurrentVehicle);
                                 pTrailer->CallEvent("onTrailerDetach", Arguments);
-                                if (pTowedByVehicle->IsBeingDeleted() || pTrailer->IsBeingDeleted())
-                                    return false;
                             }
 
                             pTowedByVehicle->SetTowedVehicle(pTrailer);
@@ -249,8 +243,6 @@ bool CVehiclePuresyncPacket::Read(NetBitStreamInterface& BitStream)
                             CLuaArguments Arguments;
                             Arguments.PushElement(pTowedByVehicle);
                             bool bContinue = pTrailer->CallEvent("onTrailerAttach", Arguments);
-                            if (pTowedByVehicle->IsBeingDeleted() || pTrailer->IsBeingDeleted())
-                                return false;
 
                             // Attach or detach trailers depending on the event outcome
                             CVehicleTrailerPacket TrailerPacket(pTowedByVehicle, pTrailer, bContinue);
@@ -281,34 +273,14 @@ bool CVehiclePuresyncPacket::Read(NetBitStreamInterface& BitStream)
                     CLuaArguments Arguments;
                     Arguments.PushElement(pTowedByVehicle);
                     pCurrentTrailer->CallEvent("onTrailerDetach", Arguments);
-                    // Skip later vehicle writes if the event destroyed the vehicle.
-                    if (pVehicle->IsBeingDeleted())
-                        return false;
                 }
-            }
-
-            if (BitStream.ReadBit())
-            {
-                ElementID DamagerID;
-                if (!BitStream.Read(DamagerID))
-                    return false;
-
-                SWeaponTypeSync weaponType;
-                if (!BitStream.Read(&weaponType))
-                    return false;
-
-                SBodypartSync bodyPart;
-                if (!BitStream.Read(&bodyPart))
-                    return false;
-
-                pSourcePlayer->SetDamageInfo(DamagerID, weaponType.data.ucWeaponType, static_cast<unsigned char>(bodyPart.data.uiBodypart));
             }
 
             // Player health
             SPlayerHealthSync health;
             if (!BitStream.Read(&health))
                 return false;
-            float fHealth = std::clamp(health.data.fValue, 0.0f, pSourcePlayer->GetMaxHealth());
+            float fHealth = health.data.fValue;
 
             float fOldHealth = pSourcePlayer->GetHealth();
             float fHealthLoss = fOldHealth - fHealth;
@@ -335,7 +307,7 @@ bool CVehiclePuresyncPacket::Read(NetBitStreamInterface& BitStream)
             SPlayerArmorSync armor;
             if (!BitStream.Read(&armor))
                 return false;
-            float fArmor = std::clamp(armor.data.fValue, 0.0f, 100.0f);
+            float fArmor = armor.data.fValue;
 
             float fOldArmor = pSourcePlayer->GetArmor();
             float fArmorLoss = fOldArmor - fArmor;
@@ -461,8 +433,7 @@ bool CVehiclePuresyncPacket::Write(NetBitStreamInterface& BitStream) const
             BitStream.Write(pSourcePlayer->GetSyncTimeContext());
 
             // Write his ping divided with 2 plus a small number so the client can find out when this packet was sent
-            const unsigned int   uiPing = pSourcePlayer->GetPing();
-            const unsigned short usLatency = uiPing <= 0xFFFF ? static_cast<unsigned short>(uiPing) : 0xFFFF;
+            auto usLatency = static_cast<unsigned short>(pSourcePlayer->GetPing());
             BitStream.WriteCompressed(usLatency);
 
             // Write the keysync data
@@ -687,6 +658,7 @@ void CVehiclePuresyncPacket::ReadVehicleSpecific(CVehicle* pVehicle, NetBitStrea
     }
 
     // Door angles.
+    // TODO: HasDoors does not support the range of 'int'.
     if (CVehicleManager::HasDoors(static_cast<unsigned short>(iRemoteModel)))
     {
         SDoorOpenRatioSync door;

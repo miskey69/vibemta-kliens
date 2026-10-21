@@ -18,7 +18,6 @@ float CStatsSA::GetStatValue(unsigned short usIndex)
     float fReturn = 0.0f;
     DWORD dwStatIndex = usIndex;
 
-    // clang-format off
     __asm
     {
         push    dwStatIndex
@@ -26,40 +25,35 @@ float CStatsSA::GetStatValue(unsigned short usIndex)
         add     esp, 4
         fstp    fReturn
     }
-    // clang-format on
     return fReturn;
 }
 
-void CStatsSA::ModifyStat(unsigned short usIndex, float fAmount)
+void CStatsSA::ModifyStat(unsigned short usIndex, float fAmmount)
 {
     DWORD dwFunc = FUNC_ModifyStat;
     DWORD dwStatIndex = usIndex;
 
-    // clang-format off
     __asm
     {
-        push    fAmount
+        push    fAmmount
         push    dwStatIndex
         call    dwFunc
         add     esp, 8
     }
-    // clang-format on
 }
 
-void CStatsSA::SetStatValue(unsigned short usIndex, float fAmount)
+void CStatsSA::SetStatValue(unsigned short usIndex, float fAmmount)
 {
     DWORD dwFunc = FUNC_SetStatValue;
     DWORD dwStatIndex = usIndex;
 
-    // clang-format off
     __asm
     {
-        push    fAmount
+        push    fAmmount
         push    dwStatIndex
         call    dwFunc
         add     esp, 8
     }
-    // clang-format on
 }
 
 unsigned short CStatsSA::GetSkillStatIndex(eWeaponType type)
@@ -67,7 +61,6 @@ unsigned short CStatsSA::GetSkillStatIndex(eWeaponType type)
     int   weaponType = (int)type;
     int   iIndex;
     DWORD dwFunc = FUNC_CWeaponInfo_GetSkillStatIndex;
-    // clang-format off
     __asm
     {
         push    weaponType
@@ -75,6 +68,5 @@ unsigned short CStatsSA::GetSkillStatIndex(eWeaponType type)
         add     esp, 0x4
         mov     iIndex, eax
     }
-    // clang-format on
     return (unsigned short)iIndex;
 }

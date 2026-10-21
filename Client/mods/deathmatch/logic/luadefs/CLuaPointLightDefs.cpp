@@ -10,7 +10,6 @@
  *****************************************************************************/
 
 #include "StdInc.h"
-#include <lua/CLuaFunctionParser.h>
 
 void CLuaPointLightDefs::LoadFunctions()
 {
@@ -33,7 +32,7 @@ void CLuaPointLightDefs::AddClass(lua_State* luaVM)
     lua_classfunction(luaVM, "getType", "getLightType");
     lua_classfunction(luaVM, "getRadius", "getLightRadius");
     lua_classfunction(luaVM, "getColor", "getLightColor");
-    lua_classfunction(luaVM, "getDirection", ArgumentParserWarn<false, OOP_GetLightDirection>);
+    lua_classfunction(luaVM, "getDirection", "getLightDirection");
 
     lua_classfunction(luaVM, "setRadius", "setLightRadius");
     lua_classfunction(luaVM, "setColor", "setLightColor");
@@ -41,7 +40,7 @@ void CLuaPointLightDefs::AddClass(lua_State* luaVM)
 
     lua_classvariable(luaVM, "type", nullptr, "getLightType");
     lua_classvariable(luaVM, "radius", "setLightRadius", "getLightRadius");
-    lua_classvariable(luaVM, "direction", SetLightDirection, ArgumentParserWarn<false, OOP_GetLightDirection>);
+    lua_classvariable(luaVM, "direction", "setLightDirection", "getLightDirection");
 
     lua_registerclass(luaVM, "Light", "Element");
 }
@@ -192,19 +191,6 @@ int CLuaPointLightDefs::GetLightDirection(lua_State* luaVM)
 
     lua_pushboolean(luaVM, false);
     return 1;
-}
-
-std::variant<CLuaMultiReturn<float, float, float>, CVector, bool> CLuaPointLightDefs::OOP_GetLightDirection(lua_State* luaVM, CClientPointLights* light)
-{
-    CVector vecDirection;
-    if (!CStaticFunctionDefinitions::GetLightDirection(light, vecDirection))
-        return false;
-
-    // Keep returning three floats when the caller assigns three results
-    if (lua_ncallresult(luaVM) == 3)
-        return CLuaMultiReturn<float, float, float>(vecDirection.fX, vecDirection.fY, vecDirection.fZ);
-
-    return vecDirection;
 }
 
 int CLuaPointLightDefs::SetLightRadius(lua_State* luaVM)

@@ -204,7 +204,7 @@ int CLuaUtilDefs::Split(lua_State* luaVM)
         wchar_t wUNICODE[2] = {static_cast<wchar_t>(uiDelimiter), '\0'};
         strDelimiter = UTF16ToMbUTF8(wUNICODE);
     }
-    else  // It's already a string
+    else            // It's already a string
         argStream.ReadString(strDelimiter);
 
     if (!argStream.HasErrors())
@@ -258,15 +258,7 @@ int CLuaUtilDefs::GetUserdataType(lua_State* luaVM)
     if (argStream.NextIsUserData())
     {
         SString strType;
-        if (lua_isclass(luaVM, 1, "Vector3"))
-            strType = "vector3";
-        else if (lua_isclass(luaVM, 1, "Vector2"))
-            strType = "vector2";
-        else if (lua_isclass(luaVM, 1, "Vector4"))
-            strType = "vector4";
-        else if (lua_isclass(luaVM, 1, "Matrix"))
-            strType = "matrix";
-        else if (iArgument == LUA_TLIGHTUSERDATA)
+        if (iArgument == LUA_TLIGHTUSERDATA)
             strType = GetUserDataClassName(lua_touserdata(luaVM, 1), luaVM, false);
         else if (iArgument == LUA_TUSERDATA)
             strType = GetUserDataClassName(*((void**)lua_touserdata(luaVM, 1)), luaVM, false);
@@ -505,23 +497,9 @@ int CLuaUtilDefs::fromJSON(lua_State* luaVM)
         CLuaArguments Converted;
         if (Converted.ReadFromJSONString(strJson))
         {
-            const int count = static_cast<int>(Converted.Count());
-
-            // Keep the original fromJSON behavior as long as all
-            // return values can fit on the Lua stack.
-            //
-            // If the root JSON is a large array and the values cannot
-            // be returned unpacked, return them as a single Lua table.
-            // GitHub Issue: #5287
-            if (!lua_checkstack(luaVM, count))
-            {
-                Converted.PushAsTable(luaVM, nullptr, true);
-                return 1;
-            }
-
             // Return it as data
             Converted.PushArguments(luaVM);
-            return count;
+            return static_cast<int>(Converted.Count());
         }
     }
     else
@@ -686,7 +664,7 @@ int CLuaUtilDefs::GetTok(lua_State* luaVM)
         wchar_t wUNICODE[2] = {static_cast<wchar_t>(uiDelimiter), '\0'};
         strDelimiter = UTF16ToMbUTF8(wUNICODE);
     }
-    else  // It's already a string
+    else            // It's already a string
         argStream.ReadString(strDelimiter);
 
     if (!argStream.HasErrors())
@@ -750,12 +728,8 @@ int CLuaUtilDefs::tocolor(lua_State* luaVM)
     if (!argStream.HasErrors())
     {
         // Make it into an unsigned long
-        const unsigned char ucRed = static_cast<unsigned char>(Clamp<int>(0, iRed, 255));
-        const unsigned char ucGreen = static_cast<unsigned char>(Clamp<int>(0, iGreen, 255));
-        const unsigned char ucBlue = static_cast<unsigned char>(Clamp<int>(0, iBlue, 255));
-        const unsigned char ucAlpha = static_cast<unsigned char>(Clamp<int>(0, iAlpha, 255));
-
-        unsigned long ulColor = COLOR_RGBA(ucRed, ucGreen, ucBlue, ucAlpha);
+        unsigned long ulColor = COLOR_RGBA(static_cast<unsigned char>(iRed), static_cast<unsigned char>(iGreen),
+                                           static_cast<unsigned char>(iBlue), static_cast<unsigned char>(iAlpha));
         lua_pushinteger(luaVM, static_cast<lua_Integer>(ulColor));
         return 1;
     }

@@ -9,7 +9,6 @@
  *****************************************************************************/
 
 #include "StdInc.h"
-#include "CClientColCallback.h"
 
 using std::list;
 using std::vector;
@@ -138,15 +137,7 @@ void CClientColManager::DoHitDetectionForEntity(const CVector& vecNowPosition, f
 //
 void CClientColManager::HandleHitDetectionResult(bool bHit, CClientColShape* pShape, CClientEntity* pEntity)
 {
-    bool bShouldTrack = bHit;
     if (bHit)
-    {
-        CClientColCallback* pCallback = pShape->GetHitCallback();
-        if (pCallback)
-            bShouldTrack = pCallback->ShouldTrackCollision(*pShape, *pEntity);
-    }
-
-    if (bShouldTrack)
     {
         // If they havn't collided yet
         if (!pEntity->CollisionExists(pShape))
@@ -174,28 +165,32 @@ void CClientColManager::HandleHitDetectionResult(bool bHit, CClientColShape* pSh
             pShape->CallHitCallback(*pEntity);
         }
     }
-    else if (pEntity->CollisionExists(pShape))
+    else
     {
-        // Remove the collision and the collider
-        pShape->RemoveCollider(pEntity);
-        pEntity->RemoveCollision(pShape);
-
-        // Can we call the event?
-        if (!pEntity->IsBeingDeleted())
+        // If they collided before
+        if (pEntity->CollisionExists(pShape))
         {
-            // Call the event
-            CLuaArguments Arguments;
-            Arguments.PushElement(pEntity);
-            Arguments.PushBoolean((pShape->GetDimension() == pEntity->GetDimension()));
-            pShape->CallEvent("onClientColShapeLeave", Arguments, true);
+            // Remove the collision and the collider
+            pShape->RemoveCollider(pEntity);
+            pEntity->RemoveCollision(pShape);
 
-            CLuaArguments Arguments2;
-            Arguments2.PushElement(pShape);
-            Arguments2.PushBoolean((pShape->GetDimension() == pEntity->GetDimension()));
-            pEntity->CallEvent("onClientElementColShapeLeave", Arguments2, true);
+            // Can we call the event?
+            if (!pEntity->IsBeingDeleted())
+            {
+                // Call the event
+                CLuaArguments Arguments;
+                Arguments.PushElement(pEntity);
+                Arguments.PushBoolean((pShape->GetDimension() == pEntity->GetDimension()));
+                pShape->CallEvent("onClientColShapeLeave", Arguments, true);
+
+                CLuaArguments Arguments2;
+                Arguments2.PushElement(pShape);
+                Arguments2.PushBoolean((pShape->GetDimension() == pEntity->GetDimension()));
+                pEntity->CallEvent("onClientElementColShapeLeave", Arguments2, true);
+            }
+
+            pShape->CallLeaveCallback(*pEntity);
         }
-
-        pShape->CallLeaveCallback(*pEntity);
     }
 }
 

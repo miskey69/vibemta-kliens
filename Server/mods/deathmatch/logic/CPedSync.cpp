@@ -91,8 +91,7 @@ void CPedSync::UpdateAllSyncer()
         const SPlayerAnimData& animData = (*iter)->GetAnimationData();
         if (animData.IsAnimating())
         {
-            const std::int64_t elapsedMs = currentTimestamp >= animData.startTime ? (currentTimestamp - animData.startTime) : 0;
-            const float        deltaTime = static_cast<float>(elapsedMs);
+            float deltaTime = static_cast<float>(currentTimestamp - animData.startTime);
             if (!animData.freezeLastFrame && animData.time > 0 && deltaTime >= animData.time)
                 (*iter)->SetAnimationData({});
         }
@@ -164,7 +163,7 @@ void CPedSync::StartSync(CPlayer* pPlayer, CPed* pPed)
 
     // Call the onElementStartSync event
     CLuaArguments Arguments;
-    Arguments.PushElement(pPlayer);  // New syncer
+    Arguments.PushElement(pPlayer);            // New syncer
     pPed->CallEvent("onElementStartSync", Arguments);
 }
 
@@ -181,7 +180,7 @@ void CPedSync::StopSync(CPed* pPed)
 
     // Call the onElementStopSync event
     CLuaArguments Arguments;
-    Arguments.PushElement(pSyncer);  // Old syncer
+    Arguments.PushElement(pSyncer);            // Old syncer
     pPed->CallEvent("onElementStopSync", Arguments);
 }
 
@@ -254,11 +253,8 @@ void CPedSync::Packet_PedSync(CPedSyncPacket& Packet)
         if (Data.ucFlags & 0x04)
             pPed->SetVelocity(Data.velocity.data.vecVelocity);
 
-        // Clamp in place, the same data is relayed to the other players below
         if (Data.ucFlags & 0x08)
         {
-            Data.fHealth = std::clamp(Data.fHealth, 0.0f, pPed->GetMaxHealth());
-
             // Less health than last time?
             float fPreviousHealth = pPed->GetHealth();
             pPed->SetHealth(Data.fHealth);
@@ -279,10 +275,7 @@ void CPedSync::Packet_PedSync(CPedSyncPacket& Packet)
         }
 
         if (Data.ucFlags & 0x10)
-        {
-            Data.fArmor = std::clamp(Data.fArmor, 0.0f, 100.0f);
             pPed->SetArmor(Data.fArmor);
-        }
 
         if (Data.flags2 & 0x01)
             pPed->SetCameraRotation(Data.cameraRotation);

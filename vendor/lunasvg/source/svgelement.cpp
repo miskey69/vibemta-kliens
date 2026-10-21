@@ -66,8 +66,6 @@ std::unique_ptr<SVGNode> SVGTextNode::clone(bool deep) const
     return node;
 }
 
-const std::string emptyString;
-
 std::unique_ptr<SVGElement> SVGElement::create(Document* document, ElementID id)
 {
     switch(id) {
@@ -358,32 +356,6 @@ SVGPaintElement* SVGElement::getPainter(const std::string_view& id) const
     return nullptr;
 }
 
-SVGElement* SVGElement::elementFromPoint(float x, float y)
-{
-    auto it = m_children.rbegin();
-    auto end = m_children.rend();
-    for(; it != end; ++it) {
-        auto child = toSVGElement(*it);
-        if(child && !child->isHiddenElement()) {
-            if(auto element = child->elementFromPoint(x, y)) {
-                return element;
-            }
-        }
-    }
-
-    if(isPointableElement()) {
-        auto transform = localTransform();
-        for(auto parent = parentElement(); parent; parent = parent->parentElement())
-            transform.postMultiply(parent->localTransform());
-        auto bbox = transform.mapRect(paintBoundingBox());
-        if(bbox.contains(x, y)) {
-            return this;
-        }
-    }
-
-    return nullptr;
-}
-
 void SVGElement::addProperty(SVGProperty& value)
 {
     m_properties.push_front(&value);
@@ -460,7 +432,6 @@ void SVGElement::layoutElement(const SVGLayoutState& state)
     m_display = state.display();
     m_overflow = state.overflow();
     m_visibility = state.visibility();
-    m_pointer_events = state.pointer_events();
 }
 
 void SVGElement::layoutChildren(SVGLayoutState& state)
@@ -510,31 +481,6 @@ bool SVGElement::isHiddenElement() const
     default:
         return false;
     }
-}
-
-bool SVGElement::isPointableElement() const
-{
-    if(m_pointer_events != PointerEvents::None
-        && m_visibility != Visibility::Hidden
-        && m_display != Display::None
-        && m_opacity != 0.f) {
-        switch(m_id) {
-        case ElementID::Line:
-        case ElementID::Rect:
-        case ElementID::Ellipse:
-        case ElementID::Circle:
-        case ElementID::Polyline:
-        case ElementID::Polygon:
-        case ElementID::Path:
-        case ElementID::Text:
-        case ElementID::Image:
-            return true;
-        default:
-            break;
-        }
-    }
-
-    return false;
 }
 
 SVGStyleElement::SVGStyleElement(Document* document)
@@ -676,7 +622,7 @@ SVGRootElement::SVGRootElement(Document* document)
 {
 }
 
-SVGRootElement* SVGRootElement::layoutIfNeeded()
+SVGRootElement* SVGRootElement::updateLayout()
 {
     if(needsLayout())
         forceLayout();

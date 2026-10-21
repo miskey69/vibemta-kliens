@@ -28,11 +28,9 @@ void ReleaseInterface(T*& pointer, int errorCode, const char* context = nullptr)
         SString label;
         label = context ? context : "ReleaseInterface";
         SString message;
-        message.Format("%s: skipping Release on invalid COM pointer %p", label.c_str(), heldPointer);
+        message.Format("%s: calling Release on potentially invalid COM pointer %p", label.c_str(), heldPointer);
         AddReportLog(errorCode, message, 5);
         ComPtrValidation::Invalidate(heldPointer);
-        pointer = nullptr;
-        return;
     }
 
     heldPointer->Release();
@@ -81,17 +79,7 @@ void ReplaceInterface(T*& destination, T* source)
 
     if (destination)
     {
-        // Cached validation. All tracked objects are held via AddRef,
-        // so an external release cannot free them while our ref is live.
-        if (!ComPtrValidation::Validate(destination))
-        {
-            AddReportLog(8799, SString("ReplaceInterface: skipping Release on stale COM pointer %p", destination), 5);
-            ComPtrValidation::Invalidate(destination);
-        }
-        else
-        {
-            destination->Release();
-        }
+        destination->Release();
         destination = nullptr;
     }
 

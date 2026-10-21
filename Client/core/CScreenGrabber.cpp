@@ -9,7 +9,6 @@
 
 #include "StdInc.h"
 #include "CCompressorJobQueue.h"
-#include "DXHook/CProxyDirect3DDevice9.h"
 
 struct SScreenShotQueueItem
 {

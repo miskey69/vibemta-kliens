@@ -1,14 +1,12 @@
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// This file is redistributable on the same terms as the PCRE2 license, except copyright
+// This file is redistributable on the same terms as the PCRE 4.3 license, except copyright
 // notice must be attributed to:
 //
 // (C) 2003 Zachary Hansen xaxxon@slackworks.com
 //
-// Distribution under the GPL or LGPL overrides any other restrictions, as in the PCRE2 license
-//
-// Ported from PCRE1 to PCRE2 API.
+// Distribution under the GPL or LGPL overrides any other restrictions, as in the PCRE license
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -29,8 +27,7 @@
 #include <string.h>
 using namespace std;
 
-#define PCRE2_CODE_UNIT_WIDTH 8
-#include <pcre2.h>
+#include <pcre.h>
 
 
 
@@ -59,7 +56,7 @@ public:
 	/// s is the regular expression, opts are PCRE flags bit-wise or'd together
 	PME(const char * s, unsigned opts );
 
-	/// s is the regular expression, opts is a perl-like string of modifier letters "gi" is global and case insensitive
+	/// s is the regular expression, opts is a perl-like string of modifier letters "gi" is global and case insensitive  
 	PME ( const char * s, const std::string & opts = "" );
 
 	/// PME copy constructor
@@ -73,7 +70,7 @@ public:
 
 	/// stores results from matches
 	typedef pair<int, int> markers;
-
+	
 	/// returns options set on this object
 	unsigned				options();
 
@@ -89,7 +86,7 @@ public:
 );
 
 	/// substitutes out whatever matches the regex for the second paramter
-	std::string             sub ( const std::string & s,
+	std::string             sub ( const std::string & s, 
 								  const std::string & r,
 								  int dodollarsubstitution = 1 );
 
@@ -120,11 +117,13 @@ protected:
 								const vector<markers> & marks, unsigned index);
 
 
-	pcre2_code * re; ///< pcre2_code structure from pcre2_compile
+	pcre * re; ///< pcre structure from pcre_compile
 
-	unsigned _opts; ///< bit-flag options for pcre2_compile
+	unsigned _opts; ///< bit-flag options for pcre_compile
 
-	int nMatches; ///< number of matches returned from last pcre2_match call
+	pcre_extra * extra;	///< results from pcre_study
+
+	int nMatches; ///< number of matches returned from last pcre_exec call
 
 	vector<markers> m_marks; ///< last set of indexes of matches
 
@@ -133,19 +132,19 @@ protected:
 
 	int m_isglobal; ///< non-pcre flag for 'g' behaviour
 	int lastglobalposition; ///< end of last match when m_isglobal != 0
-
+	
 	/// compiles the regex -- automatically called on construction
 	void compile(const std::string & s);
 
-	/// used to make a copy of a regex object (uses pcre2_code_copy)
-	pcre2_code * clone_re(pcre2_code * re);
+	/// used to make a copy of a regex object
+	static pcre * clone_re(pcre * re);
 
 	/// takes perl-style character modifiers and determines the corresponding PCRE flags
 	unsigned int DeterminePcreOptions ( const std::string & opts = "" );
-
+	
 	/// deals with $1-type constructs in the replacement string in a substitution
 	std::string UpdateReplacementString ( const std::string & r );
-
+	
 
 	/// flag as to whether this regex is valid (compiled without error)
 	int                     nValid;

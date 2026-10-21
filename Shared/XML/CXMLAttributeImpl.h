@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include <tinyxml2.h>
+#include <tinyxml.h>
 #include <string>
 
 #include <xml/CXMLAttribute.h>
@@ -21,8 +21,8 @@ class CXMLAttributesImpl;
 class CXMLAttributeImpl : public CXMLAttribute
 {
 public:
-    CXMLAttributeImpl(class CXMLAttributesImpl& Attributes, tinyxml2::XMLElement& Node, const std::string& strName);
-    CXMLAttributeImpl(class CXMLAttributesImpl& Attributes, tinyxml2::XMLElement& Node, const tinyxml2::XMLAttribute& Attribute);
+    CXMLAttributeImpl(class CXMLAttributesImpl& Attributes, TiXmlElement& Node, const std::string& strName);
+    CXMLAttributeImpl(class CXMLAttributesImpl& Attributes, TiXmlElement& Node, TiXmlAttribute& Attribute);
     virtual ~CXMLAttributeImpl();
 
     const std::string  GetName() const;
@@ -45,8 +45,7 @@ private:
     const bool    m_bUsingIDs;
     bool          m_bDeleteAttribute;
 
-    CXMLAttributesImpl&           m_Attributes;
-    tinyxml2::XMLElement&         m_Node;
-    const tinyxml2::XMLAttribute* m_pAttribute;
-    mutable std::string           m_strValueCache;
+    CXMLAttributesImpl& m_Attributes;
+    TiXmlElement&       m_Node;
+    TiXmlAttribute&     m_Attribute;
 };

@@ -1,7 +1,6 @@
 project "mbedtls"
 	kind "StaticLib"
 	language "C"
-	warnings "Off"
 
 	includedirs {
 		"3rdparty",

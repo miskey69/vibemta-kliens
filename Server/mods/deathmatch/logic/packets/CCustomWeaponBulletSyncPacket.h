@@ -11,7 +11,6 @@
 
 #include "CPacket.h"
 #include "CCustomWeapon.h"
-#include "net/SyncStructures.h"
 
 class CCustomWeaponBulletSyncPacket final : public CPacket
 {
@@ -27,11 +26,11 @@ public:
 
     CPlayer*       GetWeaponOwner() { return m_weapon != NULL ? m_weapon->GetOwner() : NULL; };
     CCustomWeapon* GetWeapon() { return m_weapon; };
-    CVector        GetStart() { return m_start.data.vecPosition; };
-    CVector        GetEnd() { return m_end.data.vecPosition; };
+    CVector        GetStart() { return m_start; };
+    CVector        GetEnd() { return m_end; };
 
     CCustomWeapon* m_weapon{};
-    ElementID      m_weaponID{INVALID_ELEMENT_ID};
-    SPositionSync  m_start{};
-    SPositionSync  m_end{};
+    CVector        m_start{};
+    CVector        m_end{};
+    std::uint8_t   m_order{};
 };

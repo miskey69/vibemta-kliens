@@ -24,7 +24,7 @@ namespace
     CVector             ms_SavedDamagedPos;
 
     VehicleDamageHandler* m_pVehicleDamageHandler = NULL;
-}  // namespace
+}            // namespace
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -58,16 +58,15 @@ bool OnMY_CVehicle_BurstTyre(CVehicleSAInterface* pVehicle, uchar ucTyre)
 }
 
 // Hook info
-#define HOOKPOS_CAutomobile_BurstTyre   0x06A331C
-#define HOOKSIZE_CAutomobile_BurstTyre  5
-#define HOOKCHECK_CAutomobile_BurstTyre 0x6A
-DWORD                         RETURN_CAutomobile_BurstTyre_A = 0x06A3321;
-DWORD                         RETURN_CAutomobile_BurstTyre_B = 0x06A3425;
+#define HOOKPOS_CAutomobile_BurstTyre                       0x06A331C
+#define HOOKSIZE_CAutomobile_BurstTyre                      5
+#define HOOKCHECK_CAutomobile_BurstTyre                     0x6A
+DWORD RETURN_CAutomobile_BurstTyre_A = 0x06A3321;
+DWORD RETURN_CAutomobile_BurstTyre_B = 0x06A3425;
 static void __declspec(naked) HOOK_CAutomobile_BurstTyre()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -89,7 +88,6 @@ cont:
         mov     ecx, ebx
         jmp     RETURN_CAutomobile_BurstTyre_A
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -99,16 +97,15 @@ cont:
 //
 //////////////////////////////////////////////////////////////////////////////////////////
 // Hook info
-#define HOOKPOS_CBike_BurstTyre   0x06BEB94
-#define HOOKSIZE_CBike_BurstTyre  10
-#define HOOKCHECK_CBike_BurstTyre 0x6A
-DWORD                         RETURN_CBike_BurstTyre_A = 0x06BEB9E;
-DWORD                         RETURN_CBike_BurstTyre_B = 0x06BECA5;
+#define HOOKPOS_CBike_BurstTyre                         0x06BEB94
+#define HOOKSIZE_CBike_BurstTyre                        10
+#define HOOKCHECK_CBike_BurstTyre                       0x6A
+DWORD RETURN_CBike_BurstTyre_A = 0x06BEB9E;
+DWORD RETURN_CBike_BurstTyre_B = 0x06BECA5;
 static void __declspec(naked) HOOK_CBike_BurstTyre()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -131,7 +128,6 @@ cont:
         lea     ecx, [esi+138h]
         jmp     RETURN_CBike_BurstTyre_A
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -153,15 +149,14 @@ bool OnMY_CVehicle_InflictDamage(CVehicleSAInterface* pVehicle, CEntitySAInterfa
 }
 
 // Hook info
-#define HOOKPOS_CVehicle_InflictDamage   0x06D7C90
-#define HOOKSIZE_CVehicle_InflictDamage  5
-#define HOOKCHECK_CVehicle_InflictDamage 0x6A
-DWORD                         RETURN_CVehicle_InflictDamage = 0x0404CDC;
+#define HOOKPOS_CVehicle_InflictDamage                          0x06D7C90
+#define HOOKSIZE_CVehicle_InflictDamage                         5
+#define HOOKCHECK_CVehicle_InflictDamage                        0x6A
+DWORD RETURN_CVehicle_InflictDamage = 0x0404CDC;
 static void __declspec(naked) HOOK_CVehicle_InflictDamage()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -186,7 +181,6 @@ cont:
         push    0FFFFFFFFh
         jmp     RETURN_CVehicle_InflictDamage
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -211,15 +205,14 @@ void OnMY_CVehicle_VehicleDamage1(CVehicleSAInterface* pVehicle, float f, ushort
 }
 
 // Hook info
-#define HOOKPOS_CAutomobile_VehicleDamage1   0x06A7650
-#define HOOKSIZE_CAutomobile_VehicleDamage1  7
-#define HOOKCHECK_CAutomobile_VehicleDamage1 0x6A
-DWORD                         RETURN_CAutomobile_VehicleDamage1 = 0x06A7657;
+#define HOOKPOS_CAutomobile_VehicleDamage1                      0x06A7650
+#define HOOKSIZE_CAutomobile_VehicleDamage1                     7
+#define HOOKCHECK_CAutomobile_VehicleDamage1                    0x6A
+DWORD RETURN_CAutomobile_VehicleDamage1 = 0x06A7657;
 static void __declspec(naked) HOOK_CAutomobile_VehicleDamage1()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -239,13 +232,12 @@ static void __declspec(naked) HOOK_CAutomobile_VehicleDamage1()
         push    [0x847FD8]
         jmp     RETURN_CAutomobile_VehicleDamage1
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 // CVehicle::VehicleDamage hook 2
-//      (Used for CAutomobile, CBike, CPlane and CBoat hooks)
+//      (Used for CAutomobile, CBike and CPlane hooks)
 //
 // Trigger event
 //
@@ -274,15 +266,14 @@ float OnMY_CVehicle_VehicleDamage2(CVehicleSAInterface* pVehicle, float fDamage)
 }
 
 // Hook info
-#define HOOKPOS_CAutomobile_VehicleDamage2   0x06A8325
-#define HOOKSIZE_CAutomobile_VehicleDamage2  6
-#define HOOKCHECK_CAutomobile_VehicleDamage2 0xD8
-DWORD                         RETURN_CAutomobile_VehicleDamage2 = 0x06A832B;
+#define HOOKPOS_CAutomobile_VehicleDamage2                      0x06A8325
+#define HOOKSIZE_CAutomobile_VehicleDamage2                     6
+#define HOOKCHECK_CAutomobile_VehicleDamage2                    0xD8
+DWORD RETURN_CAutomobile_VehicleDamage2 = 0x06A832B;
 static void __declspec(naked) HOOK_CAutomobile_VehicleDamage2()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -298,7 +289,6 @@ static void __declspec(naked) HOOK_CAutomobile_VehicleDamage2()
         fsubr   dword ptr [esi+4C0h]
         jmp     RETURN_CAutomobile_VehicleDamage2
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -309,15 +299,14 @@ static void __declspec(naked) HOOK_CAutomobile_VehicleDamage2()
 //
 //////////////////////////////////////////////////////////////////////////////////////////
 // Hook info
-#define HOOKPOS_CPlane_VehicleDamage1   0x06CC4B0
-#define HOOKSIZE_CPlane_VehicleDamage1  8
-#define HOOKCHECK_CPlane_VehicleDamage1 0x83
-DWORD                         RETURN_CPlane_VehicleDamage1 = 0x06CC4B8;
+#define HOOKPOS_CPlane_VehicleDamage1                       0x06CC4B0
+#define HOOKSIZE_CPlane_VehicleDamage1                      8
+#define HOOKCHECK_CPlane_VehicleDamage1                     0x83
+DWORD RETURN_CPlane_VehicleDamage1 = 0x06CC4B8;
 static void __declspec(naked) HOOK_CPlane_VehicleDamage1()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -337,7 +326,6 @@ static void __declspec(naked) HOOK_CPlane_VehicleDamage1()
         mov     eax, dword ptr ds:[0x08D33E4]
         jmp     RETURN_CPlane_VehicleDamage1
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -348,15 +336,14 @@ static void __declspec(naked) HOOK_CPlane_VehicleDamage1()
 //
 //////////////////////////////////////////////////////////////////////////////////////////
 // Hook info
-#define HOOKPOS_CPlane_VehicleDamage2   0x06CC6C8
-#define HOOKSIZE_CPlane_VehicleDamage2  6
-#define HOOKCHECK_CPlane_VehicleDamage2 0xD8
-DWORD                         RETURN_CPlane_VehicleDamage2 = 0x06CC6CE;
+#define HOOKPOS_CPlane_VehicleDamage2                       0x06CC6C8
+#define HOOKSIZE_CPlane_VehicleDamage2                      6
+#define HOOKCHECK_CPlane_VehicleDamage2                     0xD8
+DWORD RETURN_CPlane_VehicleDamage2 = 0x06CC6CE;
 static void __declspec(naked) HOOK_CPlane_VehicleDamage2()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -372,7 +359,6 @@ static void __declspec(naked) HOOK_CPlane_VehicleDamage2()
         fsubr   dword ptr [esi+4C0h]
         jmp     RETURN_CPlane_VehicleDamage2
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -383,15 +369,14 @@ static void __declspec(naked) HOOK_CPlane_VehicleDamage2()
 //
 //////////////////////////////////////////////////////////////////////////////////////////
 // Hook info
-#define HOOKPOS_CBike_VehicleDamage1   0x06B8EC0
-#define HOOKSIZE_CBike_VehicleDamage1  5
-#define HOOKCHECK_CBike_VehicleDamage1 0x51
-DWORD                         RETURN_CBike_VehicleDamage1 = 0x06B8EC5;
+#define HOOKPOS_CBike_VehicleDamage1                        0x06B8EC0
+#define HOOKSIZE_CBike_VehicleDamage1                       5
+#define HOOKCHECK_CBike_VehicleDamage1                      0x51
+DWORD RETURN_CBike_VehicleDamage1 = 0x06B8EC5;
 static void __declspec(naked) HOOK_CBike_VehicleDamage1()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -411,7 +396,6 @@ static void __declspec(naked) HOOK_CBike_VehicleDamage1()
         fld     [esp+8]
         jmp     RETURN_CBike_VehicleDamage1
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -422,15 +406,14 @@ static void __declspec(naked) HOOK_CBike_VehicleDamage1()
 //
 //////////////////////////////////////////////////////////////////////////////////////////
 // Hook info
-#define HOOKPOS_CBike_VehicleDamage2   0x06B91C2
-#define HOOKSIZE_CBike_VehicleDamage2  6
-#define HOOKCHECK_CBike_VehicleDamage2 0xD8
-DWORD                         RETURN_CBike_VehicleDamage2 = 0x06B91C8;
+#define HOOKPOS_CBike_VehicleDamage2                        0x06B91C2
+#define HOOKSIZE_CBike_VehicleDamage2                       6
+#define HOOKCHECK_CBike_VehicleDamage2                      0xD8
+DWORD RETURN_CBike_VehicleDamage2 = 0x06B91C8;
 static void __declspec(naked) HOOK_CBike_VehicleDamage2()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -446,55 +429,6 @@ static void __declspec(naked) HOOK_CBike_VehicleDamage2()
         fsubr   dword ptr [esi+4C0h]
         jmp     RETURN_CBike_VehicleDamage2
     }
-    // clang-format on
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-// CBoat::ProcessControl hook
-//
-// Trigger event
-//
-// CBoat has no VehicleDamage override, its collision damage is applied inline in
-// ProcessControl. The health store that follows the subtraction is part of the same hook,
-// because a damage proof boat has to keep the value out of its health, which is what the
-// separate CBoat_ApplyDamage hook did before.
-//
-//////////////////////////////////////////////////////////////////////////////////////////
-// Hook info
-#define HOOKPOS_CBoat_VehicleDamage2   0x06F1C2C
-#define HOOKSIZE_CBoat_VehicleDamage2  18
-#define HOOKCHECK_CBoat_VehicleDamage2 0xD8
-DWORD                         RETURN_CBoat_VehicleDamage2 = 0x06F1C3E;
-static void __declspec(naked) HOOK_CBoat_VehicleDamage2()
-{
-    MTA_VERIFY_HOOK_LOCAL_SIZE;
-
-    // clang-format off
-    __asm
-    {
-        // vehicleFlags->bCanBeDamaged, damage proof boats stay silent like cars
-        test    byte ptr [esi+42Ah], 20h
-        jz      damageProof
-
-        sub     esp, 4
-        fstp    dword ptr [esp] // Pop loss into the second argument
-        push    esi
-        call    OnMY_CVehicle_VehicleDamage2
-        add     esp, 4*2
-        // Loss is on fp stack (from function return)
-
-        // Continue replaced code
-        fsubr   dword ptr [esi+4C0h]
-        fst     dword ptr [esi+4C0h]
-        jmp     RETURN_CBoat_VehicleDamage2
-
-damageProof:
-        // The same without the health store
-        fsubr   dword ptr [esi+4C0h]
-        jmp     RETURN_CBoat_VehicleDamage2
-    }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -527,5 +461,4 @@ void CMultiplayerSA::InitHooks_VehicleDamage()
     EZHookInstallChecked(CPlane_VehicleDamage2);
     EZHookInstallChecked(CBike_VehicleDamage1);
     EZHookInstallChecked(CBike_VehicleDamage2);
-    EZHookInstallChecked(CBoat_VehicleDamage2);
 }

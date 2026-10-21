@@ -17,7 +17,6 @@ CGUIWebBrowser_Impl::CGUIWebBrowser_Impl(CGUI_Impl* pGUI, CGUIElement* pParent)
     m_pImagesetManager = pGUI->GetImageSetManager();
     m_pImageset = nullptr;
     m_pImage = nullptr;
-    m_pTexture = nullptr;
     m_pGUI = pGUI;
     SetManager(pGUI);
     m_pWebView = nullptr;
@@ -78,63 +77,41 @@ void CGUIWebBrowser_Impl::Clear()
         m_pImage = nullptr;
         m_pImageset = nullptr;
     }
-
-    // The imageset does not own the texture, so it must be released here
-    if (m_pTexture)
-    {
-        delete m_pTexture;
-        m_pTexture = nullptr;
-    }
 }
 
 void CGUIWebBrowser_Impl::LoadFromWebView(CWebViewInterface* pWebView)
 {
     m_pWebView = pWebView;
 
-    if (!pWebView)
+    if (m_pImageset && m_pImage)
     {
-        // No web view available (creation failed), so leave the widget blank
-        Clear();
-        return;
+        m_pImageset->undefineAllImages();
     }
 
-    // Release any previous imageset and texture so a re-load cannot draw stale
-    // content from an old web view or leak the old texture.
-    Clear();
+    CGUIWebBrowserTexture* pCEGUITexture = new CGUIWebBrowserTexture(m_pGUI->GetRenderer(), m_pWebView);
 
-    try
+    // Get an unique identifier for CEGUI for the imageset
+    char szUnique[CGUI_CHAR_SIZE];
+    m_pGUI->GetUniqueName(szUnique);
+
+    // Create an imageset
+    if (!m_pImageset)
     {
-        m_pTexture = new CGUIWebBrowserTexture(m_pGUI->GetRenderer(), m_pWebView);
-
-        // Get an unique identifier for CEGUI for the imageset
-        char szUnique[CGUI_CHAR_SIZE];
-        m_pGUI->GetUniqueName(szUnique);
-
-        // Create an imageset
-        if (!m_pImageset)
-        {
-            while (m_pImagesetManager->isImagesetPresent(szUnique))
-                m_pGUI->GetUniqueName(szUnique);
-            m_pImageset = m_pImagesetManager->createImageset(szUnique, m_pTexture, true);
-        }
-
-        // Get an unique identifier for CEGUI for the image
-        m_pGUI->GetUniqueName(szUnique);
-
-        // Define an image and get its pointer
-        m_pImageset->defineImage(szUnique, CEGUI::Point(0, 0), CEGUI::Size(m_pTexture->getWidth(), m_pTexture->getHeight()), CEGUI::Point(0, 0));
-        m_pImage = const_cast<CEGUI::Image*>(
-            &m_pImageset->getImage(szUnique));  // const_cast here is a huge hack, but is okay here since all images generated here are unique
-
-        // Set the image just loaded as the image to be drawn for the widget
-        reinterpret_cast<CEGUI::StaticImage*>(m_pWindow)->setImage(m_pImage);
+        while (m_pImagesetManager->isImagesetPresent(szUnique))
+            m_pGUI->GetUniqueName(szUnique);
+        m_pImageset = m_pImagesetManager->createImageset(szUnique, pCEGUITexture, true);
     }
-    catch (const CEGUI::Exception& e)
-    {
-        OutputDebugLine(SString("CGUIWebBrowser_Impl::LoadFromWebView failed: %s", e.getMessage().c_str()));
-        // Release any partially created imageset or texture and leave the widget blank.
-        Clear();
-    }
+
+    // Get an unique identifier for CEGUI for the image
+    m_pGUI->GetUniqueName(szUnique);
+
+    // Define an image and get its pointer
+    m_pImageset->defineImage(szUnique, CEGUI::Point(0, 0), CEGUI::Size(pCEGUITexture->getWidth(), pCEGUITexture->getHeight()), CEGUI::Point(0, 0));
+    m_pImage = const_cast<CEGUI::Image*>(
+        &m_pImageset->getImage(szUnique));            // const_cast here is a huge hack, but is okay here since all images generated here are unique
+
+    // Set the image just loaded as the image to be drawn for the widget
+    reinterpret_cast<CEGUI::StaticImage*>(m_pWindow)->setImage(m_pImage);
 }
 
 void CGUIWebBrowser_Impl::SetFrameEnabled(bool bFrameEnabled)
@@ -159,8 +136,6 @@ void CGUIWebBrowser_Impl::Render()
 
 bool CGUIWebBrowser_Impl::HasInputFocus()
 {
-    if (!m_pWebView)
-        return false;
     return m_pWebView->HasInputFocus();
 }
 
@@ -181,9 +156,6 @@ void CGUIWebBrowser_Impl::SetSize(const CVector2D& vecSize, bool bRelative)
 
 bool CGUIWebBrowser_Impl::Event_MouseButtonDown(const CEGUI::EventArgs& e)
 {
-    if (!m_pWebView)
-        return true;
-
     const CEGUI::MouseEventArgs& args = reinterpret_cast<const CEGUI::MouseEventArgs&>(e);
 
     if (args.button == CEGUI::MouseButton::LeftButton)
@@ -198,9 +170,6 @@ bool CGUIWebBrowser_Impl::Event_MouseButtonDown(const CEGUI::EventArgs& e)
 
 bool CGUIWebBrowser_Impl::Event_MouseButtonUp(const CEGUI::EventArgs& e)
 {
-    if (!m_pWebView)
-        return true;
-
     const CEGUI::MouseEventArgs& args = reinterpret_cast<const CEGUI::MouseEventArgs&>(e);
 
     if (args.button == CEGUI::MouseButton::LeftButton)
@@ -215,9 +184,6 @@ bool CGUIWebBrowser_Impl::Event_MouseButtonUp(const CEGUI::EventArgs& e)
 
 bool CGUIWebBrowser_Impl::Event_MouseDoubleClick(const CEGUI::EventArgs& e)
 {
-    if (!m_pWebView)
-        return true;
-
     const CEGUI::MouseEventArgs& args = reinterpret_cast<const CEGUI::MouseEventArgs&>(e);
 
     if (args.button == CEGUI::MouseButton::LeftButton)
@@ -232,9 +198,6 @@ bool CGUIWebBrowser_Impl::Event_MouseDoubleClick(const CEGUI::EventArgs& e)
 
 bool CGUIWebBrowser_Impl::Event_MouseMove(const CEGUI::EventArgs& e)
 {
-    if (!m_pWebView)
-        return true;
-
     const CEGUI::MouseEventArgs& args = reinterpret_cast<const CEGUI::MouseEventArgs&>(e);
 
     m_pWebView->InjectMouseMove((int)(args.position.d_x - m_pWindow->windowToScreenX(0.0f)), (int)(args.position.d_y - m_pWindow->windowToScreenY(0.0f)));
@@ -243,9 +206,6 @@ bool CGUIWebBrowser_Impl::Event_MouseMove(const CEGUI::EventArgs& e)
 
 bool CGUIWebBrowser_Impl::Event_MouseWheel(const CEGUI::EventArgs& e)
 {
-    if (!m_pWebView)
-        return true;
-
     const CEGUI::MouseEventArgs& args = reinterpret_cast<const CEGUI::MouseEventArgs&>(e);
 
     m_pWebView->InjectMouseWheel((int)(args.wheelChange * 40), 0);
@@ -254,16 +214,12 @@ bool CGUIWebBrowser_Impl::Event_MouseWheel(const CEGUI::EventArgs& e)
 
 bool CGUIWebBrowser_Impl::Event_Activated(const CEGUI::EventArgs& e)
 {
-    if (!m_pWebView)
-        return true;
     m_pWebView->Focus(true);
     return true;
 }
 
 bool CGUIWebBrowser_Impl::Event_Deactivated(const CEGUI::EventArgs& e)
 {
-    if (!m_pWebView)
-        return true;
     m_pWebView->Focus(false);
     return true;
 }

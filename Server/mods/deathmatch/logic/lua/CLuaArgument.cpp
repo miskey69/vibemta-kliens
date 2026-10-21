@@ -21,7 +21,7 @@
 extern CGame* g_pGame;
 
 #ifndef VERIFY_ELEMENT
-    #define VERIFY_ELEMENT(element) (g_pGame->GetMapManager()->GetRootElement()->IsMyChild(element, true) && !element->IsBeingDeleted())
+#define VERIFY_ELEMENT(element) (g_pGame->GetMapManager()->GetRootElement ()->IsMyChild(element,true)&&!element->IsBeingDeleted())
 #endif
 
 using namespace std;
@@ -31,7 +31,6 @@ CLuaArgument::CLuaArgument()
     m_iType = LUA_TNIL;
     m_pTableData = NULL;
     m_pUserData = NULL;
-    m_bWeakTableRef = false;
 }
 
 CLuaArgument::CLuaArgument(const CLuaArgument& Argument, CFastHashMap<CLuaArguments*, CLuaArguments*>* pKnownTables)
@@ -59,7 +58,7 @@ void CLuaArgument::CopyRecursive(const CLuaArgument& Argument, CFastHashMap<CLua
     // Clear the string
     m_strString = "";
 
-    // Destroy our old tabledata if necessary
+    // Destroy our old tabledata if neccessary
     DeleteTableData();
 
 #ifdef MTA_DEBUG
@@ -241,71 +240,62 @@ void CLuaArgument::Read(lua_State* luaVM, int iArgument, CFastHashMap<const void
 
 void CLuaArgument::Push(lua_State* luaVM, CFastHashMap<CLuaArguments*, int>* pKnownTables) const
 {
-    // Make sure the stack has enough room
-    LUA_CHECKSTACK(luaVM, 1);
-
-    // Push it depending on the type
-    switch (m_iType)
+    // Got any type?
+    if (m_iType != LUA_TNONE)
     {
-        case LUA_TNIL:
-        {
-            lua_pushnil(luaVM);
-            break;
-        }
+        // Make sure the stack has enough room
+        LUA_CHECKSTACK(luaVM, 1);
 
-        case LUA_TBOOLEAN:
+        // Push it depending on the type
+        switch (m_iType)
         {
-            lua_pushboolean(luaVM, m_bBoolean);
-            break;
-        }
-
-        case LUA_TLIGHTUSERDATA:
-        case LUA_TUSERDATA:
-        {
-            lua_pushuserdata(luaVM, m_pUserData);
-            break;
-        }
-
-        case LUA_TNUMBER:
-        {
-            lua_pushnumber(luaVM, m_Number);
-            break;
-        }
-
-        case LUA_TTABLE:
-        {
-            if (!m_pTableData)
+            case LUA_TNIL:
             {
                 lua_pushnil(luaVM);
                 break;
             }
 
-            int* pTableId;
-            if (pKnownTables && (pTableId = MapFind(*pKnownTables, m_pTableData)))
+            case LUA_TBOOLEAN:
             {
-                lua_getfield(luaVM, LUA_REGISTRYINDEX, "cache");
-                lua_pushnumber(luaVM, *pTableId);
-                lua_gettable(luaVM, -2);
-                lua_remove(luaVM, -2);
+                lua_pushboolean(luaVM, m_bBoolean);
+                break;
             }
-            else
+
+            case LUA_TLIGHTUSERDATA:
+            case LUA_TUSERDATA:
             {
-                m_pTableData->PushAsTable(luaVM, pKnownTables);
+                lua_pushuserdata(luaVM, m_pUserData);
+                break;
             }
-            break;
-        }
 
-        case LUA_TSTRING:
-        {
-            lua_pushlstring(luaVM, m_strString.c_str(), m_strString.length());
-            break;
-        }
+            case LUA_TNUMBER:
+            {
+                lua_pushnumber(luaVM, m_Number);
+                break;
+            }
 
-        default:
-        {
-            // Unexpected type, keep the stack balanced for callers
-            lua_pushnil(luaVM);
-            break;
+            case LUA_TTABLE:
+            {
+                int* pThingy;
+                if (pKnownTables && (pThingy = MapFind(*pKnownTables, m_pTableData)))
+                {
+                    lua_getfield(luaVM, LUA_REGISTRYINDEX, "cache");
+                    lua_pushnumber(luaVM, *pThingy);
+                    lua_gettable(luaVM, -2);
+                    lua_remove(luaVM, -2);
+                }
+                else
+                {
+                    m_pTableData->PushAsTable(luaVM, pKnownTables);
+                }
+                break;
+            }
+
+            case LUA_TSTRING:
+            {
+                lua_pushlstring(luaVM, m_strString.c_str(), m_strString.length());
+                break;
+            }
         }
     }
 }
@@ -435,10 +425,9 @@ bool CLuaArgument::GetAsString(SString& strBuffer)
 }
 
 // Can't use bitStream.Version() here as it is sometimes not set
-bool CLuaArgument::ReadFromBitStream(NetBitStreamInterface& bitStream, std::vector<CLuaArguments*>* pKnownTables, unsigned int uiDepth)
+bool CLuaArgument::ReadFromBitStream(NetBitStreamInterface& bitStream, std::vector<CLuaArguments*>* pKnownTables)
 {
     DeleteTableData();
-    m_iType = LUA_TNIL;
     SLuaTypeSync type;
 
     // Read out the type
@@ -494,11 +483,8 @@ bool CLuaArgument::ReadFromBitStream(NetBitStreamInterface& bitStream, std::vect
             case LUA_TTABLE:
             {
                 m_pTableData = new CLuaArguments();
-                if (!m_pTableData->ReadFromBitStream(bitStream, pKnownTables, uiDepth + 1))
-                {
-                    DeleteTableData();
+                if (!m_pTableData->ReadFromBitStream(bitStream, pKnownTables))
                     return false;
-                }
                 m_bWeakTableRef = false;
                 m_iType = LUA_TTABLE;
                 m_pTableData->ValidateTableKeys();
@@ -730,7 +716,7 @@ bool CLuaArgument::WriteToBitStream(NetBitStreamInterface& bitStream, CFastHashM
             }
             else
             {
-                // Jax: this just spams the script debugger, it's not really necessary
+                // Jax: this just spams the script debugger, it's not really neccesary
                 // LogUnableToPacketize ( "Couldn't packetize argument list, invalid element specified." );
 
                 // Write a nil though so other side won't get out of sync
@@ -867,9 +853,9 @@ json_object* CLuaArgument::WriteToJSONObject(bool bSerialize, CFastHashMap<CLuaA
             }
             else
             {
-                if (pElement)  // eg toJSON() with valid element
+                if (pElement)            // eg toJSON() with valid element
                     g_pGame->GetScriptDebugging()->LogError(NULL, "Couldn't convert userdata argument to JSON, elements not allowed for this function.");
-                else if (!bSerialize)  // eg toJSON() with invalid element
+                else if (!bSerialize)            // eg toJSON() with invalid element
                     g_pGame->GetScriptDebugging()->LogError(
                         NULL, "Couldn't convert userdata argument to JSON, only valid resources can be included for this function.");
                 else
@@ -1052,7 +1038,7 @@ bool CLuaArgument::ReadFromJSONObject(json_object* object, std::vector<CLuaArgum
                 {
                     switch (strString[1])
                     {
-                        case 'E':  // element
+                        case 'E':            // element
                         {
                             int       id = atoi(strString.c_str() + 3);
                             CElement* element = NULL;
@@ -1070,7 +1056,7 @@ bool CLuaArgument::ReadFromJSONObject(json_object* object, std::vector<CLuaArgum
                             }
                             break;
                         }
-                        case 'R':  // resource
+                        case 'R':            // resource
                         {
                             CResource* resource = g_pGame->GetResourceManager()->GetResource(strString.c_str() + 3);
                             if (resource)
@@ -1084,7 +1070,7 @@ bool CLuaArgument::ReadFromJSONObject(json_object* object, std::vector<CLuaArgum
                             }
                             break;
                         }
-                        case 'T':  // Table reference
+                        case 'T':            // Table reference
                         {
                             unsigned long ulTableID = static_cast<unsigned long>(atol(strString.c_str() + 3));
                             if (pKnownTables && ulTableID < pKnownTables->size())

@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include <tinyxml2.h>
+#include <tinyxml.h>
 #include <xml/CXMLAttributes.h>
 
 #include <list>
@@ -19,7 +19,7 @@
 class CXMLAttributesImpl : public CXMLAttributes
 {
 public:
-    CXMLAttributesImpl(tinyxml2::XMLElement& Node, bool bUseIDs);
+    CXMLAttributesImpl(TiXmlElement& Node, bool bUseIDs);
     ~CXMLAttributesImpl();
 
     unsigned int         Count();
@@ -31,7 +31,7 @@ public:
     bool                 Delete(const char* szName);
     void                 DeleteAll();
 
-    tinyxml2::XMLElement& GetNode();
+    TiXmlElement& GetNode();
 
     class CXMLAttribute* AddToList(class CXMLAttribute* pAttribute);
     void                 RemoveFromList(class CXMLAttribute* pAttribute);
@@ -45,9 +45,9 @@ private:
     void CreateAttributes();
     void DeleteAttributes();
 
-    const bool            m_bUsingIDs;
-    bool                  m_bCanRemoveFromList;
-    tinyxml2::XMLElement& m_Node;
+    const bool    m_bUsingIDs;
+    bool          m_bCanRemoveFromList;
+    TiXmlElement& m_Node;
 
     std::list<CXMLAttribute*> m_Attributes;
 };

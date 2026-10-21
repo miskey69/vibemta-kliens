@@ -57,25 +57,22 @@ bool CWebBrowserItem::IsValid()
 //
 // CWebBrowserItem::OnLostDevice
 //
-// Release device stuff - D3DPOOL_DEFAULT textures must be released
+// Release device stuff
 //
 ////////////////////////////////////////////////////////////////
 void CWebBrowserItem::OnLostDevice()
 {
-    ReleaseUnderlyingData();
 }
 
 ////////////////////////////////////////////////////////////////
 //
 // CWebBrowserItem::OnResetDevice
 //
-// Recreate device stuff - D3DPOOL_DEFAULT textures must be recreated
+// Recreate device stuff
 //
 ////////////////////////////////////////////////////////////////
 void CWebBrowserItem::OnResetDevice()
 {
-    CreateUnderlyingData();
-    m_bTextureWasRecreated = true;  // Force full repaint after device reset
 }
 
 ////////////////////////////////////////////////////////////////
@@ -90,13 +87,8 @@ void CWebBrowserItem::CreateUnderlyingData()
     assert(!m_pD3DRenderTargetSurface);
     assert(!m_pD3DTexture);
 
-    // Use D3DPOOL_DEFAULT with D3DUSAGE_DYNAMIC for better performance:
-    // - Dynamic textures are optimized for frequent Lock/Unlock operations
-    // - D3DLOCK_DISCARD can be used effectively to avoid stalls
-    // - No system memory copy (unlike D3DPOOL_MANAGED), reducing memory usage
-    // Note: Must handle device lost/reset as DEFAULT pool textures don't survive resets
-    if (FAILED(m_pDevice->CreateTexture(m_uiSizeX, m_uiSizeY, 1, D3DUSAGE_DYNAMIC, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, (IDirect3DTexture9**)&m_pD3DTexture,
-                                        nullptr)) ||
+    // Check if texture is actually created. It can be failed in some conditions(e.g. lack of memory).
+    if (FAILED(D3DXCreateTexture(m_pDevice, m_uiSizeX, m_uiSizeY, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, (IDirect3DTexture9**)&m_pD3DTexture)) ||
         !m_pD3DTexture)
         return;
 
@@ -107,7 +99,15 @@ void CWebBrowserItem::CreateUnderlyingData()
         return;
     }
 
-    // Update surface size - dynamic textures may have different dimensions than requested
+    // D3DXCreateTexture sets width and height to 1 if the argument value was 0
+    // See: https://docs.microsoft.com/en-us/windows/desktop/direct3d9/d3dxcreatetexture
+    if (m_uiSizeX == 0)
+        m_uiSizeX = 1;
+
+    if (m_uiSizeY == 0)
+        m_uiSizeY = 1;
+
+    // Update surface size, although it probably will be unchanged | Todo: Remove this
     D3DSURFACE_DESC desc;
     m_pD3DRenderTargetSurface->GetDesc(&desc);
     m_uiSurfaceSizeX = desc.Width;

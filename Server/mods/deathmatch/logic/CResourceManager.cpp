@@ -23,8 +23,8 @@
 #include "CDatabaseManager.h"
 #include "CRegistry.h"
 
-#define BLOCKED_DB_FILE_NAME  "fileblock.db"
-#define BLOCKED_DB_TABLE_NAME "`block_reasons`"
+#define BLOCKED_DB_FILE_NAME    "fileblock.db"
+#define BLOCKED_DB_TABLE_NAME   "`block_reasons`"
 
 // SResInfo - Item in list of potential resources - Used in Refresh()
 struct SResInfo
@@ -252,15 +252,6 @@ bool CResourceManager::Refresh(bool bRefreshAll, const SString strJustThisResour
     {
         CResource* pResource = m_resourcesToStartAfterRefresh.front();
         m_resourcesToStartAfterRefresh.pop_front();
-        if (pResource->HasResourceChanged())
-        {
-            // Files changed since Load(); reload to refresh checksums
-            if (!Reload(pResource))
-            {
-                CLogger::LogPrintf("Resource '%s' has changed but reload failed; skipping start\n", pResource->GetName().c_str());
-                continue;
-            }
-        }
         pResource->Start();
     }
 
@@ -436,7 +427,7 @@ CResource* CResourceManager::Load(bool bIsZipped, const char* szAbsPath, const c
     CResource* pResource = GetResource(szResourceName);
     if (pResource)
     {
-        if (pResource->IsLoaded() && !pResource->HasResourceChanged())
+        if (!pResource->HasResourceChanged())
         {
             // Already loaded and no reload required
             return pResource;
@@ -558,7 +549,7 @@ CResource* CResourceManager::GetResourceFromNetID(unsigned short usNetID)
     {
         if ((*iter)->GetNetID() == usNetID)
         {
-            assert(0);  // Should be in map
+            assert(0);            // Should be in map
             return (*iter);
         }
     }
@@ -1229,7 +1220,7 @@ bool CResourceManager::ParseResourcePathInput(std::string strInput, CResource*& 
     ReplaceOccurrencesInString(strInput, "\\", "/");
 
     // Disallow file paths with a directory separator at the end
-    if (strInput.empty() || strInput.back() == '/')
+    if (strInput.back() == '/')
         return false;
 
     std::string strMetaPath;
@@ -1239,14 +1230,12 @@ bool CResourceManager::ParseResourcePathInput(std::string strInput, CResource*& 
         // This isn't relevant on the server because all files are private
         // But let's skip the symbol anyway
         strInput = strInput.substr(1);
-        if (strInput.empty())
-            return false;
     }
 
     if (strInput[0] == ':')
     {
-        const std::size_t iEnd = strInput.find_first_of("/");
-        if (iEnd != std::string::npos && iEnd > 1 && iEnd + 1 < strInput.size())
+        unsigned int iEnd = strInput.find_first_of("/");
+        if (iEnd)
         {
             std::string strResourceName = strInput.substr(1, iEnd - 1);
             pResource = g_pGame->GetResourceManager()->GetResource(strResourceName.c_str());
@@ -1370,11 +1359,11 @@ void CResourceManager::ReevaluateSyncMapElementDataOption()
     {
         if (iter->second)
         {
-            bSyncMapElementData = true;  // Any 'true' will stop the set
+            bSyncMapElementData = true;            // Any 'true' will stop the set
             break;
         }
         else
-            bSyncMapElementData = false;  // Need at least one 'false' to set
+            bSyncMapElementData = false;            // Need at least one 'false' to set
     }
 
     // Apply

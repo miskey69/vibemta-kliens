@@ -10,7 +10,6 @@
  *****************************************************************************/
 
 #include "StdInc.h"
-
 #include "CAccountManager.h"
 #include "CGame.h"
 #include "CDatabaseManager.h"
@@ -21,17 +20,8 @@
 #include "Utils.h"
 #include "CMapManager.h"
 
-namespace
-{
-    struct SAccountSaveContext
-    {
-        CAccountManager* pManager;
-        int              iAccountId;
-    };
-}
-
 CAccountManager::CAccountManager(const SString& strDbPathFilename)
-    : m_AccountProtect(6, 30000, 60000 * 1)  // Max of 6 attempts per 30 seconds, then 1 minute ignore
+    : m_AccountProtect(6, 30000, 60000 * 1)            // Max of 6 attempts per 30 seconds, then 1 minute ignore
 {
     m_llLastTimeSaved = GetTickCount64_();
     m_bChangedSinceSaved = false;
@@ -297,19 +287,11 @@ void CAccountManager::Save(CAccount* pAccount, bool bCheckForErrors)
 
     if (bCheckForErrors)
     {
-        auto pContext = std::make_unique<SAccountSaveContext>(SAccountSaveContext{this, static_cast<int>(iID)});
-        if (!m_pDatabaseManager->QueryWithCallback(m_hDbConnection, StaticAccountSaveDbCallback, pContext.get(), strQuery))
-        {
-            MarkAsChanged(pAccount);
-            return;
-        }
-
-        pContext.release();
+        m_pDatabaseManager->QueryWithCallback(m_hDbConnection, StaticDbCallback, this, strQuery);
     }
     else
     {
-        if (!m_pDatabaseManager->Exec(m_hDbConnection, strQuery))
-            return;
+        m_pDatabaseManager->Exec(m_hDbConnection, strQuery);
     }
 
     SaveAccountSerialUsage(pAccount);
@@ -324,7 +306,6 @@ void CAccountManager::Save(bool bForce)
     {
         // Attempted save now
         m_bChangedSinceSaved = false;
-        m_llLastTimeSaved = GetTickCount64_();
 
         for (auto pAccount : m_List)
         {
@@ -610,7 +591,7 @@ bool CAccountManager::LogIn(CClient* pClient, CClient* pEchoClient, const std::s
     CLuaArguments Arguments;
     Arguments.PushAccount(pCurrentAccount);
     Arguments.PushAccount(pAccount);
-    Arguments.PushBoolean(false);  // was bAutoLogin
+    Arguments.PushBoolean(false);            // was bAutoLogin
     if (!pPlayer->CallEvent("onPlayerLogin", Arguments))
     {
         // DENIED!
@@ -742,7 +723,7 @@ std::shared_ptr<CLuaArgument> CAccountManager::GetAccountData(CAccount* pAccount
                 break;
 
             default:
-                dassert(0);  // It never should hit this, if so, something corrupted
+                dassert(0);            // It never should hit this, if so, something corrupted
                 break;
         }
     }
@@ -796,14 +777,14 @@ bool CAccountManager::CopyAccountData(CAccount* pFromAccount, CAccount* pToAccou
     // list to store pFromAccount data to
     std::map<SString, CAccountData> copiedData;
 
-    if (!pFromAccount->IsRegistered())  // is not registered account, retrieve data from memory
+    if (!pFromAccount->IsRegistered())            // is not registered account, retrieve data from memory
     {
         for (const auto& iter : *pFromAccount)
         {
             MapSet(copiedData, iter.second.GetKey(), CAccountData(iter.second.GetKey(), iter.second.GetStrValue(), iter.second.GetType()));
         }
     }
-    else  // is registered account, retrieve from database
+    else            // is registered account, retrieve from database
     {
         SString strKey;
         SString strValue;
@@ -832,17 +813,17 @@ bool CAccountManager::CopyAccountData(CAccount* pFromAccount, CAccount* pToAccou
         }
     }
 
-    if (copiedData.size() > 0)  // got anything to copy?
+    if (copiedData.size() > 0)            // got anything to copy?
     {
         std::map<SString, CAccountData>::iterator iter = copiedData.begin();
 
         for (; iter != copiedData.end(); iter++)
         {
-            if (!pToAccount->IsRegistered())  // store to memory
+            if (!pToAccount->IsRegistered())            // store to memory
             {
                 pToAccount->SetData(iter->second.GetKey(), iter->second.GetStrValue(), iter->second.GetType());
             }
-            else  // store to database
+            else            // store to database
             {
                 CRegistryResult subResult;
 
@@ -979,10 +960,13 @@ void CAccountManager::GetAccountsByIP(const SString& strIP, std::vector<CAccount
 
 CAccount* CAccountManager::GetAccountByID(int ID)
 {
-    // Failure callbacks must not query the same database that just failed.
-    for (CAccount* pAccount : m_List)
-        if (pAccount->GetID() == ID)
-            return pAccount;
+    CRegistryResult result;
+    m_pDatabaseManager->QueryWithResultf(m_hDbConnection, &result, "SELECT name FROM accounts WHERE id = ?", SQLITE_INTEGER, ID);
+
+    for (const auto& row : result->Data)
+    {
+        return Get(reinterpret_cast<const char*>(row[0].pVal));
+    }
 
     return nullptr;
 }
@@ -1027,7 +1011,7 @@ CAccount* CAccountManager::AddConsoleAccount(const SString& strName)
 CAccount* CAccountManager::AddPlayerAccount(const SString& strName, const SString& strPassword, int iUserID, const SString& strIP, const SString& strSerial,
                                             const SString& strHttpPassAppend)
 {
-    CAccount*     pAccount = new CAccount(this, EAccountType::Player, strName, strPassword, iUserID, strIP, strSerial, strHttpPassAppend);
+    CAccount* pAccount = new CAccount(this, EAccountType::Player, strName, strPassword, iUserID, strIP, strSerial, strHttpPassAppend);
     CLuaArguments Arguments;
     Arguments.PushAccount(pAccount);
     g_pGame->GetMapManager()->GetRootElement()->CallEvent("onAccountCreate", Arguments);
@@ -1077,31 +1061,16 @@ void CAccountManager::StaticDbCallback(CDbJobData* pJobData, void* pContext)
 #endif
 }
 
-void CAccountManager::StaticAccountSaveDbCallback(CDbJobData* pJobData, void* pContext)
-{
-    if (pJobData->stage != EJobStage::RESULT)
-        return;
-
-    std::unique_ptr<SAccountSaveContext> pSaveContext(static_cast<SAccountSaveContext*>(pContext));
-    if (pSaveContext->pManager->DbCallback(pJobData))
-        return;
-
-    // The account may have been removed while its asynchronous save was pending.
-    CAccount* pAccount = pSaveContext->pManager->GetAccountByID(pSaveContext->iAccountId);
-    if (pAccount)
-        pSaveContext->pManager->MarkAsChanged(pAccount);
-}
-
-bool CAccountManager::DbCallback(CDbJobData* pJobData)
+void CAccountManager::DbCallback(CDbJobData* pJobData)
 {
     if (!m_pDatabaseManager->QueryPoll(pJobData, 0))
     {
         CLogger::LogPrintf("ERROR: Something worrying happened in DbCallback '%s': %s.\n", *pJobData->GetCommandStringForLog(), *pJobData->result.strReason);
-        return false;
+        return;
     }
 
     if (pJobData->result.status != EJobResult::FAIL)
-        return true;
+        return;
 
     CLogger::LogPrintf("ERROR: While updating account with '%s': %s.\n", *pJobData->GetCommandStringForLog(), *pJobData->result.strReason);
     if (pJobData->result.strReason.ContainsI("missing database"))
@@ -1110,8 +1079,6 @@ bool CAccountManager::DbCallback(CDbJobData* pJobData)
         CLogger::LogPrintf("INFO: Reconnecting to accounts database\n");
         ReconnectToDatabase();
     }
-
-    return false;
 }
 
 //
@@ -1179,7 +1146,7 @@ bool CAccountManager::IsAuthorizedSerialRequired(CAccount* pAccount)
 bool CAccountManager::IsHttpLoginAllowed(CAccount* pAccount, const SString& strIp)
 {
     return !g_pGame->GetConfig()->GetAuthSerialHttpEnabled() || g_pGame->GetConfig()->IsAuthSerialHttpIpException(strIp) ||
-           !IsAuthorizedSerialRequired(pAccount) || pAccount->IsIpAuthorized(strIp);
+        !IsAuthorizedSerialRequired(pAccount) || pAccount->IsIpAuthorized(strIp);
 }
 
 //

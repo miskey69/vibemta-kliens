@@ -12,8 +12,6 @@
 
 #include "CStaticFunctionDefinitions.h"
 
-void NetServer_NotifyHqReachable(bool bReachable);
-
 enum
 {
     HQCOMMS_STAGE_NONE,
@@ -51,7 +49,7 @@ public:
             m_Stage = HQCOMMS_STAGE_QUERY;
 
             CBitStream bitStream;
-            bitStream->Write((char)4);  // Data version
+            bitStream->Write((char)4);            // Data version
             bitStream->WriteStr(g_pGame->GetConfig()->GetServerIP());
             bitStream->Write(g_pGame->GetConfig()->GetServerPort());
             bitStream->WriteStr(CStaticFunctionDefinitions::GetVersionSortable());
@@ -93,7 +91,7 @@ public:
             bitStream->WriteStr(SString::Join(",", g_pGame->GetConfig()->GetOwnerEmailAddressList()));
 
             // Send request
-            this->AddRef();  // Keep object alive
+            this->AddRef();            // Keep object alive
             SHttpRequestOptions options;
             options.strPostData = SStringX((const char*)bitStream->GetData(), bitStream->GetNumberOfBytesUsed());
             options.bPostBinary = true;
@@ -109,7 +107,7 @@ public:
     {
         CHqComms* pHqComms = (CHqComms*)result.pObj;
         pHqComms->DownloadFinishedCallback(result);
-        pHqComms->Release();  // No need to keep object alive now
+        pHqComms->Release();            // No need to keep object alive now
     }
 
     //
@@ -120,7 +118,6 @@ public:
         if (result.bSuccess)
         {
             m_Stage = HQCOMMS_STAGE_TIMER;
-            NetServer_NotifyHqReachable(true);
             CBitStream bitStream(result.pData, result.dataSize);
 
             // Process various parts of returned data
@@ -134,7 +131,6 @@ public:
         else
         {
             m_Stage = HQCOMMS_STAGE_TIMER;
-            NetServer_NotifyHqReachable(false);
         }
     }
 
@@ -162,7 +158,7 @@ public:
         }
     }
 
-    // Message for this server from HQ
+    // Messsage for this server from HQ
     void ProcessMessage(CBitStream& bitStream)
     {
         int     iMessageAlwaysPrint = 0;
@@ -251,7 +247,7 @@ public:
     static CNetHTTPDownloadManagerInterface* GetDownloadManager() { return g_pNetServer->GetHTTPDownloadManager(EDownloadMode::ASE); }
 
 protected:
-    ~CHqComms() {}  // Must use Release()
+    ~CHqComms() {}            // Must use Release()
 
     int          m_iPollInterval;
     int          m_iPrevBadFileHashesRev;
@@ -260,5 +256,5 @@ protected:
     SString      m_strURL;
     SString      m_strPrevMessage;
     SString      m_strCrashLogFilename;
-    SString      m_strCrashDumpMeta;  // Filename of file which contains the latest crash dump filename
+    SString      m_strCrashDumpMeta;            // Filename of file which contains the latest crash dump filename
 };

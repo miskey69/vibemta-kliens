@@ -2,7 +2,6 @@ project "blowfish_bcrypt"
 	language "C++"
 	kind "StaticLib"
 	targetname "blowfish_bcrypt"
-	warnings "Off"
 
 	vpaths {
 		["Headers/*"] = "*.h",

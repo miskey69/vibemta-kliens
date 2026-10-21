@@ -81,7 +81,6 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
         // Player position
         SPositionSync position(false);
         bool          positionRead = BitStream.Read(&position);
-        const CVector vecRelativePosition = position.data.vecPosition;
 
         if (positionRead && pContactElement != nullptr)
         {
@@ -95,8 +94,9 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
                     break;
             }
 
-            if (radius > -1 && (!IsPointNearPoint3D(pSourcePlayer->GetPosition(), pContactElement->GetPosition(), static_cast<float>(radius)) ||
-                                pSourcePlayer->GetDimension() != pContactElement->GetDimension()))
+            if (radius > -1 && 
+                (!IsPointNearPoint3D(pSourcePlayer->GetPosition(), pContactElement->GetPosition(), static_cast<float>(radius)) ||
+                    pSourcePlayer->GetDimension() != pContactElement->GetDimension()))
             {
                 pContactElement = nullptr;
                 // Use current player position. They are not reporting their absolute position so we have to disregard it.
@@ -110,7 +110,7 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
         {
             position.data.vecPosition = pSourcePlayer->GetPosition();
         }
-
+        
         CElement* pPreviousContactElement = pSourcePlayer->GetContactElement();
         pSourcePlayer->SetContactElement(pContactElement);
 
@@ -145,7 +145,7 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
         // if (position.data.vecPosition.fX != 0.0f || position.data.vecPosition.fY != 0.0f || position.data.vecPosition.fZ != 0.0f)
         {
             CVector playerPosition = pSourcePlayer->GetPosition();
-            float   playerDistancePosition = DistanceBetweenPoints3D(playerPosition, position.data.vecPosition);
+            float playerDistancePosition = DistanceBetweenPoints3D(playerPosition, position.data.vecPosition);
             if (playerDistancePosition >= g_TickRateSettings.playerTeleportAlert)
             {
                 if (!pSourcePlayer->GetTeleported())
@@ -185,14 +185,14 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
         SPlayerHealthSync health;
         if (!BitStream.Read(&health))
             return false;
-        float fHealth = std::clamp(health.data.fValue, 0.0f, pSourcePlayer->GetMaxHealth());
+        float fHealth = health.data.fValue;
 
         // Armor
         SPlayerArmorSync armor;
         if (!BitStream.Read(&armor))
             return false;
 
-        float fArmor = std::clamp(armor.data.fValue, 0.0f, 100.0f);
+        float fArmor = armor.data.fValue;
         float fOldArmor = pSourcePlayer->GetArmor();
         float fArmorLoss = fOldArmor - fArmor;
 
@@ -205,10 +205,7 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
 
         // Read the camera orientation
         CVector vecCamPosition, vecCamFwd;
-        // Camera orientation is encoded against the same position basis the client wrote.
-        CVector vecCameraBasePosition = pContactElement ? vecRelativePosition : position.data.vecPosition;
-
-        ReadCameraOrientation(vecCameraBasePosition, BitStream, vecCamPosition, vecCamFwd);
+        ReadCameraOrientation(position.data.vecPosition, BitStream, vecCamPosition, vecCamFwd);
         pSourcePlayer->SetCameraOrientation(vecCamPosition, vecCamFwd);
 
         if (flags.data.bHasAWeapon)
@@ -224,8 +221,8 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
 
             if (pSourcePlayer->GetWeaponType() != ucClientWeaponType)
             {
-                bWeaponCorrect = false;                // Possibly old weapon data.
-                ucUseWeaponType = ucClientWeaponType;  // Use the packet supplied weapon type to skip over the correct amount of data
+                bWeaponCorrect = false;                          // Possibly old weapon data.
+                ucUseWeaponType = ucClientWeaponType;            // Use the packet supplied weapon type to skip over the correct amount of data
             }
 
             // Update check counts
@@ -239,13 +236,7 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
 
             // Set weapon slot
             if (bWeaponCorrect)
-            {
-                const unsigned int uiCurrSlot = slot.data.uiSlot;
-                if (uiCurrSlot > 0xFF)
-                    return false;
-
-                pSourcePlayer->SetWeaponSlot(static_cast<unsigned char>(uiCurrSlot));
-            }
+                pSourcePlayer->SetWeaponSlot(ucSlot);
             else
             {
                 // remove invalid weapon data to prevent this from being relayed to other players
@@ -363,7 +354,7 @@ bool CPlayerPuresyncPacket::Write(NetBitStreamInterface& BitStream) const
         CPlayer* pSourcePlayer = static_cast<CPlayer*>(m_pSourceElement);
 
         ElementID               PlayerID = pSourcePlayer->GetID();
-        unsigned short          usLatency = static_cast<unsigned short>(pSourcePlayer->GetPing());
+        auto                    usLatency = static_cast<unsigned short>(pSourcePlayer->GetPing());
         const CControllerState& ControllerState = pSourcePlayer->GetPad()->GetCurrentControllerState();
         CElement*               pContactElement = pSourcePlayer->GetContactElement();
 

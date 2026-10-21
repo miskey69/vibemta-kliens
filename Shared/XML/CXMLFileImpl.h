@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include <tinyxml2.h>
+#include <tinyxml.h>
 #include <iostream>
 #include <fstream>
 #include <xml/CXMLFile.h>
@@ -41,7 +41,7 @@ public:
     // Private functions
     void SetLastError(CXMLErrorCodes::Code errCode, const std::string& strDescription);
 
-    tinyxml2::XMLDocument* GetDocument();
+    TiXmlDocument* GetDocument();
 
     eXMLClass     GetClassType() { return CXML_FILE; };
     unsigned long GetID()
@@ -67,7 +67,7 @@ private:
     CXMLErrorCodes::Code m_errLastError;
     std::string          m_strLastError;
 
-    tinyxml2::XMLDocument* m_pDocument;
+    TiXmlDocument* m_pDocument;
 
     class CXMLNodeImpl* m_pRootNode;
     unsigned long       m_ulID;

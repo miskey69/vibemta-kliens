@@ -2,7 +2,7 @@
  *
  *  PROJECT:     Multi Theft Auto
  *  LICENSE:     See LICENSE in the top level directory
- *  FILE:        sdk/enums/ObjectGroupPhysicalProperties.h
+ *  FILE:        sdk/ObjectGroupPhysicalProperties.h
  *  PURPOSE:     Header for common definitions
  *
  *  Multi Theft Auto is available from https://www.multitheftauto.com/
@@ -13,7 +13,7 @@
 
 namespace ObjectGroupPhysicalProperties
 {
-    enum Modifiable
+    enum class Modifiable
     {
         MASS,
         TURNMASS,
@@ -36,7 +36,7 @@ namespace ObjectGroupPhysicalProperties
         SPARKSONIMPACT
     };
 
-    enum DamageEffect
+    enum class DamageEffect
     {
         NO_EFFECT = 0,
         CHANGE_MODEL = 1,
@@ -46,7 +46,7 @@ namespace ObjectGroupPhysicalProperties
         BREAKABLE_REMOVED = 202
     };
 
-    enum CollisionResponse
+    enum class CollisionResponse
     {
         NO_RESPONSE,
         LAMPPOST,
@@ -60,7 +60,7 @@ namespace ObjectGroupPhysicalProperties
         POOLBALL
     };
 
-    enum FxType
+    enum class FxType
     {
         NO_FX,
         PLAY_ON_HIT,
@@ -68,10 +68,10 @@ namespace ObjectGroupPhysicalProperties
         PLAY_ON_HIT_DESTROYED
     };
 
-    enum BreakMode
+    enum class BreakMode
     {
         NOT_BY_GUN,
         BY_GUN,
         SMASHABLE,
     };
-}  // namespace ObjectGroupPhysicalProperties
+}            // namespace ObjectGroupPhysicalProperties

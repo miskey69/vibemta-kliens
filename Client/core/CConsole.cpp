@@ -15,7 +15,7 @@ using SharedUtil::CalcMTASAPath;
 using std::string;
 
 #define CONSOLE_INPUT_HISTORY_LENGTH 128
-#define CONSOLE_SIZE                 4096
+#define CONSOLE_SIZE 4096
 
 #define MAX_CONSOLE_COMMAND_LENGTH 255
 
@@ -123,7 +123,7 @@ bool CConsole::IsEnabled()
 
 void CConsole::SetEnabled(bool bEnabled)
 {
-    // Hide it if necessary
+    // Hide it if neccessary
     if (!bEnabled && m_pWindow->IsVisible())
     {
         SetVisible(false);
@@ -368,13 +368,13 @@ void CConsole::SetNextAutoCompleteMatch()
             while (CEntryHistoryItem* pEntryHistoryItem = m_pConsoleHistory->Get(++iIndex))
             {
                 const char* szItem = *pEntryHistoryItem;
-                if (strlen(szItem) < 3)  // Skip very short lines
+                if (strlen(szItem) < 3)            // Skip very short lines
                     continue;
 
                 // Save the index of any matches
                 if (strnicmp(szItem, strInput.c_str(), strInput.length()) == 0)
                 {
-                    if (m_AutoCompleteList.size())  // Dont add duplicates of the previously added line
+                    if (m_AutoCompleteList.size())            // Dont add duplicates of the previously added line
                     {
                         CEntryHistoryItem* pPrevEntryHistoryItem = m_pConsoleHistory->Get(m_AutoCompleteList.at(m_AutoCompleteList.size() - 1));
                         if (!pPrevEntryHistoryItem)
@@ -513,9 +513,8 @@ void CConsole::FlushPendingAdd()
     if (!m_strPendingAdd.empty())
     {
         // Grab the scroll and the max scroll
-        float       fScroll = m_pHistory->GetVerticalScrollPosition();
-        const float fMaxScroll = m_pHistory->GetMaxVerticalScrollPosition();
-        const bool  bWasScrolledBack = fScroll < fMaxScroll;
+        float fScroll = m_pHistory->GetVerticalScrollPosition();
+        float fMaxScroll = m_pHistory->GetScrollbarDocumentSize() - m_pHistory->GetScrollbarPageSize();
 
         // Grab selection
         uint uiSelectionStart = m_pHistory->GetSelectionStart();
@@ -528,33 +527,20 @@ void CConsole::FlushPendingAdd()
         m_strPendingAdd.clear();
 
         // Trim new buffer
-        const uint uiBufferLength = strBuffer.length();
-        uint       uiBufferCharacterDiff = 0;
+        uint uiBufferLength = strBuffer.length();
 
         if (uiBufferLength > CONSOLE_SIZE)
         {
-            SString strUntrimmedBuffer;
-
-            // Avoid copying and decoding the buffer on the usual follow-at-bottom path.
-            if (bWasScrolledBack || uiSelectionLength > 0)
-                strUntrimmedBuffer = strBuffer;
-
             strBuffer = strBuffer.Right(CONSOLE_SIZE);
             strBuffer = strBuffer.SplitRight("\n");
-
-            if (!strUntrimmedBuffer.empty())
-            {
-                const uint uiBufferLengthDiff = uiBufferLength - strBuffer.length();
-
-                // Console limits use UTF-8 bytes, while CEGUI selection and line indexes use Unicode characters.
-                uiBufferCharacterDiff = m_pHistory->GetUTF8CharacterCount(strUntrimmedBuffer.Left(uiBufferLengthDiff));
-            }
 
             // Fix text selection coords after trimming
             if (uiSelectionLength > 0)
             {
+                uint uiBufferLengthDiff = uiBufferLength - strBuffer.length();
+
                 // Beware of underflows, all cases must be properly handled
-                if (uiSelectionEnd < uiBufferCharacterDiff)
+                if (uiSelectionEnd < uiBufferLengthDiff)
                 {
                     // Whole selection would be out of the screen now, so technically
                     // it does not exist anymore
@@ -562,33 +548,29 @@ void CConsole::FlushPendingAdd()
                     uiSelectionEnd = 0;
                     uiSelectionLength = 0;
                 }
-                else if (uiSelectionStart < uiBufferCharacterDiff)
+                else if (uiSelectionStart < uiBufferLengthDiff)
                 {
                     // Start of selection would be out of the screen now,
                     // so it must be shortened
-                    uiSelectionLength -= uiBufferCharacterDiff - uiSelectionStart;
+                    uiSelectionLength -= uiBufferLengthDiff - uiSelectionStart;
                     uiSelectionStart = 0;
-                    uiSelectionEnd -= uiBufferCharacterDiff;
+                    uiSelectionEnd -= uiBufferLengthDiff;
                 }
-                else  // Both start and end of selection are greater than length difference
+                else            // Both start and end of selection are greater than length difference
                 {
                     // Whole selection would still be visible on the screen,
                     // just a simple movement is needed
-                    uiSelectionStart -= uiBufferCharacterDiff;
-                    uiSelectionEnd -= uiBufferCharacterDiff;
+                    uiSelectionStart -= uiBufferLengthDiff;
+                    uiSelectionEnd -= uiBufferLengthDiff;
                 }
             }
         }
 
-        // Rebase the viewport when old rendered lines are removed, so the same retained text remains visible.
-        if (bWasScrolledBack && uiBufferCharacterDiff > 0)
-            fScroll = std::max(0.0f, fScroll - m_pHistory->GetVerticalOffsetForCharacterIndex(uiBufferCharacterDiff));
-
         // Set new buffer
         m_pHistory->SetText(strBuffer);
 
-        // If not at the end, keep the same retained content in view
-        if (bWasScrolledBack)
+        // If not at the end, keep the scrollbar position
+        if (fScroll < fMaxScroll)
             m_pHistory->SetVerticalScrollPosition(fScroll);
 
         // Restore text selection if any

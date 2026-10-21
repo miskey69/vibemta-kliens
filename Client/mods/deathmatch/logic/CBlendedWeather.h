@@ -17,7 +17,6 @@ public:
     CBlendedWeather();
 
     void DoPulse();
-    void ReapplyWeatherTypes();
 
     void SetWeather(unsigned char ucWeather);
     void SetWeatherBlended(unsigned char ucWeather, unsigned char ucHour);

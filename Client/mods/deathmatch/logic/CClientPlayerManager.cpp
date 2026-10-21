@@ -178,19 +178,12 @@ bool CClientPlayerManager::IsPlayerLimitReached()
 
 bool CClientPlayerManager::IsValidModel(unsigned long ulModel)
 {
-    CModelInfo* pModelInfo = g_pGame->GetModelInfo(ulModel);
-    if (!pModelInfo || !pModelInfo->GetInterface())
-        return false;
-
-    // Custom models allocated via engineRequestModel have a parent ID
-    if (pModelInfo->GetParentID() != 0)
-        return pModelInfo->GetModelType() == eModelInfoType::PED;
-
-    // Standard GTA models must be in valid range
-    if (ulModel >= static_cast<unsigned long>(g_pGame->GetBaseIDforTXD()))
-        return false;
-
-    return pModelInfo->IsPlayerModel();
+    if (ulModel < static_cast<unsigned long>(g_pGame->GetBaseIDforTXD()))
+    {
+        CModelInfo* pModelInfo = g_pGame->GetModelInfo(ulModel);
+        return pModelInfo && pModelInfo->IsPlayerModel();
+    }
+    return false;
 }
 
 void CClientPlayerManager::ResetAll()

@@ -28,7 +28,6 @@ CClientSound::CClientSound(CClientManager* pManager, ElementID ID) : ClassInit(t
     m_bPan = true;
     m_fPan = 0.0f;
     m_bThrottle = false;
-    m_bStreamFailureWarned = false;
 
     m_uiBufferLength = 0;
     m_uiFrameNumberCreated = g_pClientGame->GetFrameCount();
@@ -389,7 +388,7 @@ double CClientSound::GetLength(bool bAvoidLoad)
     {
         // Not loaded by this entity yet
 
-#if 0  // TODO
+#if 0       // TODO
         if ( bAvoidLoad )
         {
             // Caller wants to avoid loading the file to find out the length,
@@ -509,14 +508,14 @@ void CClientSound::SetPaused(bool bPaused)
         {
             // call onClientSoundStopped
             CLuaArguments Arguments;
-            Arguments.PushString("paused");  // Reason
+            Arguments.PushString("paused");            // Reason
             this->CallEvent("onClientSoundStopped", Arguments, false);
         }
         else
         {
             // call onClientSoundStarted
             CLuaArguments Arguments;
-            Arguments.PushString("resumed");  // Reason
+            Arguments.PushString("resumed");            // Reason
             this->CallEvent("onClientSoundStarted", Arguments, false);
         }
     }
@@ -598,7 +597,6 @@ float* CClientSound::GetWaveData(int iLength)
     }
     return NULL;
 }
-
 bool CClientSound::SetPanEnabled(bool bPan)
 {
     if (m_b3D)
@@ -681,12 +679,7 @@ bool CClientSound::SetFxEffect(uint uiFxEffect, bool bEnable)
     m_EnabledEffects[uiFxEffect] = bEnable;
 
     if (m_pAudio)
-    {
         m_pAudio->SetFxEffects(&m_EnabledEffects[0], NUMELMS(m_EnabledEffects));
-        // Report the BASS-effective outcome: an effect the OS doesn't provide
-        // (e.g. I3DL2REVERB on Windows 11 24H2, #4259) won't actually engage.
-        return m_pAudio->IsFxEffectEnabled(uiFxEffect) == bEnable;
-    }
 
     return true;
 }
@@ -695,8 +688,6 @@ bool CClientSound::IsFxEffectEnabled(uint uiFxEffect)
 {
     if (uiFxEffect >= NUMELMS(m_EnabledEffects))
         return false;
-    if (m_pAudio)
-        return m_pAudio->IsFxEffectEnabled(uiFxEffect);
     return m_EnabledEffects[uiFxEffect] ? true : false;
 }
 
@@ -739,17 +730,13 @@ void CClientSound::Process3D(const CVector& vecPlayerPosition, const CVector& ve
     {
         // Update our position and velocity if we're attached
         CClientEntity* pAttachedToEntity = GetAttachedTo();
-
         if (pAttachedToEntity)
         {
             GetPosition(m_vecPosition);
             DoAttaching();
-
             CVector vecVelocity;
-
             if (CStaticFunctionDefinitions::GetElementVelocity(*pAttachedToEntity, vecVelocity))
                 SetVelocity(vecVelocity);
-
             // Update our spatial data position
             UpdateSpatialData();
         }
@@ -769,7 +756,7 @@ void CClientSound::Process3D(const CVector& vecPlayerPosition, const CVector& ve
                     if (Create())
                     {
                         CLuaArguments Arguments;
-                        Arguments.PushString("enabled");  // Reason
+                        Arguments.PushString("enabled");            // Reason
                         CallEvent("onClientSoundStarted", Arguments, false);
                     }
                 }
@@ -779,7 +766,7 @@ void CClientSound::Process3D(const CVector& vecPlayerPosition, const CVector& ve
         {
             Destroy();
             CLuaArguments Arguments;
-            Arguments.PushString("disabled");  // Reason
+            Arguments.PushString("disabled");            // Reason
             CallEvent("onClientSoundStopped", Arguments, false);
         }
     }
@@ -811,16 +798,6 @@ void CClientSound::Process3D(const CVector& vecPlayerPosition, const CVector& ve
         }
         else if (eventInfo.type == SOUND_EVENT_STREAM_RESULT)
         {
-            if (eventInfo.bBool)
-            {
-                m_bStreamFailureWarned = false;
-            }
-            else if (!m_bStreamFailureWarned)
-            {
-                m_bStreamFailureWarned = true;
-                g_pClientGame->GetScriptDebugging()->LogWarning(m_LuaDebugInfo, SString("Unable to stream sound '%s'", *m_strPath));
-            }
-
             // Call onClientSoundStream Lua event
             CLuaArguments Arguments;
             Arguments.PushBoolean(eventInfo.bBool);

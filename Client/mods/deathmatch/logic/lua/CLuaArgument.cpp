@@ -11,15 +11,15 @@
 #include "StdInc.h"
 #include "net/SyncStructures.h"
 
-#define ARGUMENT_TYPE_INT   9
-#define ARGUMENT_TYPE_FLOAT 10
+#define ARGUMENT_TYPE_INT       9
+#define ARGUMENT_TYPE_FLOAT     10
 
 #ifndef VERIFY_ENTITY
-    #define VERIFY_ENTITY(entity) (CStaticFunctionDefinitions::GetRootElement()->IsMyChild(entity, true) && !entity->IsBeingDeleted())
+#define VERIFY_ENTITY(entity) (CStaticFunctionDefinitions::GetRootElement()->IsMyChild(entity,true)&&!entity->IsBeingDeleted())
 #endif
 
 #ifndef VERIFY_RESOURCE
-    #define VERIFY_RESOURCE(resource) (g_pClientGame->GetResourceManager()->Exists(resource))
+#define VERIFY_RESOURCE(resource) (g_pClientGame->GetResourceManager()->Exists(resource))
 #endif
 
 extern CClientGame* g_pClientGame;
@@ -27,7 +27,7 @@ extern CClientGame* g_pClientGame;
 using namespace std;
 
 // Prevent the warning issued when doing unsigned short -> void*
-#pragma warning(disable : 4312)
+#pragma warning(disable:4312)
 
 CLuaArgument::CLuaArgument()
 {
@@ -35,7 +35,6 @@ CLuaArgument::CLuaArgument()
     m_iIndex = -1;
     m_pTableData = NULL;
     m_pUserData = NULL;
-    m_bWeakTableRef = false;
 }
 
 CLuaArgument::CLuaArgument(const CLuaArgument& Argument, CFastHashMap<CLuaArguments*, CLuaArguments*>* pKnownTables)
@@ -47,10 +46,7 @@ CLuaArgument::CLuaArgument(const CLuaArgument& Argument, CFastHashMap<CLuaArgume
 
 CLuaArgument::CLuaArgument(NetBitStreamInterface& bitStream, std::vector<CLuaArguments*>* pKnownTables)
 {
-    m_iType = LUA_TNIL;
     m_pTableData = NULL;
-    m_pUserData = NULL;
-    m_bWeakTableRef = false;
     ReadFromBitStream(bitStream, pKnownTables);
 }
 
@@ -73,7 +69,7 @@ void CLuaArgument::CopyRecursive(const CLuaArgument& Argument, CFastHashMap<CLua
     // Clear the string
     m_strString = "";
 
-    // Destroy our old tabledata if necessary
+    // Destroy our old tabledata if neccessary
     DeleteTableData();
 
 #ifdef MTA_DEBUG
@@ -398,233 +394,215 @@ CClientEntity* CLuaArgument::GetElement() const
 
 void CLuaArgument::Push(lua_State* luaVM, CFastHashMap<CLuaArguments*, int>* pKnownTables) const
 {
-    // Make sure the stack has enough room
-    LUA_CHECKSTACK(luaVM, 1);
-
-    // Push it depending on the type
-    switch (m_iType)
+    // WARNING:
+    // Stuff using this function is kinda unsafe, we expect
+    // it to successfully push something, when it actually may not,
+    // corrupting the Lua stack
+    if (m_iType != LUA_TNONE)
     {
-        case LUA_TNIL:
-        {
-            lua_pushnil(luaVM);
-            break;
-        }
+        // Make sure the stack has enough room
+        LUA_CHECKSTACK(luaVM, 1);
 
-        case LUA_TBOOLEAN:
+        // Push it depending on the type
+        switch (m_iType)
         {
-            lua_pushboolean(luaVM, m_bBoolean);
-            break;
-        }
-
-        case LUA_TUSERDATA:
-        case LUA_TLIGHTUSERDATA:
-        {
-            lua_pushuserdata(luaVM, m_pUserData);
-            break;
-        }
-
-        case LUA_TNUMBER:
-        {
-            lua_pushnumber(luaVM, m_Number);
-            break;
-        }
-
-        case LUA_TTABLE:
-        {
-            if (!m_pTableData)
+            case LUA_TNIL:
             {
                 lua_pushnil(luaVM);
                 break;
             }
 
-            int* pTableId;
-            if (pKnownTables && (pTableId = MapFind(*pKnownTables, m_pTableData)))
+            case LUA_TBOOLEAN:
             {
-                lua_getfield(luaVM, LUA_REGISTRYINDEX, "cache");
-                lua_pushnumber(luaVM, *pTableId);
-                lua_gettable(luaVM, -2);
-                lua_remove(luaVM, -2);
+                lua_pushboolean(luaVM, m_bBoolean);
+                break;
             }
-            else
+
+            case LUA_TUSERDATA:
+            case LUA_TLIGHTUSERDATA:
             {
-                m_pTableData->PushAsTable(luaVM, pKnownTables);
+                lua_pushuserdata(luaVM, m_pUserData);
+                break;
             }
-            break;
-        }
 
-        case LUA_TSTRING:
-        {
-            lua_pushlstring(luaVM, m_strString.c_str(), m_strString.length());
-            break;
-        }
+            case LUA_TNUMBER:
+            {
+                lua_pushnumber(luaVM, m_Number);
+                break;
+            }
 
-        default:
-        {
-            // Unexpected type, keep the stack balanced for callers
-            lua_pushnil(luaVM);
-            break;
+            case LUA_TTABLE:
+            {
+                int* pTableId;
+                if (pKnownTables && (pTableId = MapFind(*pKnownTables, m_pTableData)))
+                {
+                    lua_getfield(luaVM, LUA_REGISTRYINDEX, "cache");
+                    lua_pushnumber(luaVM, *pTableId);
+                    lua_gettable(luaVM, -2);
+                    lua_remove(luaVM, -2);
+                }
+                else
+                {
+                    m_pTableData->PushAsTable(luaVM, pKnownTables);
+                }
+                break;
+            }
+
+            case LUA_TSTRING:
+            {
+                lua_pushlstring(luaVM, m_strString.c_str(), m_strString.length());
+                break;
+            }
         }
     }
 }
 
 // Can't use bitStream.Version() here as it is sometimes not set
-bool CLuaArgument::ReadFromBitStream(NetBitStreamInterface& bitStream, std::vector<CLuaArguments*>* pKnownTables, unsigned int uiDepth)
+bool CLuaArgument::ReadFromBitStream(NetBitStreamInterface& bitStream, std::vector<CLuaArguments*>* pKnownTables)
 {
     DeleteTableData();
-    m_iType = LUA_TNIL;
     SLuaTypeSync type;
 
     // Read out the type
-    if (!bitStream.Read(&type))
-        return false;
-
-    // Depending on what type...
-    switch (type.data.ucType)
+    if (bitStream.Read(&type))
     {
-        // Nil type
-        case LUA_TNIL:
+        // Depending on what type...
+        switch (type.data.ucType)
         {
-            m_iType = LUA_TNIL;
-            break;
-        }
-
-        // Boolean type
-        case LUA_TBOOLEAN:
-        {
-            bool bValue;
-            if (bitStream.ReadBit(bValue))
-                ReadBool(bValue);
-            break;
-        }
-
-        // Number type
-        case LUA_TNUMBER:
-        {
-            if (bitStream.ReadBit())
+            // Nil type
+            case LUA_TNIL:
             {
-                // Should be in high precision mode
-                dassert(g_pClientGame->IsHighFloatPrecision());
+                m_iType = LUA_TNIL;
+                break;
+            }
+
+            // Boolean type
+            case LUA_TBOOLEAN:
+            {
+                bool bValue;
+                if (bitStream.ReadBit(bValue))
+                    ReadBool(bValue);
+                break;
+            }
+
+            // Number type
+            case LUA_TNUMBER:
+            {
                 if (bitStream.ReadBit())
                 {
-                    double dNum;
-                    if (bitStream.Read(dNum))
-                        ReadNumber(dNum);
+                    // Should be in high precision mode
+                    dassert(g_pClientGame->IsHighFloatPrecision());
+                    if (bitStream.ReadBit())
+                    {
+                        double dNum;
+                        if (bitStream.Read(dNum))
+                            ReadNumber(dNum);
+                    }
+                    else
+                    {
+                        float fNum;
+                        if (bitStream.Read(fNum))
+                            ReadNumber(RoundFromFloatSource(fNum));
+                    }
                 }
                 else
                 {
-                    float fNum;
-                    if (bitStream.Read(fNum))
-                        ReadNumber(RoundFromFloatSource(fNum));
+                    int iNum;
+                    if (bitStream.ReadCompressed(iNum))
+                        ReadNumber(iNum);
                 }
+                break;
             }
-            else
-            {
-                int iNum;
-                if (bitStream.ReadCompressed(iNum))
-                    ReadNumber(iNum);
-            }
-            break;
-        }
 
-        // Table type
-        case LUA_TTABLE:
-        {
-            m_pTableData = new CLuaArguments();
-            if (!m_pTableData->ReadFromBitStream(bitStream, pKnownTables, uiDepth + 1))
+            // Table type
+            case LUA_TTABLE:
             {
-                DeleteTableData();
-                return false;
+                m_pTableData = new CLuaArguments(bitStream, pKnownTables);
+                m_bWeakTableRef = false;
+                m_iType = LUA_TTABLE;
+                m_pTableData->ValidateTableKeys();
+                break;
             }
-            m_bWeakTableRef = false;
-            m_iType = LUA_TTABLE;
-            m_pTableData->ValidateTableKeys();
-            break;
-        }
 
-        // Table reference (self-referencing tables)
-        case LUA_TTABLEREF:
-        {
-            unsigned long ulTableRef;
-            if (bitStream.ReadCompressed(ulTableRef))
+            // Table reference (self-referencing tables)
+            case LUA_TTABLEREF:
             {
-                if (pKnownTables && ulTableRef < pKnownTables->size())
+                unsigned long ulTableRef;
+                if (bitStream.ReadCompressed(ulTableRef))
                 {
-                    m_pTableData = pKnownTables->at(ulTableRef);
-                    m_bWeakTableRef = true;
-                    m_iType = LUA_TTABLE;
+                    if (pKnownTables && ulTableRef < pKnownTables->size())
+                    {
+                        m_pTableData = pKnownTables->at(ulTableRef);
+                        m_bWeakTableRef = true;
+                        m_iType = LUA_TTABLE;
+                    }
                 }
+                break;
             }
-            break;
-        }
 
-        // String type
-        case LUA_TSTRING:
-        {
-            // Read out the string length
-            unsigned short usLength;
-            if (bitStream.ReadCompressed(usLength) && usLength)
+            // String type
+            case LUA_TSTRING:
             {
-                if (!bitStream.CanReadNumberOfBytes(usLength))
-                    return false;
-
-                // Allocate a buffer and read the string into it
-                char* szValue = new char[usLength + 1];
-                if (bitStream.Read(szValue, usLength))
+                // Read out the string length
+                unsigned short usLength;
+                if (bitStream.ReadCompressed(usLength) && usLength)
                 {
-                    // Put it into us
-                    ReadString(std::string(szValue, usLength));
+                    // Allocate a buffer and read the string into it
+                    char* szValue = new char[usLength + 1];
+                    if (bitStream.Read(szValue, usLength))
+                    {
+                        // Put it into us
+                        ReadString(std::string(szValue, usLength));
+                    }
+
+                    // Delete the buffer
+                    delete[] szValue;
                 }
+                else
+                    ReadString("");
 
-                // Delete the buffer
-                delete[] szValue;
+                break;
             }
-            else
-                ReadString("");
 
-            break;
-        }
-
-        // Long string type
-        case LUA_TSTRING_LONG:
-        {
-            // Read out the string length
-            uint uiLength;
-            if (bitStream.ReadCompressed(uiLength) && uiLength)
+            // Long string type
+            case LUA_TSTRING_LONG:
             {
-                if (!bitStream.CanReadNumberOfBytes(uiLength))
-                    return false;
-
-                bitStream.AlignReadToByteBoundary();
-
-                // Allocate a buffer and read the string into it
-                char* szValue = new char[uiLength + 1];
-                assert(szValue);
-                if (bitStream.Read(szValue, uiLength))
+                // Read out the string length
+                uint uiLength;
+                if (bitStream.ReadCompressed(uiLength) && uiLength)
                 {
-                    // Put it into us
-                    ReadString(std::string(szValue, uiLength));
+                    bitStream.AlignReadToByteBoundary();
+
+                    // Allocate a buffer and read the string into it
+                    char* szValue = new char[uiLength + 1];
+                    assert(szValue);
+                    if (bitStream.Read(szValue, uiLength))
+                    {
+                        // Put it into us
+                        ReadString(std::string(szValue, uiLength));
+                    }
+
+                    // Delete the buffer
+                    delete[] szValue;
                 }
+                else
+                    ReadString("");
 
-                // Delete the buffer
-                delete[] szValue;
+                break;
             }
-            else
-                ReadString("");
 
-            break;
-        }
-
-        // Element type
-        case LUA_TLIGHTUSERDATA:
-        case LUA_TUSERDATA:
-        {
-            // Read out the element ID
-            ElementID ElementID;
-            if (bitStream.Read(ElementID))
+            // Element type
+            case LUA_TLIGHTUSERDATA:
+            case LUA_TUSERDATA:
             {
-                ReadElementID(ElementID);
+                // Read out the elemnt ID
+                ElementID ElementID;
+                if (bitStream.Read(ElementID))
+                {
+                    ReadElementID(ElementID);
+                }
+                break;
             }
-            break;
         }
     }
     return true;
@@ -909,9 +887,9 @@ json_object* CLuaArgument::WriteToJSONObject(bool bSerialize, CFastHashMap<CLuaA
             }
             else
             {
-                if (pElement)  // eg toJSON() with valid element
+                if (pElement)            // eg toJSON() with valid element
                     g_pClientGame->GetScriptDebugging()->LogError(NULL, "Couldn't convert userdata argument to JSON, elements not allowed for this function.");
-                else if (!bSerialize)  // eg toJSON() with invalid element
+                else if (!bSerialize)            // eg toJSON() with invalid element
                     g_pClientGame->GetScriptDebugging()->LogError(
                         NULL, "Couldn't convert userdata argument to JSON, only valid resources can be included for this function.");
                 else
@@ -1060,7 +1038,7 @@ bool CLuaArgument::ReadFromJSONObject(json_object* object, std::vector<CLuaArgum
                 {
                     switch (strString[1])
                     {
-                        case 'E':  // element
+                        case 'E':            // element
                         {
                             int            id = atoi(strString.c_str() + 3);
                             CClientEntity* element = NULL;
@@ -1078,7 +1056,7 @@ bool CLuaArgument::ReadFromJSONObject(json_object* object, std::vector<CLuaArgum
                             }
                             break;
                         }
-                        case 'R':  // resource
+                        case 'R':            // resource
                         {
                             CResource* resource = g_pClientGame->GetResourceManager()->GetResource(strString.c_str() + 3);
                             if (resource)
@@ -1092,7 +1070,7 @@ bool CLuaArgument::ReadFromJSONObject(json_object* object, std::vector<CLuaArgum
                             }
                             break;
                         }
-                        case 'T':  // Table reference
+                        case 'T':            // Table reference
                         {
                             unsigned long ulTableID = static_cast<unsigned long>(atol(strString.c_str() + 3));
                             if (pKnownTables && ulTableID < pKnownTables->size())

@@ -56,47 +56,31 @@ void TriggerVehicleCollisionEvent()
 //      CAutomobile, CPlane, CHeli, CMonsterTruck, CQuadBike, CTrailer
 //
 //////////////////////////////////////////////////////////////////////////////////////////
-#define HOOKPOS_CAutomobile_ProcessControl_VehicleDamage  0x6B1F3B
-#define HOOKSIZE_CAutomobile_ProcessControl_VehicleDamage 6
+#define HOOKPOS_CAutomobile_ProcessControl_VehicleDamage               0x6B1F3B
+#define HOOKSIZE_CAutomobile_ProcessControl_VehicleDamage              6
 static const DWORD CONTINUE_CAutomobile_ProcessControl_VehicleDamage = 0x6B1F41;
 
 static void __declspec(naked) HOOK_CAutomobile_ProcessControl_VehicleDamage()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
         mov pCollisionVehicle, ecx
     }
-    // clang-format on
 
     TriggerVehicleCollisionEvent();
 
-    // clang-format off
     __asm
     {
         popad
         mov     ecx, pCollisionVehicle
-        test    ecx, ecx
-        jz      skip_automobile_damage
-
-        mov     esi, ecx
+        mov     esi, pCollisionVehicle
         mov     eax, [esi]
-        cmp     eax, 400000h
-        jb      skip_automobile_damage
-        cmp     eax, 900000h
-        ja      skip_automobile_damage
-
         call    dword ptr[eax + 0E0h]
         jmp     CONTINUE_CAutomobile_ProcessControl_VehicleDamage
-
-    skip_automobile_damage:
-        add     esp, 18h
-        jmp     CONTINUE_CAutomobile_ProcessControl_VehicleDamage
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -107,47 +91,31 @@ static void __declspec(naked) HOOK_CAutomobile_ProcessControl_VehicleDamage()
 //      CBike, CBmx
 //
 //////////////////////////////////////////////////////////////////////////////////////////
-#define HOOKPOS_CBike_ProcessControl_VehicleDamage  0x6B9AA5
-#define HOOKSIZE_CBike_ProcessControl_VehicleDamage 6
+#define HOOKPOS_CBike_ProcessControl_VehicleDamage               0x6B9AA5
+#define HOOKSIZE_CBike_ProcessControl_VehicleDamage              6
 static const DWORD CONTINUE_CBike_ProcessControl_VehicleDamage = 0x6B9AAB;
 
 static void __declspec(naked) HOOK_CBike_ProcessControl_VehicleDamage()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
         mov pCollisionVehicle, ecx
     }
-    // clang-format on
 
     TriggerVehicleCollisionEvent();
 
-    // clang-format off
     __asm
     {
         popad
         mov     ecx, pCollisionVehicle
-        test    ecx, ecx
-        jz      skip_bike_damage
-
-        mov     esi, ecx
+        mov     esi, pCollisionVehicle
         mov     eax, [esi]
-        cmp     eax, 400000h
-        jb      skip_bike_damage
-        cmp     eax, 900000h
-        ja      skip_bike_damage
-
         call    dword ptr[eax + 0E0h]
         jmp     CONTINUE_CBike_ProcessControl_VehicleDamage
-
-    skip_bike_damage:
-        add     esp, 18h
-        jmp     CONTINUE_CBike_ProcessControl_VehicleDamage
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -158,8 +126,8 @@ static void __declspec(naked) HOOK_CBike_ProcessControl_VehicleDamage()
 //      CBoat
 //
 //////////////////////////////////////////////////////////////////////////////////////////
-#define HOOKPOS_CBoat_ProcessControl_VehicleDamage  0x6F1864
-#define HOOKSIZE_CBoat_ProcessControl_VehicleDamage 5
+#define HOOKPOS_CBoat_ProcessControl_VehicleDamage               0x6F1864
+#define HOOKSIZE_CBoat_ProcessControl_VehicleDamage              5
 static const DWORD CONTINUE_CBoat_ProcessControl_VehicleDamage = 0x6F1869;
 static const DWORD FUNC_CVehicle_ProcessCarAlarm = 0x6D21F0;
 
@@ -167,31 +135,22 @@ static void __declspec(naked) HOOK_CBoat_ProcessControl_VehicleDamage()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
         mov pCollisionVehicle, ecx
     }
-    // clang-format on
 
     TriggerVehicleCollisionEvent();
 
-    // clang-format off
     __asm
     {
         popad
         mov     ecx, pCollisionVehicle
-        test    ecx, ecx
-        jz      skip_boat_damage
-
-        mov     esi, ecx
+        mov     esi, pCollisionVehicle
         call    FUNC_CVehicle_ProcessCarAlarm
-
-    skip_boat_damage:
         jmp     CONTINUE_CBoat_ProcessControl_VehicleDamage
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -202,25 +161,22 @@ static void __declspec(naked) HOOK_CBoat_ProcessControl_VehicleDamage()
 //      CTrain
 //
 //////////////////////////////////////////////////////////////////////////////////////////
-#define HOOKPOS_CTrain_ProcessControl_VehicleDamage  0x6F86BB
-#define HOOKSIZE_CTrain_ProcessControl_VehicleDamage 5
+#define HOOKPOS_CTrain_ProcessControl_VehicleDamage               0x6F86BB
+#define HOOKSIZE_CTrain_ProcessControl_VehicleDamage              5
 static const DWORD CONTINUE_CTrain_ProcessControl_VehicleDamage = 0x6F86C0;
 
 static void __declspec(naked) HOOK_CTrain_ProcessControl_VehicleDamage()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
         mov pCollisionVehicle, esi
     }
-    // clang-format on
 
     TriggerVehicleCollisionEvent();
 
-    // clang-format off
     __asm
     {
         popad
@@ -228,7 +184,6 @@ static void __declspec(naked) HOOK_CTrain_ProcessControl_VehicleDamage()
         mov     al, ds:[0BA6728h]
         jmp     CONTINUE_CTrain_ProcessControl_VehicleDamage
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////

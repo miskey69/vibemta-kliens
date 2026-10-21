@@ -106,7 +106,7 @@ void CHandlingRPCs::SetVehicleHandlingProperty(CClientEntity* pSource, NetBitStr
             };
 
             // Depending on what property
-            switch (static_cast<HandlingProperty::Enum>(ucProperty))
+            switch (static_cast<HandlingProperty>(ucProperty))
             {
                 case HandlingProperty::HANDLING_MASS:
                     bitStream.Read(fFloat);
@@ -361,15 +361,13 @@ void CHandlingRPCs::RestoreVehicleHandlingProperty(CClientEntity* pSource, NetBi
         if (pSource && pSource->GetType() == CCLIENTVEHICLE)
         {
             // Grab the vehicle handling entry and the original handling
-            CClientVehicle&        Vehicle = static_cast<CClientVehicle&>(*pSource);
-            CHandlingEntry*        pHandlingEntry = Vehicle.GetHandlingData();
-            const CHandlingEntry*  pOriginalEntry = Vehicle.GetOriginalHandlingData();
-            CModelInfo*            pModelInfo = Vehicle.GetModelInfo();
-            HandlingProperty::Enum property = static_cast<HandlingProperty::Enum>(ucProperty);
-            const bool             bSupportsSuspension = pModelInfo && (pModelInfo->IsCar() || pModelInfo->IsMonsterTruck());
+            CClientVehicle&       Vehicle = static_cast<CClientVehicle&>(*pSource);
+            CHandlingEntry*       pHandlingEntry = Vehicle.GetHandlingData();
+            const CHandlingEntry* pOriginalEntry = Vehicle.GetOriginalHandlingData();
+            HandlingProperty      property = static_cast<HandlingProperty>(ucProperty);
 
             if (property >= HandlingProperty::HANDLING_SUSPENSION_FORCELEVEL && property <= HandlingProperty::HANDLING_SUSPENSION_ANTIDIVEMULTIPLIER &&
-                !bSupportsSuspension)
+                (Vehicle.GetModelInfo()->IsCar() || Vehicle.GetModelInfo()->IsMonsterTruck()))
             {
                 return;
             }

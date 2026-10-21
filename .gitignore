@@ -83,6 +83,13 @@ Makefile
 *.make
 obj/
 
+### VisualStudioCode ###
+.vscode/*
+#!.vscode/settings.json
+#!.vscode/tasks.json
+#!.vscode/launch.json
+#!.vscode/extensions.json
+
 ### Windows ###
 # Windows thumbnail cache files
 Thumbs.db

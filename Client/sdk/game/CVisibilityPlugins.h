@@ -11,11 +11,10 @@
 
 #pragma once
 
-#define ATOMIC_ID_FLAG_TWO_VERSIONS_UNDAMAGED 1
-#define ATOMIC_ID_FLAG_TWO_VERSIONS_DAMAGED   2
+#define ATOMIC_ID_FLAG_TWO_VERSIONS_UNDAMAGED   1
+#define ATOMIC_ID_FLAG_TWO_VERSIONS_DAMAGED     2
 
 struct RpClump;
-struct RpAtomic;
 struct RwObject;
 
 class CVisibilityPlugins
@@ -25,6 +24,4 @@ public:
     virtual int  GetAtomicId(RwObject* pAtomic) = 0;
 
     virtual bool InsertEntityIntoEntityList(void* entity, float distance, void* callback) = 0;
-
-    virtual bool IsAtomicVisible(RpAtomic* atomic) const = 0;
 };

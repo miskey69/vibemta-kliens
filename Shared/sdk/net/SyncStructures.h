@@ -57,9 +57,9 @@ struct SFloatSync : public ISyncStructure
 
         double dValue = data.fValue;
 #ifdef WIN32
-    #ifdef MTA_DEBUG
+#ifdef MTA_DEBUG
         assert(!std::isnan(dValue));
-    #endif
+#endif
 #endif
         dValue = Clamp<double>(limitsMin, dValue, limitsMax);
 
@@ -190,28 +190,22 @@ struct SPlayerArmorSync : public SFloatAsBitsSync<8>
     SPlayerArmorSync() : SFloatAsBitsSync<8>(0.f, 127.5f, true, false) {}
 };
 
-struct SVehicleHealthSync : public SFloatAsBitsSync<15>
+struct SVehicleHealthSync : public SFloatAsBitsSync<12>
 {
-    // 0 - 10000 step 0.5                               16383.5 = ( 2^15 - 1 ) * 0.5
-    SVehicleHealthSync() : SFloatAsBitsSync<15>(0.f, 16383.5f, true, false) {}
+    // 0 - 2000 step 0.5                                2047.5 = ( 2^12 - 1 ) * 0.5
+    SVehicleHealthSync() : SFloatAsBitsSync<12>(0.f, 2047.5f, true, false) {}
 };
 
-struct SLowPrecisionVehicleHealthSync : public SFloatAsBitsSync<11>
+struct SLowPrecisionVehicleHealthSync : public SFloatAsBitsSync<8>
 {
-    // 0 - 10000 step 8                                             16376 = ( 2^11 - 1 ) * 8
-    SLowPrecisionVehicleHealthSync() : SFloatAsBitsSync<11>(0.0f, 16376.0f, true, false) {}
+    // 0 - 2000 step 8                                              2040 = ( 2^8 - 1 ) * 8
+    SLowPrecisionVehicleHealthSync() : SFloatAsBitsSync<8>(0.0f, 2040.0f, true, false) {}
 };
 
 struct SObjectHealthSync : public SFloatAsBitsSync<11>
 {
     // 0 - 1000 step 0.5                               1023.5 = ( 2^11 - 1 ) * 0.5
     SObjectHealthSync() : SFloatAsBitsSync<11>(0.f, 1023.5f, true, false) {}
-};
-
-struct SPedStatSync : public SFloatAsBitsSync<14>
-{
-    // 0 - 1000 step 0.1                               1638.3 = ( 2^14 - 1 ) * 0.1
-    SPedStatSync() : SFloatAsBitsSync<14>(0.f, 1638.3f, false, false) {}
 };
 
 //////////////////////////////////////////
@@ -513,7 +507,7 @@ struct SVelocitySync : public ISyncStructure
                 if (bitStream.ReadNormVector(data.vecVelocity.fX, data.vecVelocity.fY, data.vecVelocity.fZ))
                 {
                     data.vecVelocity = data.vecVelocity * fModule;
-                    return data.vecVelocity.IsValid();
+                    return true;
                 }
             }
         }
@@ -553,9 +547,15 @@ struct SPlayerPuresyncFlags : public ISyncStructure
         BITCOUNT = 15
     };
 
-    bool Read(NetBitStreamInterface& stream) { return stream.ReadBits((char*)&data, BITCOUNT); }
+    bool Read(NetBitStreamInterface& stream)
+    {
+        return stream.ReadBits((char*)&data, BITCOUNT);
+    }
 
-    void Write(NetBitStreamInterface& stream) const { stream.WriteBits((const char*)&data, BITCOUNT); }
+    void Write(NetBitStreamInterface& stream) const
+    {
+        stream.WriteBits((const char*)&data, BITCOUNT);
+    }
 
     struct
     {
@@ -1694,49 +1694,49 @@ struct SVehicleHandlingSync : public ISyncStructure
 
     struct
     {
-        float fMass;  // +4
+        float fMass;            // +4
 
-        float         fTurnMass;           // +12
-        float         fDragCoeff;          // +16
-        CVector       vecCenterOfMass;     // +20
-        unsigned char ucPercentSubmerged;  // +32     (unsigned int - sync changes)
+        float         fTurnMass;                     // +12
+        float         fDragCoeff;                    // +16
+        CVector       vecCenterOfMass;               // +20
+        unsigned char ucPercentSubmerged;            // +32     (unsigned int - sync changes)
 
-        float fTractionMultiplier;  // +40
+        float fTractionMultiplier;            // +40
 
-        unsigned char ucDriveType;      // +112
-        unsigned char ucEngineType;     // +113
-        unsigned char ucNumberOfGears;  // +114
+        unsigned char ucDriveType;                // +112
+        unsigned char ucEngineType;               // +113
+        unsigned char ucNumberOfGears;            // +114
 
-        float fEngineAcceleration;  // +120     (value in handling.cfg * 0x86A950)
-        float fEngineInertia;       // +124
-        float fMaxVelocity;         // +128
+        float fEngineAcceleration;            // +120     (value in handling.cfg * 0x86A950)
+        float fEngineInertia;                 // +124
+        float fMaxVelocity;                   // +128
 
-        float fBrakeDeceleration;  // +148
-        float fBrakeBias;          // +152
-        bool  bABS;                // +156
+        float fBrakeDeceleration;            // +148
+        float fBrakeBias;                    // +152
+        bool  bABS;                          // +156
 
-        float fSteeringLock;  // +160
-        float fTractionLoss;  // +164
-        float fTractionBias;  // +168
+        float fSteeringLock;            // +160
+        float fTractionLoss;            // +164
+        float fTractionBias;            // +168
 
-        float fSuspensionForceLevel;          // +172
-        float fSuspensionDamping;             // +176
-        float fSuspensionHighSpdDamping;      // +180
-        float fSuspensionUpperLimit;          // +184
-        float fSuspensionLowerLimit;          // +188
-        float fSuspensionFrontRearBias;       // +192
-        float fSuspensionAntiDiveMultiplier;  // +196
+        float fSuspensionForceLevel;                    // +172
+        float fSuspensionDamping;                       // +176
+        float fSuspensionHighSpdDamping;                // +180
+        float fSuspensionUpperLimit;                    // +184
+        float fSuspensionLowerLimit;                    // +188
+        float fSuspensionFrontRearBias;                 // +192
+        float fSuspensionAntiDiveMultiplier;            // +196
 
-        float fCollisionDamageMultiplier;  // +200
+        float fCollisionDamageMultiplier;            // +200
 
-        unsigned int uiModelFlags;         // +204
-        unsigned int uiHandlingFlags;      // +208
-        float        fSeatOffsetDistance;  // +212
+        unsigned int uiModelFlags;                   // +204
+        unsigned int uiHandlingFlags;                // +208
+        float        fSeatOffsetDistance;            // +212
         // unsigned int    uiMonetary;                     // +216
 
         // unsigned char   ucHeadLight;                    // +220
         // unsigned char   ucTailLight;                    // +221
-        unsigned char ucAnimGroup;  // +222
+        unsigned char ucAnimGroup;            // +222
     } data;
 };
 
@@ -1818,10 +1818,7 @@ struct SVehicleSirenSync : public ISyncStructure
                 bitStream.ReadBit(data.m_bDoLOSCheck);
                 bitStream.ReadBit(data.m_bUseRandomiser);
                 bitStream.ReadBit(data.m_bEnableSilent);
-
-                // The id indexes a fixed size array, so reject it here rather than at the point of use.
-                // Everything is read first so the rest of the stream stays aligned.
-                return data.m_ucSirenID <= SIREN_ID_MAX;
+                return true;
             }
         }
 
@@ -2410,26 +2407,26 @@ struct sWeaponPropertySync : public ISyncStructure
     struct
     {
         int   weaponType;
-        FLOAT fTargetRange;  // max targeting range
-        FLOAT fWeaponRange;  // absolute gun range / default melee attack range
+        FLOAT fTargetRange;            // max targeting range
+        FLOAT fWeaponRange;            // absolute gun range / default melee attack range
 
-        int nFlags;  // flags defining characteristics
+        int nFlags;            // flags defining characteristics
 
-        short nAmmo;    // ammo in one clip
-        short nDamage;  // damage inflicted per hit
+        short nAmmo;              // ammo in one clip
+        short nDamage;            // damage inflicted per hit
 
-        FLOAT fAccuracy;   // modify accuracy of weapon
-        FLOAT fMoveSpeed;  // how fast can move with weapon
+        FLOAT fAccuracy;             // modify accuracy of weapon
+        FLOAT fMoveSpeed;            // how fast can move with weapon
 
-        FLOAT anim_loop_start;        // start of animation loop
-        FLOAT anim_loop_stop;         // end of animation loop
-        FLOAT anim_loop_bullet_fire;  // time in animation when weapon should be fired
+        FLOAT anim_loop_start;                  // start of animation loop
+        FLOAT anim_loop_stop;                   // end of animation loop
+        FLOAT anim_loop_bullet_fire;            // time in animation when weapon should be fired
 
-        FLOAT anim2_loop_start;        // start of animation2 loop
-        FLOAT anim2_loop_stop;         // end of animation2 loop
-        FLOAT anim2_loop_bullet_fire;  // time in animation2 when weapon should be fired
+        FLOAT anim2_loop_start;                  // start of animation2 loop
+        FLOAT anim2_loop_stop;                   // end of animation2 loop
+        FLOAT anim2_loop_bullet_fire;            // time in animation2 when weapon should be fired
 
-        FLOAT anim_breakout_time;  // time after which player can break out of attack and run off
+        FLOAT anim_breakout_time;            // time after which player can break out of attack and run off
     } data;
 };
 

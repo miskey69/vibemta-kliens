@@ -7,7 +7,6 @@ project "Shared"
 	language "C++"
 	kind "None"
 	targetname "shared"
-	clangtidy "On"
 
 	vpaths {
 		["Headers/*"] = { "**.h", "**.hpp" },

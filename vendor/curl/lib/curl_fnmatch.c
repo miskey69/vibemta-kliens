@@ -21,11 +21,16 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-#include "curl_setup.h"
 
+#include "curl_setup.h"
 #ifndef CURL_DISABLE_FTP
+#include <curl/curl.h>
 
 #include "curl_fnmatch.h"
+#include "curl_memory.h"
+
+/* The last #include file should be: */
+#include "memdebug.h"
 
 #ifndef HAVE_FNMATCH
 
@@ -69,13 +74,14 @@ typedef enum {
 static int parsekeyword(const unsigned char **pattern, unsigned char *charset)
 {
   parsekey_state state = CURLFNM_PKW_INIT;
-  char keyword[10] = { 0 };
-  size_t i;
+#define KEYLEN 10
+  char keyword[KEYLEN] = { 0 };
+  int i;
   const unsigned char *p = *pattern;
   bool found = FALSE;
   for(i = 0; !found; i++) {
     char c = (char)*p++;
-    if(i >= sizeof(keyword))
+    if(i >= KEYLEN)
       return SETCHARSET_FAIL;
     switch(state) {
     case CURLFNM_PKW_INIT:
@@ -238,7 +244,7 @@ static int setcharset(const unsigned char **p, unsigned char *charset)
     case CURLFNM_SCHS_RIGHTBRLEFTBR:
       if(c == ']')
         return SETCHARSET_OK;
-      state = CURLFNM_SCHS_DEFAULT;
+      state  = CURLFNM_SCHS_DEFAULT;
       charset[c] = 1;
       (*p)++;
       break;
@@ -251,8 +257,8 @@ fail:
 static int loop(const unsigned char *pattern, const unsigned char *string,
                 int maxstars)
 {
-  const unsigned char *p = pattern;
-  const unsigned char *s = string;
+  const unsigned char *p = (const unsigned char *)pattern;
+  const unsigned char *s = (const unsigned char *)string;
   unsigned char charset[CURLFNM_CHSET_SIZE] = { 0 };
 
   for(;;) {
@@ -356,8 +362,7 @@ int Curl_fnmatch(void *ptr, const char *pattern, const char *string)
   return loop((const unsigned char *)pattern,
               (const unsigned char *)string, 2);
 }
-#else /* HAVE_FNMATCH */
-
+#else
 #include <fnmatch.h>
 /*
  * @unittest: 1307
@@ -380,6 +385,7 @@ int Curl_fnmatch(void *ptr, const char *pattern, const char *string)
   }
   /* not reached */
 }
-#endif /* !HAVE_FNMATCH */
 
-#endif /* !CURL_DISABLE_FTP */
+#endif
+
+#endif /* if FTP is disabled */

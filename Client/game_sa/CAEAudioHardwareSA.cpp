@@ -24,7 +24,6 @@ bool CAEAudioHardwareSA::IsSoundBankLoaded(short wSoundBankID, short wSoundBankS
     DWORD dwThis = (DWORD)m_pInterface;
     DWORD dwFunc = FUNC_CAEAudioHardware__IsSoundBankLoaded;
     bool  bReturn = false;
-    // clang-format off
     __asm
     {
         push    dwSoundBankSlotID
@@ -33,7 +32,6 @@ bool CAEAudioHardwareSA::IsSoundBankLoaded(short wSoundBankID, short wSoundBankS
         call    dwFunc
         mov     bReturn, al
     }
-    // clang-format on
     return bReturn;
 }
 
@@ -43,7 +41,6 @@ void CAEAudioHardwareSA::LoadSoundBank(short wSoundBankID, short wSoundBankSlotI
     DWORD dwSoundBankSlotID = wSoundBankSlotID;
     DWORD dwThis = (DWORD)m_pInterface;
     DWORD dwFunc = FUNC_CAEAudioHardware__LoadSoundBank;
-    // clang-format off
     __asm
     {
         push    dwSoundBankSlotID
@@ -51,5 +48,4 @@ void CAEAudioHardwareSA::LoadSoundBank(short wSoundBankID, short wSoundBankSlotI
         mov     ecx, dwThis
         call    dwFunc
     }
-    // clang-format on
 }

@@ -47,21 +47,20 @@ void SharedUtil_Tests()
 //
 ///////////////////////////////////////////////////////////////
 #define TEST_FUNCTION \
-    struct testStruct \
-    { \
-        void Test(int testIndex) \
-        { \
-            testStruct dataCopy = *this;  // Info when debugging
+        struct testStruct { \
+            void Test(int testIndex) \
+            { \
+                testStruct dataCopy = *this;    // Info when debugging
 
-#define TEST_VARS }
+#define TEST_VARS \
+            }
 
 #define TEST_DATA \
-    } \
-    testData[]
+        } testData[]
 
 #define TEST_END \
-    for (uint i = 0; i < NUMELMS(testData); i++) \
-        testData[i].Test(i);
+        for (uint i = 0 ; i < NUMELMS(testData) ; i++) \
+            testData[i].Test(i);
 
 ///////////////////////////////////////////////////////////////
 //
@@ -114,15 +113,15 @@ void SString_Tests()
     {
         TEST_FUNCTION
         std::vector<SString> parts;
-        source.Split(delim, parts, maxAmount, minAmount);
+        source.Split(delim, parts, maxAmmount, minAmmount);
         assert(parts.front() == resultFirst);
         assert(parts.back() == resultLast);
         assert(parts.size() == resultCount);
         TEST_VARS
         SString     source;
         const char* delim;
-        uint        maxAmount;
-        uint        minAmount;
+        uint        maxAmmount;
+        uint        minAmmount;
         const char* resultFirst;
         const char* resultLast;
         uint        resultCount;
@@ -947,11 +946,7 @@ void SharedUtil_Hash_Tests()
         TEST_END
     }
 
-#define szTempFilename \
-    "hash_" \
-    "\xD0" \
-    "\x98" \
-    "_test"
+    #define szTempFilename "hash_""\xD0""\x98""_test"
 
     // MD5
     {

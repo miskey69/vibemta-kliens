@@ -2,9 +2,8 @@ project "pme"
 	language "C++"
 	kind "StaticLib"
 	targetname "pme"
-	warnings "Off"
 
-	includedirs { "../pcre2" }
+	includedirs { "../pcre" }
 
 	vpaths {
 		["Headers/*"] = "**.h",

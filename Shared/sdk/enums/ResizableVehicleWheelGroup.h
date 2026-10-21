@@ -2,7 +2,7 @@
  *
  *  PROJECT:     Multi Theft Auto
  *  LICENSE:     See LICENSE in the top level directory
- *  FILE:        sdk/enums/ResizableVehicleWheelGroup.h
+ *  FILE:        sdk/ResizableVehicleWheelGroup.h
  *  PURPOSE:     Header for common definitions
  *
  *  Multi Theft Auto is available from https://www.multitheftauto.com/
@@ -11,12 +11,9 @@
 
 #pragma once
 
-namespace ResizableVehicleWheelGroup
+enum class ResizableVehicleWheelGroup
 {
-    enum Enum
-    {
-        FRONT_AXLE = 0,
-        REAR_AXLE,
-        ALL_WHEELS = 0xFF,
-    };
-}
+    FRONT_AXLE = 0,
+    REAR_AXLE,
+    ALL_WHEELS = 0xFF,
+};

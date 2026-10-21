@@ -19,9 +19,9 @@
 #include <CMatrix.h>
 
 #define INVALID_VEHICLE_SEAT 0xFF
-#define NUM_PLAYER_STATS     343
-#define WEAPON_SLOTS         13
-#define STEALTH_KILL_RANGE   2.5f
+#define NUM_PLAYER_STATS 343
+#define WEAPON_SLOTS 13
+#define STEALTH_KILL_RANGE 2.5f
 
 enum ePedMoveAnim
 {
@@ -192,7 +192,7 @@ public:
 
     float GetMaxHealth();
     float GetHealth() { return m_fHealth; }
-    void  SetHealth(float fHealth) noexcept { m_fHealth = std::clamp(fHealth, 0.0f, GetMaxHealth()); }
+    void  SetHealth(float fHealth) { m_fHealth = fHealth; }
     float GetArmor() const noexcept { return m_armor; }
     void  SetArmor(float armor) noexcept { m_armor = std::clamp(armor, 0.0f, 100.0f); }
 
@@ -208,7 +208,7 @@ public:
     static const char* GetBodyPartName(unsigned char ucID);
 
     bool HasJetPack() { return m_bHasJetPack; }
-    void SetHasJetPack(bool bHasJetPack) { m_bHasJetPack = bHasJetPack; }
+    void SetHasJetPack(bool bHasJetPack);
 
     bool IsInWater() { return m_bInWater; }
     void SetInWater(bool bInWater) { m_bInWater = bInWater; }
@@ -353,7 +353,7 @@ protected:
     CVehicle*                            m_pJackingVehicle;
     SPlayerAnimData                      m_animData{};
     float                                m_cameraRotation{};
-    bool                                 m_hanging{false};  // Is the player hanging during a climb task?
+    bool                                 m_hanging{false}; // Is the player hanging during a climb task?
 
     CVehicle*    m_pVehicle;
     unsigned int m_uiVehicleSeat;

@@ -108,9 +108,8 @@ static int json_patch_apply_remove(struct json_object **res, const char *path, s
 	return rc;
 }
 
-// callback for json_pointer_set_with_cb()
-// key is ignored because this callback is only for arrays
-static int json_object_array_insert_idx_cb(struct json_object *parent, const char *key, size_t idx,
+// callback for json_pointer_set_with_array_cb()
+static int json_object_array_insert_idx_cb(struct json_object *parent, size_t idx,
                                            struct json_object *value, void *priv)
 {
 	int rc;
@@ -118,7 +117,7 @@ static int json_object_array_insert_idx_cb(struct json_object *parent, const cha
 
 	if (idx > json_object_array_length(parent))
 	{
-		// Note: will propagate back out through json_pointer_set_with_cb()
+		// Note: will propagate back out through json_pointer_set_with_array_cb()
 		errno = EINVAL;
 		return -1;
 	}
@@ -149,8 +148,8 @@ static int json_patch_apply_add_replace(struct json_object **res,
 		return -1;
 	}
 
-	rc = json_pointer_set_with_cb(res, path, json_object_get(value),
-					    json_object_array_insert_idx_cb, 0, &add);
+	rc = json_pointer_set_with_array_cb(res, path, json_object_get(value),
+					    json_object_array_insert_idx_cb, &add);
 	if (rc)
 	{
 		_set_err(errno, "Failed to set value at path referenced by 'path' field");
@@ -160,9 +159,8 @@ static int json_patch_apply_add_replace(struct json_object **res,
 	return rc;
 }
 
-// callback for json_pointer_set_with_cb()
-// key is ignored because this callback is only for arrays
-static int json_object_array_move_cb(struct json_object *parent, const char *key, size_t idx,
+// callback for json_pointer_set_with_array_cb()
+static int json_object_array_move_cb(struct json_object *parent, size_t idx,
                                      struct json_object *value, void *priv)
 {
 	int rc;
@@ -180,7 +178,7 @@ static int json_object_array_move_cb(struct json_object *parent, const char *key
 
 	if (idx > len)
 	{
-		// Note: will propagate back out through json_pointer_set_with_cb()
+		// Note: will propagate back out through json_pointer_set_with_array_cb()
 		errno = EINVAL;
 		return -1;
 	}
@@ -195,7 +193,7 @@ static int json_patch_apply_move_copy(struct json_object **res,
                                       struct json_object *patch_elem,
                                       const char *path, int move, struct json_patch_error *patch_error)
 {
-	json_pointer_set_cb array_set_cb;
+	json_pointer_array_set_cb array_set_cb;
 	struct json_pointer_get_result from;
 	struct json_object *jfrom;
 	const char *from_s;
@@ -246,7 +244,7 @@ static int json_patch_apply_move_copy(struct json_object **res,
 		array_set_cb = json_object_array_move_cb;
 	}
 
-	rc = json_pointer_set_with_cb(res, path, from.obj, array_set_cb, 0, &from);
+	rc = json_pointer_set_with_array_cb(res, path, from.obj, array_set_cb, &from);
 	if (rc)
 	{
 		_set_err(errno, "Failed to set value at path referenced by 'path' field");

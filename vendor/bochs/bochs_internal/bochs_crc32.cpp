@@ -30,33 +30,31 @@ unsigned long CRCGenerator::GetCRCFromFile ( const char* szFilename )
 
 unsigned long CRCGenerator::GetCRCFromFile ( const char* szFilename, unsigned long ucOldCRC )
 {
-    FILE* pFile = File::FopenExclusive ( szFilename, "rb" );
+    // Open the file
+    FILE* pFile = File::Fopen ( szFilename, "rb" );
     if ( pFile )
     {
+        // Start at the old CRC
         unsigned long ulCRC = ucOldCRC;
 
-        constexpr size_t bufferSize = 65536;
-        char pBuffer[bufferSize];
-        while (true)
+        // While we're not at the end
+        char pBuffer [65536];
+        do
         {
-            size_t sizeRead = fread ( pBuffer, 1, bufferSize, pFile );
-            if (sizeRead == 0)
-            {
-                if (ferror(pFile))
-                {
-                    fclose(pFile);
-                    errno = EIO;
-                    return 0;
-                }
-                break;
-            }
+            // Try to read 65536 bytes. It returns number of bytes actually read.
+            // Then CRC that using the CRC from last loop as beginning. This should
+            // be faster/more compatible than allocating a huge buffer for the entire
+            // file.
+            size_t sizeRead = fread ( pBuffer, 1, 65536, pFile );
             ulCRC = crc32 ( ulCRC, (Bytef*) pBuffer, sizeRead );
         }
+        while ( !feof ( pFile ) );
 
+        // Close it and return the CRC
         fclose ( pFile );
-        errno = 0;
         return ulCRC;
     }
 
+    // Not exist
     return 0;
 }

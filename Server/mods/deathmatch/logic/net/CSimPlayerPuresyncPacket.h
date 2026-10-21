@@ -34,7 +34,7 @@ public:
     ZERO_ON_NEW
 
     CSimPlayerPuresyncPacket(ElementID PlayerID, ushort PlayerLatency, uchar PlayerSyncTimeContext, uchar PlayerGotWeaponType, float WeaponRange,
-                             float PlayerMaxHealth, CControllerState& sharedControllerState);
+                             CControllerState& sharedControllerState);
 
     ePacketID     GetPacketID() const { return PACKET_ID_PLAYER_PURESYNC; };
     unsigned long GetFlags() const { return PACKET_MEDIUM_PRIORITY | PACKET_SEQUENCED; };
@@ -55,7 +55,6 @@ public:
     const uchar       m_PlayerSyncTimeContext;
     const uchar       m_PlayerGotWeaponType;
     const float       m_WeaponRange;
-    const float       m_PlayerMaxHealth;
     CControllerState& m_sharedControllerState;
 
     // Set in Read ()
@@ -74,13 +73,13 @@ public:
         CVector              vecCamFwd;
 
         bool   bWeaponCorrect;
-        uchar  ucWeaponSlot;  // Only valid if bWeaponCorrect
-        ushort usAmmoInClip;  // Only valid if bWeaponCorrect
-        ushort usTotalAmmo;   // Only valid if bWeaponCorrect
+        uchar  ucWeaponSlot;            // Only valid if bWeaponCorrect
+        ushort usAmmoInClip;            // Only valid if bWeaponCorrect
+        ushort usTotalAmmo;             // Only valid if bWeaponCorrect
 
         bool    bIsAimFull;
-        float   fAimDirection;    // Only valid if bWeaponCorrect
-        CVector vecSniperSource;  // Only valid if bWeaponCorrect and bIsAimFull
-        CVector vecTargetting;    // Only valid if bWeaponCorrect and bIsAimFull
+        float   fAimDirection;              // Only valid if bWeaponCorrect
+        CVector vecSniperSource;            // Only valid if bWeaponCorrect and bIsAimFull
+        CVector vecTargetting;              // Only valid if bWeaponCorrect and bIsAimFull
     } m_Cache;
 };

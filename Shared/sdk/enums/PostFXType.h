@@ -2,20 +2,17 @@
  *
  *  PROJECT:     Multi Theft Auto
  *  LICENSE:     See LICENSE in the top level directory
- *  FILE:        sdk/enums/PostFXType.h
+ *  FILE:        sdk/PostFXType.h
  *  PURPOSE:     Header for common definitions
  *
  *  Multi Theft Auto is available from https://www.multitheftauto.com/
  *
  *****************************************************************************/
 
-namespace PostFXType
+enum class PostFXType
 {
-    enum Enum
-    {
-        GAMMA,
-        BRIGHTNESS,
-        CONTRAST,
-        SATURATION
-    };
+    GAMMA,
+    BRIGHTNESS,
+    CONTRAST,
+    SATURATION
 };

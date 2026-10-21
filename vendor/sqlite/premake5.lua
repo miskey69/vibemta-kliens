@@ -2,7 +2,6 @@ project "sqlite"
 	language "C"
 	kind "StaticLib"
 	targetname "sqlite"
-	warnings "Off"
 
 	vpaths {
 		["Headers/*"] = "*.h",

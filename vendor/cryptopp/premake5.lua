@@ -2,7 +2,6 @@ project "cryptopp"
 	language "C++"
 	kind "StaticLib"
 	targetname "cryptopp"
-	warnings "Off"
 
 	vpaths {
 		["Headers/*"] = "**.h",

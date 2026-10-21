@@ -359,7 +359,7 @@ Bitmap Element::renderToBitmap(int width, int height, uint32_t backgroundColor) 
 
     Matrix matrix(xScale, 0, 0, yScale, -elementBounds.x * xScale, -elementBounds.y * yScale);
     Bitmap bitmap(width, height);
-    if(backgroundColor) bitmap.clear(backgroundColor);
+    bitmap.clear(backgroundColor);
     render(bitmap, matrix);
     return bitmap;
 }
@@ -408,11 +408,11 @@ NodeList Element::children() const
     return children;
 }
 
-SVGElement* Element::element(bool layoutIfNeeded) const
+SVGElement* Element::element(bool layout) const
 {
     auto element = static_cast<SVGElement*>(m_node);
-    if(element && layoutIfNeeded)
-        element->rootElement()->layoutIfNeeded();
+    if(element && layout)
+        element->rootElement()->updateLayout();
     return element;
 }
 
@@ -448,22 +448,22 @@ std::unique_ptr<Document> Document::loadFromData(const char* data, size_t length
 
 float Document::width() const
 {
-    return rootElement(true)->intrinsicWidth();
+    return m_rootElement->updateLayout()->intrinsicWidth();
 }
 
 float Document::height() const
 {
-    return rootElement(true)->intrinsicHeight();
+    return m_rootElement->updateLayout()->intrinsicHeight();
 }
 
 Box Document::boundingBox() const
 {
-    return rootElement(true)->localTransform().mapRect(rootElement()->paintBoundingBox());
+    return m_rootElement->updateLayout()->localTransform().mapRect(m_rootElement->paintBoundingBox());
 }
 
 void Document::updateLayout()
 {
-    m_rootElement->layoutIfNeeded();
+    m_rootElement->updateLayout();
 }
 
 void Document::forceLayout()
@@ -477,13 +477,13 @@ void Document::render(Bitmap& bitmap, const Matrix& matrix) const
         return;
     auto canvas = Canvas::create(bitmap);
     SVGRenderState state(nullptr, nullptr, matrix, SVGRenderMode::Painting, canvas);
-    rootElement(true)->render(state);
+    m_rootElement->updateLayout()->render(state);
 }
 
 Bitmap Document::renderToBitmap(int width, int height, uint32_t backgroundColor) const
 {
-    auto intrinsicWidth = rootElement(true)->intrinsicWidth();
-    auto intrinsicHeight = rootElement()->intrinsicHeight();
+    auto intrinsicWidth = m_rootElement->updateLayout()->intrinsicWidth();
+    auto intrinsicHeight = m_rootElement->intrinsicHeight();
     if(intrinsicWidth == 0.f || intrinsicHeight == 0.f)
         return Bitmap();
     if(width <= 0 && height <= 0) {
@@ -500,14 +500,9 @@ Bitmap Document::renderToBitmap(int width, int height, uint32_t backgroundColor)
 
     Matrix matrix(xScale, 0, 0, yScale, 0, 0);
     Bitmap bitmap(width, height);
-    if(backgroundColor) bitmap.clear(backgroundColor);
+    bitmap.clear(backgroundColor);
     render(bitmap, matrix);
     return bitmap;
-}
-
-Element Document::elementFromPoint(float x, float y) const
-{
-    return rootElement(true)->elementFromPoint(x, y);
 }
 
 Element Document::getElementById(const std::string& id) const
@@ -517,13 +512,6 @@ Element Document::getElementById(const std::string& id) const
 
 Element Document::documentElement() const
 {
-    return m_rootElement.get();
-}
-
-SVGRootElement* Document::rootElement(bool layoutIfNeeded) const
-{
-    if(layoutIfNeeded)
-        m_rootElement->layoutIfNeeded();
     return m_rootElement.get();
 }
 

@@ -2,7 +2,6 @@ project "jpeg"
 	language "C"
 	kind "StaticLib"
 	targetname "jpeg"
-	warnings "Off"
 
 	vpaths {
 		["Headers/*"] = "**.h",

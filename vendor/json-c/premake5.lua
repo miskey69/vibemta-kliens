@@ -2,7 +2,6 @@ project "json-c"
 	language "C++"
 	kind "StaticLib"
 	targetname "json-c"
-	warnings "Off"
 
 	includedirs { "." }
 	defines { "_LIB" }

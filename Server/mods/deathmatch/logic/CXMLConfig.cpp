@@ -12,9 +12,6 @@
 #include "StdInc.h"
 #include "CXMLConfig.h"
 
-#include <cctype>
-#include <cstdlib>
-
 CXMLConfig::CXMLConfig(const char* szFileName)
 {
     m_pFile = NULL;
@@ -95,39 +92,30 @@ int CXMLConfig::GetString(CXMLNode* pParent, const char* szKey, std::string& str
 int CXMLConfig::GetRGBA(CXMLNode* pParent, const char* szKey, unsigned char& R, unsigned char& G, unsigned char& B, unsigned char& A)
 {
     int Status = INVALID_VALUE;
+    int iR, iG, iB, iA;
 
     // Grab the XML node
     CXMLNode* pNode = pParent->FindSubNode(szKey);
     if (pNode)
     {
-        const std::string strValue = pNode->GetTagContent();
+        char               cDelimiter;
+        std::istringstream iss;
 
-        const char* p = strValue.c_str();
-        int         values[4] = {0, 0, 0, 0};
-        for (int i = 0; i < 4; ++i)
+        std::string strValue;
+        strValue = pNode->GetTagContent();
+
+        try
         {
-            while (*p && (std::isspace(static_cast<unsigned char>(*p)) || *p == ','))
-                ++p;
-
-            if (!*p)
-                return INVALID_VALUE;
-
-            char*      end = nullptr;
-            const long v = std::strtol(p, &end, 10);
-            if (end == p)
-                return INVALID_VALUE;
-            if (v < 0 || v > 255)
-                return INVALID_VALUE;
-
-            values[i] = static_cast<int>(v);
-            p = end;
+            iss >> iR >> cDelimiter >> iG >> cDelimiter >> iB >> cDelimiter >> iA;
+            R = static_cast<unsigned char>(iR);
+            G = static_cast<unsigned char>(iG);
+            B = static_cast<unsigned char>(iB);
+            A = static_cast<unsigned char>(iA);
+            Status = IS_SUCCESS;
         }
-
-        R = static_cast<unsigned char>(values[0]);
-        G = static_cast<unsigned char>(values[1]);
-        B = static_cast<unsigned char>(values[2]);
-        A = static_cast<unsigned char>(values[3]);
-        Status = IS_SUCCESS;
+        catch (std::ios::failure e)
+        {
+        }
     }
     else
         Status = DOESNT_EXIST;

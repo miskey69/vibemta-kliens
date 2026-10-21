@@ -2,7 +2,6 @@ project "portaudio"
 	language "C++"
 	kind "StaticLib"
 	targetname "portaudio"
-	warnings "Off"
 
 	vpaths {
 		["Headers/*"] = "**.h",
@@ -21,6 +20,6 @@ project "portaudio"
 
 	filter "architecture:not x86"
 		flags { "ExcludeFromBuild" }
-
+	
 	filter "system:not windows"
 		flags { "ExcludeFromBuild" }

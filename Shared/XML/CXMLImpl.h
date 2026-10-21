@@ -11,13 +11,12 @@
 
 #pragma once
 
-#include <tinyxml2.h>
 #include <xml/CXML.h>
 
 typedef struct SXMLStringImpl : SXMLString
 {
-    tinyxml2::XMLDocument* doc;
-    SXMLStringImpl(tinyxml2::XMLDocument* d, CXMLNode* n) : doc(d) { node = n; };
+    TiXmlDocument* doc;
+    SXMLStringImpl(TiXmlDocument* d, CXMLNode* n) : doc(d) { node = n; };
     ~SXMLStringImpl()
     {
         delete node;

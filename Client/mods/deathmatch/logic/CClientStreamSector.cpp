@@ -137,36 +137,24 @@ void CClientStreamSector::CompareSurroundings(CClientStreamSector* pSector, list
     }
 }
 
-void CClientStreamSector::AddElements(list<CClientStreamElement*>* pList, std::unordered_set<CClientStreamElement*>* pSet)
+void CClientStreamSector::AddElements(list<CClientStreamElement*>* pList)
 {
     list<CClientStreamElement*>::iterator iter = m_Elements.begin();
     for (; iter != m_Elements.end(); iter++)
     {
-        // Don't add if already in the list (O(1) if set provided)
-        if (pSet)
-        {
-            if (pSet->count(*iter))
-                continue;
-            pSet->insert(*iter);
-        }
-        else if (ListContains(*pList, *iter))
+        // Don't add if already in the list
+        if (ListContains(*pList, *iter))
             continue;
 
         pList->push_back(*iter);
     }
 }
 
-void CClientStreamSector::RemoveElements(list<CClientStreamElement*>* pList, std::unordered_set<CClientStreamElement*>* pSet)
+void CClientStreamSector::RemoveElements(list<CClientStreamElement*>* pList)
 {
-    if (m_Elements.empty())
-        return;
-
-    if (pSet)
+    list<CClientStreamElement*>::iterator iter = m_Elements.begin();
+    for (; iter != m_Elements.end(); iter++)
     {
-        for (CClientStreamElement* pElement : m_Elements)
-            pSet->erase(pElement);
+        pList->remove(*iter);
     }
-
-    // list::remove per element walks the whole active list each time, so strip our elements in a single pass
-    pList->remove_if([this](CClientStreamElement* pElement) { return pElement->GetStreamSector() == this; });
 }

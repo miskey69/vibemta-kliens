@@ -18,7 +18,7 @@
 #include "CLuaPedDefs.h"
 
 #define MIN_CLIENT_REQ_REMOVEPEDFROMVEHICLE_CLIENTSIDE "1.3.0-9.04482"
-#define MIN_CLIENT_REQ_WARPPEDINTOVEHICLE_CLIENTSIDE   "1.3.0-9.04482"
+#define MIN_CLIENT_REQ_WARPPEDINTOVEHICLE_CLIENTSIDE "1.3.0-9.04482"
 
 void CLuaPedDefs::LoadFunctions()
 {
@@ -75,7 +75,7 @@ void CLuaPedDefs::LoadFunctions()
         {"getPedAnimation", GetPedAnimation},
         {"getPedAnimationProgress", ArgumentParser<GetPedAnimationProgress>},
         {"getPedAnimationSpeed", ArgumentParser<GetPedAnimationSpeed>},
-        {"getPedAnimationLength", ArgumentParser<GetPedAnimationLength>},
+        {"getPedAnimationLength", ArgumentParser<GetPedAnimationLength>},        
         {"getPedWalkingStyle", GetPedMoveAnim},
         {"getPedControlState", ArgumentParserWarn<false, GetPedControlState>},
         {"getPedAnalogControlState", GetPedAnalogControlState},
@@ -141,7 +141,7 @@ void CLuaPedDefs::AddClass(lua_State* luaVM)
 
     lua_classfunction(luaVM, "canBeKnockedOffBike", "canPedBeKnockedOffBike");
     lua_classfunction(luaVM, "doesHaveJetPack", "doesPedHaveJetPack");
-    lua_classfunction(luaVM, "isWearingJetpack", "isPedWearingJetpack");  // introduced in 1.5.5-9.13846
+    lua_classfunction(luaVM, "isWearingJetpack", "isPedWearingJetpack");            // introduced in 1.5.5-9.13846
     lua_classfunction(luaVM, "getAmmoInClip", "getPedAmmoInClip");
     lua_classfunction(luaVM, "getAnalogControlState", "getPedAnalogControlState");
     lua_classfunction(luaVM, "getAnimation", "getPedAnimation");
@@ -178,9 +178,8 @@ void CLuaPedDefs::AddClass(lua_State* luaVM)
     lua_classfunction(luaVM, "setFootBloodEnabled", "setPedFootBloodEnabled");
     lua_classfunction(luaVM, "getTargetEnd", OOP_GetPedTargetEnd);
     lua_classfunction(luaVM, "getTargetStart", OOP_GetPedTargetStart);
-    lua_classfunction(luaVM, "getWeaponMuzzlePosition", ArgumentParserWarn<false, OOP_GetPedWeaponMuzzlePosition>);
+    lua_classfunction(luaVM, "getWeaponMuzzlePosition", "getPedWeaponMuzzlePosition");
     lua_classfunction(luaVM, "getBonePosition", OOP_GetPedBonePosition);
-    lua_classfunction(luaVM, "getBoneMatrix", ArgumentParserWarn<false, OOP_GetElementBoneMatrix>);
     lua_classfunction(luaVM, "getCameraRotation", "getPedCameraRotation");
     lua_classfunction(luaVM, "getWeaponSlot", "getPedWeaponSlot");
     lua_classfunction(luaVM, "getWalkingStyle", "getPedWalkingStyle");
@@ -219,7 +218,7 @@ void CLuaPedDefs::AddClass(lua_State* luaVM)
     lua_classvariable(luaVM, "vehicleSeat", NULL, "getPedOccupiedVehicleSeat");
     lua_classvariable(luaVM, "canBeKnockedOffBike", "setPedCanBeKnockedOffBike", "canPedBeKnockedOffBike");
     lua_classvariable(luaVM, "hasJetPack", NULL, "doesPedHaveJetPack");
-    lua_classvariable(luaVM, "jetpack", NULL, "isPedWearingJetpack");  // introduced in 1.5.5-9.13846
+    lua_classvariable(luaVM, "jetpack", NULL, "isPedWearingJetpack");            // introduced in 1.5.5-9.13846
     lua_classvariable(luaVM, "armor", "setPedArmor", "getPedArmor");
     lua_classvariable(luaVM, "fightingStyle", "setPedFightingStyle", "getPedFightingStyle");
     lua_classvariable(luaVM, "cameraRotation", "setPedCameraRotation", "getPedCameraRotation");
@@ -242,7 +241,7 @@ void CLuaPedDefs::AddClass(lua_State* luaVM)
     lua_classvariable(luaVM, "targetCollision", nullptr, OOP_GetPedTargetCollision);
     lua_classvariable(luaVM, "targetEnd", nullptr, OOP_GetPedTargetEnd);
     lua_classvariable(luaVM, "targetStart", nullptr, OOP_GetPedTargetStart);
-    lua_classvariable(luaVM, "muzzlePosition", nullptr, ArgumentParserWarn<false, OOP_GetPedWeaponMuzzlePosition>);
+    // lua_classvariable ( luaVM, "muzzlePosition", NULL, "getPedWeaponMuzzlePosition" ); // TODO: needs to return a vector3 for oop
     lua_classvariable(luaVM, "weaponSlot", "setPedWeaponSlot", "getPedWeaponSlot");
     lua_classvariable(luaVM, "walkingStyle", "setPedWalkingStyle", "getPedWalkingStyle");
     lua_classvariable(luaVM, "reloadingWeapon", nullptr, "isPedReloadingWeapon");
@@ -481,19 +480,6 @@ int CLuaPedDefs::GetPedWeaponMuzzlePosition(lua_State* luaVM)
 
     lua_pushboolean(luaVM, false);
     return 1;
-}
-
-std::variant<CLuaMultiReturn<float, float, float>, CVector, bool> CLuaPedDefs::OOP_GetPedWeaponMuzzlePosition(lua_State* luaVM, CClientPed* ped)
-{
-    CVector vecMuzzlePosition;
-    if (!CStaticFunctionDefinitions::GetPedWeaponMuzzlePosition(*ped, vecMuzzlePosition))
-        return false;
-
-    // Keep returning three floats when the caller assigns three results
-    if (lua_ncallresult(luaVM) == 3)
-        return CLuaMultiReturn<float, float, float>(vecMuzzlePosition.fX, vecMuzzlePosition.fY, vecMuzzlePosition.fZ);
-
-    return vecMuzzlePosition;
 }
 
 int CLuaPedDefs::GetPedOccupiedVehicle(lua_State* luaVM)
@@ -1017,7 +1003,7 @@ std::variant<bool, CLuaMultiReturn<float, float, float>> CLuaPedDefs::GetElement
         throw std::invalid_argument("Invalid bone: " + std::to_string(bone));
 
     CEntity* entity = ped->GetGameEntity();
-    CVector  position;
+    CVector position;
 
     if (!entity || !entity->GetBonePosition(static_cast<eBone>(bone), position))
         return false;
@@ -1034,7 +1020,7 @@ std::variant<bool, CLuaMultiReturn<float, float, float>> CLuaPedDefs::GetElement
     float    yaw = 0.0f;
     float    pitch = 0.0f;
     float    roll = 0.0f;
-
+    
     if (!entity || !entity->GetBoneRotation(static_cast<eBone>(bone), yaw, pitch, roll))
         return false;
 
@@ -1078,28 +1064,6 @@ std::variant<bool, std::array<std::array<float, 4>, 4>> CLuaPedDefs::GetElementB
     g_pGame->GetRenderWare()->RwMatrixToCMatrix(*rwmatrix, matrix);
 
     return matrix.To4x4Array();
-}
-
-std::variant<bool, CMatrix> CLuaPedDefs::OOP_GetElementBoneMatrix(CClientPed* ped, const std::uint16_t bone)
-{
-    if (bone < BONE_ROOT || bone > BONE_LEFTBREAST)
-        throw std::invalid_argument("Invalid bone: " + std::to_string(bone));
-
-    CEntity* entity = ped->GetGameEntity();
-
-    if (!entity)
-        return false;
-
-    RwMatrix* rwmatrix = entity->GetBoneRwMatrix(static_cast<eBone>(bone));
-
-    if (!rwmatrix)
-        return false;
-
-    CMatrix matrix;
-
-    g_pGame->GetRenderWare()->RwMatrixToCMatrix(*rwmatrix, matrix);
-
-    return matrix;
 }
 
 bool CLuaPedDefs::SetElementBonePosition(CClientPed* ped, const std::uint16_t bone, const CVector position)
@@ -1170,7 +1134,7 @@ bool CLuaPedDefs::UpdateElementRpHAnim(CClientPed* ped)
 
     if (clump)
     {
-        ((void(__cdecl*)(RpClump*))0x5DF560)(clump);  // CPed::ShoulderBoneRotation
+        ((void(__cdecl*)(RpClump*))0x5DF560)(clump); // CPed::ShoulderBoneRotation
     }
 
     return true;
@@ -1298,7 +1262,7 @@ bool CLuaPedDefs::IsPedReloadingWeapon(CClientPed* const ped) noexcept
 {
     return ped->IsReloadingWeapon();
 }
-
+  
 int CLuaPedDefs::GetPedClothes(lua_State* luaVM)
 {
     // Verify the argument
@@ -1349,7 +1313,7 @@ bool CLuaPedDefs::GetPedControlState(std::variant<CClientPed*, std::string> firs
     }
 
     bool state;
-
+    
     if (!CStaticFunctionDefinitions::GetPedControlState(*ped, control, state))
         return false;
 
@@ -1475,7 +1439,7 @@ int CLuaPedDefs::GetPedAnimation(lua_State* luaVM)
             lua_setfield(luaVM, -2, "loop");
             lua_pushboolean(luaVM, animationCache.bUpdatePosition);
             lua_setfield(luaVM, -2, "updatePosition");
-            lua_pushboolean(luaVM, animationCache.bInterruptible);
+            lua_pushboolean(luaVM, animationCache.bInterruptable);
             lua_setfield(luaVM, -2, "interruptable");
             lua_pushboolean(luaVM, animationCache.bFreezeLastFrame);
             lua_setfield(luaVM, -2, "freezeLastFrame");
@@ -1841,13 +1805,10 @@ int CLuaPedDefs::IsPedDead(lua_State* luaVM)
         // Grab his dead state and return it
         bool bDead = pPed->IsDead() || pPed->IsDying();
 
-        // Cover the window between network death and GTA processing it (#4147).
-        // Don't apply if GTA has already processed a revival (health > 0 and not
-        // in a death task) - IsDeadOnNetwork would be a stale server-side artifact.
+        // Check player is already dead on network (#4147)
         if (auto pPlayer = dynamic_cast<CClientPlayer*>(pPed))
         {
-            if (pPlayer->IsDeadOnNetwork() && (pPed->GetHealth() <= 0.0f || bDead))
-                bDead = true;
+            bDead = bDead || pPlayer->IsDeadOnNetwork();
         }
 
         lua_pushboolean(luaVM, bDead);
@@ -2274,23 +2235,23 @@ int CLuaPedDefs::SetPedAnimation(lua_State* luaVM)
     int            iBlend = 250;
     bool           bLoop = true;
     bool           bUpdatePosition = true;
-    bool           bInterruptible = true;
+    bool           bInterruptable = true;
     bool           bFreezeLastFrame = true;
     bool           bTaskToBeRestoredOnAnimEnd = false;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pEntity);
     if (argStream.NextIsBool())
-        argStream.ReadBool(bDummy);  // Wiki used setPedAnimation(source,false) as an example
+        argStream.ReadBool(bDummy);            // Wiki used setPedAnimation(source,false) as an example
     else if (argStream.NextIsNil())
-        argStream.m_iIndex++;  // Wiki docs said blockName could be nil
+        argStream.m_iIndex++;            // Wiki docs said blockName could be nil
     else
         argStream.ReadString(strBlockName, "");
     argStream.ReadString(strAnimName, "");
     argStream.ReadNumber(iTime, -1);
     argStream.ReadBool(bLoop, true);
     argStream.ReadBool(bUpdatePosition, true);
-    argStream.ReadBool(bInterruptible, true);
+    argStream.ReadBool(bInterruptable, true);
     argStream.ReadBool(bFreezeLastFrame, true);
     argStream.ReadNumber(iBlend, 250);
     argStream.ReadBool(bTaskToBeRestoredOnAnimEnd, false);
@@ -2298,7 +2259,7 @@ int CLuaPedDefs::SetPedAnimation(lua_State* luaVM)
     if (!argStream.HasErrors())
     {
         if (CStaticFunctionDefinitions::SetPedAnimation(*pEntity, strBlockName == "" ? NULL : strBlockName.c_str(),
-                                                        strAnimName == "" ? NULL : strAnimName.c_str(), iTime, iBlend, bLoop, bUpdatePosition, bInterruptible,
+                                                        strAnimName == "" ? NULL : strAnimName.c_str(), iTime, iBlend, bLoop, bUpdatePosition, bInterruptable,
                                                         bFreezeLastFrame))
         {
             CClientPed* pPed = static_cast<CClientPed*>(pEntity);
@@ -2358,12 +2319,11 @@ int CLuaPedDefs::SetPedAnimationProgress(lua_State* luaVM)
 
 float CLuaPedDefs::GetPedAnimationProgress(CClientPed* ped)
 {
-    CTaskManager* taskManager = ped->GetTaskManager();
-    if (!taskManager)
-        return -1.0f;
+    CTask*       currentTask = ped->GetTaskManager()->GetActiveTask();
+    std::int32_t type = currentTask->GetTaskType();
 
-    CTask* currentTask = taskManager->GetActiveTask();
-    if (!currentTask || currentTask->GetTaskType() != TASK_SIMPLE_NAMED_ANIM)
+    // check if animation (task type is 401)
+    if (type != 401)
         return -1.0f;
 
     auto* animation = dynamic_cast<CTaskSimpleRunNamedAnim*>(currentTask);
@@ -2379,12 +2339,11 @@ float CLuaPedDefs::GetPedAnimationProgress(CClientPed* ped)
 
 float CLuaPedDefs::GetPedAnimationSpeed(CClientPed* ped)
 {
-    CTaskManager* taskManager = ped->GetTaskManager();
-    if (!taskManager)
-        return -1.0f;
+    CTask*       currentTask = ped->GetTaskManager()->GetActiveTask();
+    std::int32_t type = currentTask->GetTaskType();
 
-    CTask* currentTask = taskManager->GetActiveTask();
-    if (!currentTask || currentTask->GetTaskType() != TASK_SIMPLE_NAMED_ANIM)
+    // check if animation (task type is 401)
+    if (type != 401)
         return -1.0f;
 
     auto* animation = dynamic_cast<CTaskSimpleRunNamedAnim*>(currentTask);
@@ -2400,12 +2359,11 @@ float CLuaPedDefs::GetPedAnimationSpeed(CClientPed* ped)
 
 float CLuaPedDefs::GetPedAnimationLength(CClientPed* ped)
 {
-    CTaskManager* taskManager = ped->GetTaskManager();
-    if (!taskManager)
-        return -1.0f;
+    CTask*       currentTask = ped->GetTaskManager()->GetActiveTask();
+    std::int32_t type = currentTask->GetTaskType();
 
-    CTask* currentTask = taskManager->GetActiveTask();
-    if (!currentTask || currentTask->GetTaskType() != TASK_SIMPLE_NAMED_ANIM)
+    // check if animation (task type is 401)
+    if (type != 401)
         return -1.0f;
 
     auto* animation = dynamic_cast<CTaskSimpleRunNamedAnim*>(currentTask);
@@ -2560,29 +2518,11 @@ int CLuaPedDefs::DetonateSatchels(lua_State* luaVM)
     return 1;
 }
 
-bool CLuaPedDefs::SetPedEnterVehicle(CClientPed* pPed, std::optional<CClientVehicle*> pOptVehicle,
-                                     std::optional<std::variant<bool, unsigned int>> seatOrPassenger)
+bool CLuaPedDefs::SetPedEnterVehicle(CClientPed* pPed, std::optional<CClientVehicle*> pOptVehicle, std::optional<bool> bOptPassenger)
 {
-    CClientVehicle*             pVehicle = pOptVehicle.value_or(nullptr);
-    bool                        bPassenger = false;
-    std::optional<unsigned int> optSeat;
-
-    // Parse third argument: either a bool (passenger flag) or int (seat number)
-    if (seatOrPassenger.has_value())
-    {
-        if (std::holds_alternative<bool>(seatOrPassenger.value()))
-        {
-            // Third argument is bool - treat as passenger flag
-            bPassenger = std::get<bool>(seatOrPassenger.value());
-        }
-        else if (std::holds_alternative<unsigned int>(seatOrPassenger.value()))
-        {
-            // Third argument is int - treat as seat number
-            optSeat = std::get<unsigned int>(seatOrPassenger.value());
-        }
-    }
-
-    return pPed->EnterVehicle(pVehicle, bPassenger, optSeat);
+    CClientVehicle* pVehicle = pOptVehicle.value_or(nullptr);
+    bool            bPassenger = bOptPassenger.value_or(false);
+    return pPed->EnterVehicle(pVehicle, bPassenger);
 }
 
 bool CLuaPedDefs::SetPedExitVehicle(CClientPed* pPed)
@@ -2590,7 +2530,7 @@ bool CLuaPedDefs::SetPedExitVehicle(CClientPed* pPed)
     return pPed->ExitVehicle();
 }
 
-bool CLuaPedDefs::killPedTask(CClientPed* ped, taskType taskType, std::uint8_t taskNumber, std::optional<bool> gracefully)
+bool CLuaPedDefs::killPedTask(CClientPed* ped, taskType taskType, std::uint8_t taskNumber, std::optional<bool> gracefully) 
 {
     switch (taskType)
     {
@@ -2602,7 +2542,7 @@ bool CLuaPedDefs::killPedTask(CClientPed* ped, taskType taskType, std::uint8_t t
             if (taskNumber >= TASK_PRIORITY_MAX)
                 throw LuaFunctionError("Invalid task slot number");
 
-            return ped->KillTask(taskNumber, gracefully.value_or(true));
+            return ped->KillTask(taskNumber, gracefully.value_or(true)); 
         }
         case taskType::SECONDARY_TASK:
         {
@@ -2612,7 +2552,7 @@ bool CLuaPedDefs::killPedTask(CClientPed* ped, taskType taskType, std::uint8_t t
             return ped->KillTaskSecondary(taskNumber, gracefully.value_or(true));
         }
         default:
-            return false;
+            return false; 
     }
 }
 

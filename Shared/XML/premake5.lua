@@ -3,11 +3,10 @@ project "XML"
 	kind "SharedLib"
 	targetname "xmll"
 	targetdir(buildpath("server"))
-	clangtidy "On"
 
 	includedirs {
 		"../sdk",
-		"../../vendor/tinyxml2"
+		"../../vendor/tinyxml"
 	}
 
 	pchheader "StdInc.h"
@@ -19,7 +18,11 @@ project "XML"
 		["*"] = "premake5.lua"
 	}
 
-	links { "tinyxml2" }
+	links { "tinyxml" }
+
+	defines {
+		"TIXML_USE_STL"
+	}
 
 	files {
 		"premake5.lua",

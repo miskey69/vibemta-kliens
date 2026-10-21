@@ -152,7 +152,6 @@ private:
     void Callback_OnCollision(CColShape& Shape, CElement& Element);
     void Callback_OnLeave(CColShape& Shape, CElement& Element);
     void Callback_OnCollisionDestroy(CColShape* pShape);
-    bool ShouldTrackCollision(CColShape& Shape, CElement& Element);
 
     class CPickupManager* m_pPickupManager;
 

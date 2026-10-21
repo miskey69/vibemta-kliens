@@ -364,12 +364,6 @@ int CLuaACLDefs::aclSetRight(lua_State* luaVM)
                 CLogger::LogPrintf("ACL: %s: Right '%s' changed to %s in ACL '%s'\n", GetResourceName(luaVM), strRight.c_str(), bAccess ? "ALLOW" : "DISALLOW",
                                    pACL->GetName());
             pACLRight->SetRightAccess(bAccess);
-            if (pACLRight->GetAttributeValue("pending") == "true")
-            {
-                pACLRight->SetAttributeValue("pending", "false");
-                pACLRight->SetAttributeValue("who", GetResourceName(luaVM));
-                pACLRight->SetAttributeValue("date", GetLocalTimeString(true));
-            }
             lua_pushboolean(luaVM, true);
             return 1;
         }
@@ -424,6 +418,7 @@ int CLuaACLDefs::aclListRights(lua_State* luaVM)
         lua_newtable(luaVM);
 
         // Loop through ACL
+        char                                           szRightName[128];
         CAccessControlListRight::ERightType            eType;
         unsigned int                                   uiIndex = 0;
         list<CAccessControlListRight*>::const_iterator iter = pACL->IterBegin();
@@ -434,36 +429,35 @@ int CLuaACLDefs::aclListRights(lua_State* luaVM)
             if (!bAll && eType != eAllowed)
                 continue;
 
-            const char* szPrefix = "unknown.";
             switch (eType)
             {
                 case CAccessControlListRight::RIGHT_TYPE_COMMAND:
-                    szPrefix = "command.";
+                    strcpy(szRightName, "command.");
                     break;
 
                 case CAccessControlListRight::RIGHT_TYPE_FUNCTION:
-                    szPrefix = "function.";
+                    strcpy(szRightName, "function.");
                     break;
 
                 case CAccessControlListRight::RIGHT_TYPE_RESOURCE:
-                    szPrefix = "resource.";
+                    strcpy(szRightName, "resource.");
                     break;
 
                 case CAccessControlListRight::RIGHT_TYPE_GENERAL:
-                    szPrefix = "general.";
+                    strcpy(szRightName, "general.");
                     break;
 
                 default:
+                    strcpy(szRightName, "unknown.");
                     break;
             }
 
             // Append right name
-            SString strRightName = szPrefix;
-            strRightName += (*iter)->GetRightName();
+            strncat(szRightName, (*iter)->GetRightName(), NUMELMS(szRightName) - 1);
 
             // Push its name onto the table
             lua_pushnumber(luaVM, ++uiIndex);
-            lua_pushstring(luaVM, strRightName);
+            lua_pushstring(luaVM, szRightName);
             lua_settable(luaVM, -3);
         }
 
@@ -809,30 +803,29 @@ int CLuaACLDefs::aclGroupListObjects(lua_State* luaVM)
         lua_newtable(luaVM);
 
         // Loop through ACL stuff
+        char                                                 szBuffer[255];
         unsigned int                                         uiIndex = 0;
         list<CAccessControlListGroupObject*>::const_iterator iter = pGroup->IterBeginObjects();
         for (; iter != pGroup->IterEndObjects(); ++iter)
         {
             // Put the base type depending on the type
-            const char* szPrefix = "";
             switch ((*iter)->GetObjectType())
             {
                 case CAccessControlListGroupObject::OBJECT_TYPE_RESOURCE:
-                    szPrefix = "resource.";
+                    strcpy(szBuffer, "resource.");
                     break;
 
                 case CAccessControlListGroupObject::OBJECT_TYPE_USER:
-                    szPrefix = "user.";
+                    strcpy(szBuffer, "user.");
                     break;
             };
 
             // Append the object name
-            SString strObjectName = szPrefix;
-            strObjectName += (*iter)->GetObjectName();
+            strncat(szBuffer, (*iter)->GetObjectName(), 254);
 
             // Push its name onto the table
             lua_pushnumber(luaVM, ++uiIndex);
-            lua_pushstring(luaVM, strObjectName);
+            lua_pushstring(luaVM, szBuffer);
             lua_settable(luaVM, -3);
         }
         // Return the table
@@ -1062,7 +1055,7 @@ int CLuaACLDefs::OOP_isObjectInACLGroup(lua_State* luaVM)
 std::vector<CAccessControlListGroup*> CLuaACLDefs::aclObjectGetGroups(std::string strObject)
 {
     CAccessControlListGroupObject::EObjectType objectType;
-    const char*                                szObjectAfterDot = strObject.c_str();
+    const char* szObjectAfterDot = strObject.c_str();
     if (StringBeginsWith(szObjectAfterDot, "resource."))
     {
         szObjectAfterDot += 9;
@@ -1078,7 +1071,8 @@ std::vector<CAccessControlListGroup*> CLuaACLDefs::aclObjectGetGroups(std::strin
 
     std::vector<CAccessControlListGroup*> groups;
 
-    for (auto iter = m_pACLManager->Groups_Begin(); iter != m_pACLManager->Groups_End(); ++iter)
+    for (auto iter = m_pACLManager->Groups_Begin();
+        iter != m_pACLManager->Groups_End(); ++iter)
     {
         if (!(*iter)->FindObjectMatch(szObjectAfterDot, objectType))
             continue;

@@ -11,8 +11,7 @@
 
 #include <StdInc.h>
 #include "CTileBatcher.h"
-#include "DXHook/CProxyDirect3DDevice9.h"
-#define DEG2RAD(deg) ((deg) * (6.2832f / 360.f))
+#define DEG2RAD(deg) ( (deg) * (6.2832f/360.f) )
 
 ////////////////////////////////////////////////////////////////
 //
@@ -191,23 +190,9 @@ void CTileBatcher::Flush()
         if (CTextureItem* pTextureItem = DynamicCast<CTextureItem>(m_pCurrentMaterial))
         {
             // Draw using texture
-            bool bDrawTexture = true;
-            if (CRenderTargetItem* pRenderTarget = DynamicCast<CRenderTargetItem>(pTextureItem))
-            {
-                if (!pRenderTarget->TryEnsureValid())
-                    bDrawTexture = false;
-            }
-            else if (CScreenSourceItem* pScreenSource = DynamicCast<CScreenSourceItem>(pTextureItem))
-            {
-                if (!pScreenSource->TryEnsureValid())
-                    bDrawTexture = false;
-            }
-            if (bDrawTexture && pTextureItem->m_pD3DTexture)
-            {
-                m_pDevice->SetTexture(0, pTextureItem->m_pD3DTexture);
-                m_pDevice->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, NumVertices, PrimitiveCount, pIndexData, D3DFMT_INDEX16, pVertexStreamZeroData,
-                                                  VertexStreamZeroStride);
-            }
+            m_pDevice->SetTexture(0, pTextureItem->m_pD3DTexture);
+            m_pDevice->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, NumVertices, PrimitiveCount, pIndexData, D3DFMT_INDEX16, pVertexStreamZeroData,
+                                              VertexStreamZeroStride);
         }
         else if (CShaderInstance* pShaderInstance = DynamicCast<CShaderInstance>(m_pCurrentMaterial))
         {
@@ -222,7 +207,7 @@ void CTileBatcher::Flush()
             pShaderInstance->m_pEffectWrap->ApplyMappedHandles();
 
             // Do shader passes
-            DWORD dwFlags = D3DXFX_DONOTSAVESHADERSTATE;  // D3DXFX_DONOTSAVE(SHADER|SAMPLER)STATE
+            DWORD dwFlags = D3DXFX_DONOTSAVESHADERSTATE;            // D3DXFX_DONOTSAVE(SHADER|SAMPLER)STATE
             uint  uiNumPasses = 0;
             pShaderInstance->m_pEffectWrap->Begin(&uiNumPasses, dwFlags, false);
 

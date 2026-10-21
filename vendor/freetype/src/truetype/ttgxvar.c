@@ -4,7 +4,7 @@
  *
  *   TrueType GX Font Variation loader
  *
- * Copyright (C) 2004-2026 by
+ * Copyright (C) 2004-2025 by
  * David Turner, Robert Wilhelm, Werner Lemberg, and George Williams.
  *
  * This file is part of the FreeType project, and may only be used,
@@ -697,9 +697,11 @@
       if ( long_words )
         per_region_size *= 2;
 
-      if ( FT_QALLOC_MULT( varData->deltaSet, item_count, per_region_size ) )
+      if ( FT_NEW_ARRAY( varData->deltaSet, per_region_size * item_count ) )
         goto Exit;
-      if ( FT_STREAM_READ( varData->deltaSet, item_count * per_region_size ) )
+      if ( FT_Stream_Read( stream,
+                           varData->deltaSet,
+                           per_region_size * item_count ) )
       {
         FT_TRACE2(( "deltaSet read failed." ));
         error = FT_THROW( Invalid_Table );
@@ -3453,7 +3455,9 @@
     TT_Face       ttface = (TT_Face)face;
     FT_Error      error  = FT_Err_Ok;
     GX_Blend      blend;
-    FT_UInt       i;
+    FT_MM_Var*    mmvar;
+    FT_Var_Axis*  a;
+    FT_UInt       i, nc;
 
 
     if ( !ttface->blend )
@@ -3472,29 +3476,30 @@
         return error;
     }
 
+    nc = num_coords;
     if ( num_coords > blend->num_axis )
     {
       FT_TRACE2(( "TT_Get_Var_Design:"
                   " only using first %u of %u coordinates\n",
                   blend->num_axis, num_coords ));
-
-      FT_ARRAY_ZERO( coords + blend->num_axis, num_coords - blend->num_axis );
-      num_coords = blend->num_axis;
+      nc = blend->num_axis;
     }
 
+    mmvar = blend->mmvar;
+    a     = mmvar->axis;
     if ( ttface->doblend )
     {
-      for ( i = 0; i < num_coords; i++ )
+      for ( i = 0; i < nc; i++, a++ )
         coords[i] = blend->coords[i];
     }
     else
     {
-      FT_Var_Axis*  a = blend->mmvar->axis;
-
-
-      for ( i = 0; i < num_coords; i++, a++ )
+      for ( i = 0; i < nc; i++, a++ )
         coords[i] = a->def;
     }
+
+    for ( ; i < num_coords; i++, a++ )
+      coords[i] = a->def;
 
     return FT_Err_Ok;
   }
@@ -4022,13 +4027,13 @@
   /* modeled after `af_iup_shift' */
 
   static void
-  tt_delta_shift( FT_UInt     p1,
-                  FT_UInt     p2,
-                  FT_UInt     ref,
+  tt_delta_shift( int         p1,
+                  int         p2,
+                  int         ref,
                   FT_Vector*  in_points,
                   FT_Vector*  out_points )
   {
-    FT_UInt    p;
+    int        p;
     FT_Vector  delta;
 
 
@@ -4059,14 +4064,14 @@
   /* modeled after `af_iup_interp', `_iup_worker_interpolate', and   */
   /* `Ins_IUP' with spec differences in handling ill-defined cases.  */
   static void
-  tt_delta_interpolate( FT_UInt     p1,
-                        FT_UInt     p2,
-                        FT_UInt     ref1,
-                        FT_UInt     ref2,
+  tt_delta_interpolate( int         p1,
+                        int         p2,
+                        int         ref1,
+                        int         ref2,
                         FT_Vector*  in_points,
                         FT_Vector*  out_points )
   {
-    FT_UInt  p, i;
+    int  p, i;
 
     FT_Pos  out, in1, in2, out1, out2, d1, d2;
 
@@ -4132,18 +4137,24 @@
                          FT_Vector*   in_points,
                          FT_Bool*     has_delta )
   {
-    FT_UInt  first_point;
-    FT_UInt  end_point;
+    FT_Int  first_point;
+    FT_Int  end_point;
 
-    FT_UInt  first_delta;
-    FT_UInt  cur_delta;
+    FT_Int  first_delta;
+    FT_Int  cur_delta;
 
-    FT_UInt  point;
-    FT_UInt  contour;
+    FT_Int    point;
+    FT_Short  contour;
 
 
-    for ( point = 0, contour = 0;
-          contour < outline->n_contours; contour++ )
+    /* ignore empty outlines */
+    if ( !outline->n_contours )
+      return;
+
+    contour = 0;
+    point   = 0;
+
+    do
     {
       end_point   = outline->contours[contour];
       first_point = point;
@@ -4204,7 +4215,9 @@
                                   out_points );
         }
       }
-    }
+      contour++;
+
+    } while ( contour < outline->n_contours );
   }
 
 

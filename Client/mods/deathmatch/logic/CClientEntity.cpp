@@ -14,7 +14,7 @@ using std::list;
 
 extern CClientGame* g_pClientGame;
 
-#pragma warning(disable : 4355)  // warning C4355: 'this' : used in base member initializer list
+#pragma warning( disable : 4355 )   // warning C4355: 'this' : used in base member initializer list
 
 CClientEntity::CClientEntity(ElementID ID) : ClassInit(this)
 {
@@ -146,7 +146,8 @@ CClientEntity::~CClientEntity()
     }
 
     // Remove from spatial database
-    GetClientSpatialDatabase()->RemoveEntity(this);
+    if (!g_pClientGame->IsBeingDeleted())
+        GetClientSpatialDatabase()->RemoveEntity(this);
 
     // Ensure not referenced in the disabled collisions list
     assert(!MapContains(g_pClientGame->m_AllDisabledCollisions, this));
@@ -307,8 +308,8 @@ CLuaArguments* CClientEntity::GetAllCustomData(CLuaArguments* table)
 
     for (auto it = m_pCustomData->IterBegin(); it != m_pCustomData->IterEnd(); it++)
     {
-        table->PushString(it->first);              // key
-        table->PushArgument(it->second.Variable);  // value
+        table->PushString(it->first);                        // key
+        table->PushArgument(it->second.Variable);            // value
     }
 
     return table;
@@ -514,7 +515,7 @@ void CClientEntity::DeleteCustomData(const CStringName& name)
         CLuaArguments Arguments;
         Arguments.PushString(name);
         Arguments.PushArgument(oldVariable);
-        Arguments.PushArgument(CLuaArgument());  // Use nil as the new value to indicate the data has been removed
+        Arguments.PushArgument(CLuaArgument());            // Use nil as the new value to indicate the data has been removed
         CallEvent("onClientElementDataChange", Arguments, true);
     }
 }
@@ -741,14 +742,10 @@ bool CClientEntity::AddEvent(CLuaMain* pLuaMain, const char* szName, const CLuaF
     return m_pEventManager->Add(pLuaMain, szName, iLuaFunction, bPropagated, eventPriority, fPriorityMod);
 }
 
-bool CClientEntity::CallEvent(const char* szName, const CLuaArguments& Arguments, bool bCallOnChildren, const char* minClientVersion)
+bool CClientEntity::CallEvent(const char* szName, const CLuaArguments& Arguments, bool bCallOnChildren)
 {
-    CDebugHookManager* debugHookManager = g_pClientGame->GetDebugHookManager();
-    if (debugHookManager->HasPreEventHooks())
-    {
-        if (!debugHookManager->OnPreEvent(szName, Arguments, this, nullptr))
-            return false;
-    }
+    if (!g_pClientGame->GetDebugHookManager()->OnPreEvent(szName, Arguments, this, NULL))
+        return false;
 
     TIMEUS startTime = GetTimeUs();
 
@@ -758,12 +755,12 @@ bool CClientEntity::CallEvent(const char* szName, const CLuaArguments& Arguments
     pEvents->PreEventPulse();
 
     // Call the event on our parents/us first
-    CallParentEvent(szName, Arguments, this, minClientVersion);
+    CallParentEvent(szName, Arguments, this);
 
     if (bCallOnChildren)
     {
         // Call it on all our children
-        CallEventNoParent(szName, Arguments, this, minClientVersion);
+        CallEventNoParent(szName, Arguments, this);
     }
 
     // Tell the event manager that we're done calling the event
@@ -776,33 +773,32 @@ bool CClientEntity::CallEvent(const char* szName, const CLuaArguments& Arguments
             TIMING_DETAIL(SString("Event: %s [%d ms]", szName, deltaTimeUs / 1000));
     }
 
-    if (debugHookManager->HasPostEventHooks())
-        debugHookManager->OnPostEvent(szName, Arguments, this, nullptr);
+    g_pClientGame->GetDebugHookManager()->OnPostEvent(szName, Arguments, this, NULL);
 
     // Return whether it got cancelled or not
     return (!pEvents->WasEventCancelled());
 }
 
-void CClientEntity::CallEventNoParent(const char* szName, const CLuaArguments& Arguments, CClientEntity* pSource, const char* minClientVersion)
+void CClientEntity::CallEventNoParent(const char* szName, const CLuaArguments& Arguments, CClientEntity* pSource)
 {
     // Call it on us if this isn't the same class it was raised on
     // TODO not sure why the null check is necessary (eAi)
     if (pSource != this && m_pEventManager != NULL && m_pEventManager->HasEvents())
     {
-        m_pEventManager->Call(szName, Arguments, pSource, this, minClientVersion);
+        m_pEventManager->Call(szName, Arguments, pSource, this);
     }
 
     // Call it on all our children
     if (!m_Children.empty())
     {
         CElementListSnapshotRef pChildrenSnapshot = GetChildrenListSnapshot();
-        for (CClientEntity* pEntity : *pChildrenSnapshot)
+		for (CClientEntity* pEntity : *pChildrenSnapshot)
         {
             if (!pEntity->IsBeingDeleted())
             {
                 if (!pEntity->m_pEventManager || pEntity->m_pEventManager->HasEvents() || !pEntity->m_Children.empty())
                 {
-                    pEntity->CallEventNoParent(szName, Arguments, pSource, minClientVersion);
+                    pEntity->CallEventNoParent(szName, Arguments, pSource);
                     if (m_bBeingDeleted)
                         break;
                 }
@@ -811,18 +807,18 @@ void CClientEntity::CallEventNoParent(const char* szName, const CLuaArguments& A
     }
 }
 
-void CClientEntity::CallParentEvent(const char* szName, const CLuaArguments& Arguments, CClientEntity* pSource, const char* minClientVersion)
+void CClientEntity::CallParentEvent(const char* szName, const CLuaArguments& Arguments, CClientEntity* pSource)
 {
     // Call the event on us
     if (m_pEventManager && m_pEventManager->HasEvents())
     {
-        m_pEventManager->Call(szName, Arguments, pSource, this, minClientVersion);
+        m_pEventManager->Call(szName, Arguments, pSource, this);
     }
 
     // Call parent's handler
     if (m_pParent)
     {
-        m_pParent->CallParentEvent(szName, Arguments, pSource, minClientVersion);
+        m_pParent->CallParentEvent(szName, Arguments, pSource);
     }
 }
 
@@ -1109,7 +1105,7 @@ bool CClientEntity::IsAttachedToElement(CClientEntity* pEntity, bool bRecursive)
                 return true;
 
             if (!std::get<bool>(history.insert(pCurrent)))
-                break;  // This should not be possible, but you never know
+                break;            // This should not be possible, but you never know
         }
 
         return false;
@@ -1197,21 +1193,6 @@ void CClientEntity::DoAttaching()
 
         if (!SetMatrix(returnMatrix))
             SetPosition(returnMatrix.vPos);
-
-        // Moving us can run script events (a colshape firing hit/leave events here), and a
-        // handler may have detached us, so make sure we are still attached before going on
-        if (!m_pAttachedToEntity)
-            return;
-
-        // The game only recalculates an entity's surface brightness from its surroundings
-        // while it's not attached to anything (see CObject::PreRender), so an attached
-        // entity would otherwise stay stuck at its default (too bright) value forever.
-        // Keep it in sync with whatever it's attached to every frame, same as vanilla
-        // hand-held objects already do with their owning ped.
-        CPhysical* pThisPhysical = dynamic_cast<CPhysical*>(GetGameEntity());
-        CPhysical* pAttachedToPhysical = dynamic_cast<CPhysical*>(m_pAttachedToEntity->GetGameEntity());
-        if (pThisPhysical && pAttachedToPhysical)
-            pThisPhysical->SetLighting(pAttachedToPhysical->GetLighting());
     }
 }
 

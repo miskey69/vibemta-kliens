@@ -223,6 +223,7 @@ void CLuaGUIDefs::AddClass(lua_State* luaVM)
     AddGuiTabClass(luaVM);
 }
 
+// TODO: vector class
 void CLuaGUIDefs::AddGuiElementClass(lua_State* luaVM)
 {
     lua_newclass(luaVM);
@@ -252,8 +253,8 @@ void CLuaGUIDefs::AddGuiElementClass(lua_State* luaVM)
     lua_classfunction(luaVM, "getEnabled", "guiGetEnabled");
     lua_classfunction(luaVM, "getVisible", "guiGetVisible");
     lua_classfunction(luaVM, "getText", "guiGetText");
-    lua_classfunction(luaVM, "getPosition", ArgumentParserWarn<false, OOP_GUIGetPosition>);
-    lua_classfunction(luaVM, "getSize", ArgumentParserWarn<false, OOP_GUIGetSize>);
+    lua_classfunction(luaVM, "getPosition", "guiGetPosition");
+    lua_classfunction(luaVM, "getSize", "guiGetSize");
     lua_classfunction(luaVM, "getProperty", "guiGetProperty");
 
     lua_classfunction(luaVM, "setInputEnabled", "guiSetInputEnabled");
@@ -283,8 +284,8 @@ void CLuaGUIDefs::AddGuiElementClass(lua_State* luaVM)
     lua_classvariable(luaVM, "alpha", "guiSetAlpha", "guiGetAlpha");
     lua_classvariable(luaVM, "enabled", "guiSetEnabled", "guiGetEnabled");
     lua_classvariable(luaVM, "text", "guiSetText", "guiGetText");
-    lua_classvariable(luaVM, "size", ArgumentParserWarn<false, OOP_GUISetSize>, ArgumentParserWarn<false, OOP_GUIGetSize>);
-    lua_classvariable(luaVM, "position", ArgumentParserWarn<false, OOP_GUISetPosition>, ArgumentParserWarn<false, OOP_GUIGetPosition>);
+    lua_classvariable(luaVM, "size", "guiSetSize", "guiGetSize");
+    lua_classvariable(luaVM, "position", "guiSetPosition", "guiGetPosition");
     lua_classvariable(luaVM, "chatboxCharacterLimit", "setChatboxCharacterLimit", "getChatboxCharacterLimit");
 
     lua_registerclass(luaVM, "GuiElement", "Element");
@@ -385,10 +386,9 @@ void CLuaGUIDefs::AddGuiImageClass(lua_State* luaVM)
 
     lua_classfunction(luaVM, "create", "guiCreateStaticImage");
     lua_classfunction(luaVM, "loadImage", "guiStaticImageLoadImage");
-    lua_classfunction(luaVM, "getNativeSize", ArgumentParserWarn<false, OOP_GUIStaticImageGetNativeSize>);
+    lua_classfunction(luaVM, "getNativeSize", "guiStaticImageGetNativeSize");
 
     lua_classvariable(luaVM, "image", "guiStaticImageLoadImage", NULL);
-    lua_classvariable(luaVM, "nativeSize", nullptr, ArgumentParserWarn<false, OOP_GUIStaticImageGetNativeSize>);
 
     lua_registerclass(luaVM, "GuiStaticImage", "GuiElement");
 }
@@ -1228,19 +1228,6 @@ int CLuaGUIDefs::GUIStaticImageGetNativeSize(lua_State* luaVM)
     return 1;
 }
 
-std::variant<CLuaMultiReturn<float, float>, CVector2D, bool> CLuaGUIDefs::OOP_GUIStaticImageGetNativeSize(lua_State* luaVM, CClientGUIElement* guiElement)
-{
-    CVector2D vecSize;
-    if (!CStaticFunctionDefinitions::GUIStaticImageGetNativeSize(*guiElement, vecSize))
-        return false;
-
-    // Keep returning two floats when the caller assigns two results
-    if (lua_ncallresult(luaVM) == 2)
-        return CLuaMultiReturn<float, float>(vecSize.fX, vecSize.fY);
-
-    return vecSize;
-}
-
 int CLuaGUIDefs::GUICreateTab(lua_State* luaVM)
 {
     //  element guiCreateTab ( string text, element parent )
@@ -1795,19 +1782,6 @@ int CLuaGUIDefs::GUIGetSize(lua_State* luaVM)
     return 1;
 }
 
-std::variant<CLuaMultiReturn<float, float>, CVector2D> CLuaGUIDefs::OOP_GUIGetSize(lua_State* luaVM, CClientGUIElement* guiElement,
-                                                                                   std::optional<bool> relative)
-{
-    CVector2D vecSize;
-    guiElement->GetCGUIElement()->GetSize(vecSize, relative.value_or(false));
-
-    // Keep returning two floats when the caller assigns two results
-    if (lua_ncallresult(luaVM) == 2)
-        return CLuaMultiReturn<float, float>(vecSize.fX, vecSize.fY);
-
-    return vecSize;
-}
-
 int CLuaGUIDefs::GUIGetScreenSize(lua_State* luaVM)
 {
     const CVector2D Size = CStaticFunctionDefinitions::GUIGetScreenSize();
@@ -1842,19 +1816,6 @@ int CLuaGUIDefs::GUIGetPosition(lua_State* luaVM)
     // error: bad arguments
     lua_pushboolean(luaVM, false);
     return 1;
-}
-
-std::variant<CLuaMultiReturn<float, float>, CVector2D> CLuaGUIDefs::OOP_GUIGetPosition(lua_State* luaVM, CClientGUIElement* guiElement,
-                                                                                       std::optional<bool> relative)
-{
-    CVector2D vecPosition;
-    guiElement->GetCGUIElement()->GetPosition(vecPosition, relative.value_or(false));
-
-    // Keep returning two floats when the caller assigns two results
-    if (lua_ncallresult(luaVM) == 2)
-        return CLuaMultiReturn<float, float>(vecPosition.fX, vecPosition.fY);
-
-    return vecPosition;
 }
 
 int CLuaGUIDefs::GUISetAlpha(lua_State* luaVM)
@@ -2144,12 +2105,6 @@ int CLuaGUIDefs::GUISetSize(lua_State* luaVM)
     return 1;
 }
 
-bool CLuaGUIDefs::OOP_GUISetSize(CClientGUIElement* guiElement, CVector2D vecSize, std::optional<bool> relative)
-{
-    CStaticFunctionDefinitions::GUISetSize(*guiElement, vecSize, relative.value_or(false));
-    return true;
-}
-
 int CLuaGUIDefs::GUISetPosition(lua_State* luaVM)
 {
     //  bool guiSetPosition ( element guiElement, float x, float y, bool relative )
@@ -2176,12 +2131,6 @@ int CLuaGUIDefs::GUISetPosition(lua_State* luaVM)
     // error: bad arguments
     lua_pushboolean(luaVM, false);
     return 1;
-}
-
-bool CLuaGUIDefs::OOP_GUISetPosition(CClientGUIElement* guiElement, CVector2D vecPosition, std::optional<bool> relative)
-{
-    CStaticFunctionDefinitions::GUISetPosition(*guiElement, vecPosition, relative.value_or(false));
-    return true;
 }
 
 int CLuaGUIDefs::GUIGridListSetSortingEnabled(lua_State* luaVM)
@@ -2475,7 +2424,7 @@ int CLuaGUIDefs::GUIGridListInsertRowAfter(lua_State* luaVM)
         else
         {
             // Vector containing our string arguments.  We add a bool to store whether it was originally a number.
-            std::vector<std::pair<SString, bool>> m_items;
+            std::vector<std::pair<SString, bool> >     m_items;
             for (CLuaArgument* pArgument : Arguments)
             {
                 SString strItemText;
@@ -2620,7 +2569,7 @@ int CLuaGUIDefs::GUIGridListGetSelectedItem(lua_State* luaVM)
         int iRow = static_cast<CGUIGridList*>(guiGridlist->GetCGUIElement())->GetSelectedItemRow();
         int iColumn = static_cast<CGUIGridList*>(guiGridlist->GetCGUIElement())->GetSelectedItemColumn();
         lua_pushnumber(luaVM, iRow);
-        lua_pushnumber(luaVM, iColumn + 1);  // columns start at 1
+        lua_pushnumber(luaVM, iColumn + 1);            // columns start at 1
         return 2;
     }
     else

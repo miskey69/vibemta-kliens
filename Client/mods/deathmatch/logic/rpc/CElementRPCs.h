@@ -46,7 +46,6 @@ public:
     DECLARE_ELEMENT_RPC(SetCustomWeaponFlags);
     DECLARE_ELEMENT_RPC(SetCustomWeaponFiringRate);
     DECLARE_ELEMENT_RPC(ResetCustomWeaponFiringRate);
-    DECLARE_ELEMENT_RPC(SetCustomWeaponWeaponRange);
     DECLARE_ELEMENT_RPC(SetWeaponOwner);
     DECLARE_ELEMENT_RPC(SetWeaponConfig);
     DECLARE_ELEMENT_RPC(SetCallPropagationEnabled);

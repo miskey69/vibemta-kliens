@@ -22,11 +22,11 @@ CQueryReceiver::~CQueryReceiver()
 
 void CQueryReceiver::RequestQuery(in_addr address, ushort port)
 {
-    if (m_Socket == INVALID_SOCKET)  // Create the socket
+    if (m_Socket == INVALID_SOCKET)            // Create the socket
     {
         m_Socket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
         u_long flag = 1;
-        ioctlsocket(m_Socket, FIONBIO, &flag);  // Nonblocking I/O
+        ioctlsocket(m_Socket, FIONBIO, &flag);            // Nonblocking I/O
     }
 
     sockaddr_in addr;
@@ -34,7 +34,6 @@ void CQueryReceiver::RequestQuery(in_addr address, ushort port)
     addr.sin_family = AF_INET;
     addr.sin_addr = address;
     addr.sin_port = htons(port);
-    m_QueryAddress = addr;
 
     // Trailing data to work around 1 byte UDP packet filtering
     int iSendByte = g_pCore->GetNetwork()->SendTo(m_Socket, "r mtasa", 1, 0, (sockaddr*)&addr, sizeof(addr));
@@ -89,7 +88,7 @@ SQueryInfo CQueryReceiver::GetServerResponse()
     SQueryInfo info;
 
     if (m_Socket == INVALID_SOCKET)
-        return info;  // Query not sent
+        return info;            // Query not sent
 
     char szBuffer[SERVER_LIST_QUERY_BUFFER] = {0};
 
@@ -100,12 +99,6 @@ SQueryInfo CQueryReceiver::GetServerResponse()
 
     if (len >= 0)
     {
-        if (clntAddr.sin_family != m_QueryAddress.sin_family || clntAddr.sin_addr.S_un.S_addr != m_QueryAddress.sin_addr.S_un.S_addr ||
-            clntAddr.sin_port != m_QueryAddress.sin_port)
-        {
-            return info;
-        }
-
         // Parse data
 
         // Check length
@@ -169,14 +162,8 @@ SQueryInfo CQueryReceiver::GetServerResponse()
             SString strJoinedPlayers, strMaxPlayers;
             if (strPlayerCount.Split("/", &strJoinedPlayers, &strMaxPlayers))
             {
-                const int joinedPlayers = atoi(strJoinedPlayers);
-                const int maxPlayers = atoi(strMaxPlayers);
-
-                if (joinedPlayers >= 0 && joinedPlayers <= 0xFFFF)
-                    info.players = static_cast<ushort>(joinedPlayers);
-
-                if (maxPlayers >= 0 && maxPlayers <= 0xFFFF)
-                    info.playerSlot = static_cast<ushort>(maxPlayers);
+                info.players = static_cast<ushort>(atoi(strJoinedPlayers));
+                info.playerSlot = static_cast<ushort>(atoi(strMaxPlayers));
             }
         }
 
@@ -203,11 +190,7 @@ SQueryInfo CQueryReceiver::GetServerResponse()
         const SString strUpTime = strNetRoute.Right(strNetRoute.length() - strlen(strNetRoute) - 1);
         const SString strHttpPort = strUpTime.Right(strUpTime.length() - strlen(strUpTime) - 1);
         if (!strHttpPort.empty())
-        {
-            const int httpPort = atoi(strHttpPort);
-            if (httpPort >= 0 && httpPort <= 0xFFFF)
-                info.httpPort = static_cast<ushort>(httpPort);
-        }
+            info.httpPort = static_cast<ushort>(atoi(strHttpPort));
 
         // Get player nicks
         while (i < len)

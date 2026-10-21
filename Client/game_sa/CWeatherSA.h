@@ -20,7 +20,6 @@ class CWeatherSA : public CWeather
 public:
     unsigned char Get();
     void          Set(unsigned char primary, unsigned char secondary);
-    void          ResyncInterpolationWithGameClock(unsigned char primary, unsigned char secondary);
 
     void Release();
 

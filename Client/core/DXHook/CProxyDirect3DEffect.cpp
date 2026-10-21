@@ -10,7 +10,6 @@
 
 #include "StdInc.h"
 #include "CProxyDirect3DEffect.h"
-#include "ComPtrValidation.h"
 
 /////////////////////////////////////////////////////////////
 //
@@ -19,11 +18,11 @@
 //
 //
 /////////////////////////////////////////////////////////////
-CProxyDirect3DEffect::CProxyDirect3DEffect(IDirect3DDevice9* InD3DDevice9, ID3DXEffect* pOriginal)
-    : m_pStats(&g_StaticMemoryState.Effect), m_pOriginal(pOriginal), m_lRefCount(1)
+CProxyDirect3DEffect::CProxyDirect3DEffect(IDirect3DDevice9* InD3DDevice9, ID3DXEffect* pOriginal) : m_stats(g_pDeviceState->MemoryState.Effect)
 {
-    m_pStats->iCurrentCount++;
-    m_pStats->iCreatedCount++;
+    m_pOriginal = pOriginal;
+    m_stats.iCurrentCount++;
+    m_stats.iCreatedCount++;
 }
 
 /////////////////////////////////////////////////////////////
@@ -35,11 +34,8 @@ CProxyDirect3DEffect::CProxyDirect3DEffect(IDirect3DDevice9* InD3DDevice9, ID3DX
 /////////////////////////////////////////////////////////////
 CProxyDirect3DEffect::~CProxyDirect3DEffect()
 {
-    if (m_pStats)
-    {
-        m_pStats->iCurrentCount--;
-        m_pStats->iDestroyedCount++;
-    }
+    m_stats.iCurrentCount--;
+    m_stats.iDestroyedCount++;
 }
 
 /////////////////////////////////////////////////////////////
@@ -57,56 +53,10 @@ HRESULT CProxyDirect3DEffect::QueryInterface(REFIID riid, void** ppvObj)
     if (riid == CProxyDirect3DEffect_GUID)
     {
         *ppvObj = this;
-        AddRef();
         return S_OK;
     }
 
-    if (!IsOriginalValid())
-        return E_NOINTERFACE;
-
     return m_pOriginal->QueryInterface(riid, ppvObj);
-}
-
-/////////////////////////////////////////////////////////////
-//
-// CProxyDirect3DEffect::IsOriginalValid
-//
-// Check if the underlying ID3DXEffect pointer is still valid.
-// Uses COM pointer validation to detect freed/invalid objects.
-//
-/////////////////////////////////////////////////////////////
-bool CProxyDirect3DEffect::IsOriginalValid() const
-{
-    if (!m_pOriginal)
-        return false;
-
-    return IsValidComInterfacePointer(m_pOriginal);
-}
-
-/////////////////////////////////////////////////////////////
-//
-// CProxyDirect3DEffect::AddRef
-//
-// Increment reference count. Validates the original pointer
-// before forwarding to avoid crashes on invalid COM objects.
-//
-/////////////////////////////////////////////////////////////
-ULONG CProxyDirect3DEffect::AddRef()
-{
-    LONG newRefCount = m_lRefCount.fetch_add(1, std::memory_order_relaxed) + 1;
-
-    if (IsOriginalValid())
-    {
-        m_pOriginal->AddRef();
-    }
-    else
-    {
-        // Original is invalid (e.g., d3d9on12 crash) - null it to prevent
-        // dangling pointer access from inline methods
-        m_pOriginal = nullptr;
-    }
-
-    return static_cast<ULONG>(newRefCount);
 }
 
 /////////////////////////////////////////////////////////////
@@ -118,34 +68,16 @@ ULONG CProxyDirect3DEffect::AddRef()
 /////////////////////////////////////////////////////////////
 ULONG CProxyDirect3DEffect::Release()
 {
-    LONG newRefCount = m_lRefCount.fetch_sub(1, std::memory_order_acq_rel) - 1;
+    // Call original function
+    ULONG count = m_pOriginal->Release();
 
-    // Handle underflow
-    if (newRefCount < 0)
+    if (count == 0)
     {
-        m_lRefCount.store(0, std::memory_order_release);
-        newRefCount = 0;
+        // now, the Original Object has deleted itself, so do we here
+        delete this;            // destructor will be called automatically
     }
 
-    // Release the original if valid
-    if (IsOriginalValid())
-    {
-        m_pOriginal->Release();
-    }
-    else
-    {
-        // Original is invalid (e.g., d3d9on12 crash) - null it to prevent
-        // dangling pointer access from inline methods
-        m_pOriginal = nullptr;
-    }
-
-    // Destroy proxy when refcount reaches 0
-    if (newRefCount == 0)
-    {
-        delete this;
-    }
-
-    return static_cast<ULONG>(newRefCount);
+    return count;
 }
 
 /////////////////////////////////////////////////////////////
@@ -157,11 +89,8 @@ ULONG CProxyDirect3DEffect::Release()
 /////////////////////////////////////////////////////////////
 HRESULT CProxyDirect3DEffect::CloneEffect(LPDIRECT3DDEVICE9 pDevice, LPD3DXEFFECT* ppEffect)
 {
-    if (!IsOriginalValid())
-        return E_FAIL;
-
     HRESULT hr = m_pOriginal->CloneEffect(pDevice, ppEffect);
-    if (SUCCEEDED(hr) && ppEffect && *ppEffect)
+    if (SUCCEEDED(hr))
     {
         // Create proxy so we can track when it's finished with
         *ppEffect = new CProxyDirect3DEffect(pDevice, *ppEffect);
@@ -173,7 +102,7 @@ HRESULT CProxyDirect3DEffect::CloneEffect(LPDIRECT3DDEVICE9 pDevice, LPD3DXEFFEC
 //
 // MyD3DXCreateEffectFromFile
 //
-// Wrap result of original function
+// Wrap result of orignal function
 //
 /////////////////////////////////////////////////////////////
 HRESULT WINAPI MyD3DXCreateEffectFromFile(LPDIRECT3DDEVICE9 pDevice, LPCSTR pSrcFile, CONST D3DXMACRO* pDefines, LPD3DXINCLUDE pInclude, DWORD Flags,
@@ -192,7 +121,7 @@ HRESULT WINAPI MyD3DXCreateEffectFromFile(LPDIRECT3DDEVICE9 pDevice, LPCSTR pSrc
 //
 // D3DXCreateEffect
 //
-// Wrap result of original function
+// Wrap result of orignal function
 //
 /////////////////////////////////////////////////////////////
 HRESULT WINAPI MyD3DXCreateEffect(LPDIRECT3DDEVICE9 pDevice, LPCVOID pSrcData, UINT SrcDataLen, CONST D3DXMACRO* pDefines, LPD3DXINCLUDE pInclude, DWORD Flags,

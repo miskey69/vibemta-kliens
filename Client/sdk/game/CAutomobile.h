@@ -1,6 +1,6 @@
 /*****************************************************************************
  *
- *  PROJECT:     Multi Theft Auto
+ *  PROJECT:     Multi Theft Auto v1.0
  *  LICENSE:     See LICENSE in the top level directory
  *  FILE:        sdk/game/CAutomobile.h
  *  PURPOSE:     Automobile vehicle entity interface
@@ -20,7 +20,5 @@ class CDoor;
 class CAutomobile : public virtual CVehicle
 {
 public:
-    virtual ~CAutomobile() {};
-
-    virtual bool IsAnyWheelTouchingGround() const = 0;
+    virtual ~CAutomobile(){};
 };

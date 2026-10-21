@@ -4,7 +4,7 @@
  *
  *   TrueType font driver implementation (body).
  *
- * Copyright (C) 1996-2026 by
+ * Copyright (C) 1996-2025 by
  * David Turner, Robert Wilhelm, and Werner Lemberg.
  *
  * This file is part of the FreeType project, and may only be used,
@@ -455,6 +455,15 @@
     FT_Face       face   = ttslot->face;
     FT_Error      error;
 
+
+    if ( !slot )
+      return FT_THROW( Invalid_Slot_Handle );
+
+    if ( !size )
+      return FT_THROW( Invalid_Size_Handle );
+
+    if ( !face )
+      return FT_THROW( Invalid_Face_Handle );
 
 #ifdef FT_CONFIG_OPTION_INCREMENTAL
     if ( glyph_index >= (FT_UInt)face->num_glyphs &&

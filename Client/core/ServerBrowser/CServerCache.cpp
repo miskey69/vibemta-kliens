@@ -25,23 +25,24 @@ namespace
 
     struct CCachedInfo
     {
-        CValueInt nPlayers;     // Current players
-        CValueInt nMaxPlayers;  // Maximum players
-        CValueInt nPing;        // Ping time
-        CValueInt bPassworded;  // Password protected
+        CValueInt nPlayers;               // Current players
+        CValueInt nMaxPlayers;            // Maximum players
+        CValueInt nPing;                  // Ping time
+        CValueInt bPassworded;            // Password protected
         CValueInt bKeepFlag;
         CValueInt uiCacheNoReplyCount;
         CValueInt usHttpPort;
         CValueInt ucSpecialFlags;
-        SString   strName;      // Server name
-        SString   strGameMode;  // Game mode
-        SString   strMap;       // Map name
-        SString   strVersion;   // Version
+        SString   strName;                // Server name
+        SString   strGameMode;            // Game mode
+        SString   strMap;                 // Map name
+        SString   strVersion;             // Version
     };
 
     // Variables used for saving the server cache file on a separate thread
-    static std::atomic_bool ms_bIsSaving = false;
-}  // namespace
+    static bool                              ms_bIsSaving = false;
+    static std::map<CCachedKey, CCachedInfo> ms_ServerCachedMap;
+}            // namespace
 
 ///////////////////////////////////////////////////////////////
 //
@@ -67,7 +68,7 @@ public:
 protected:
     bool                LoadServerCache();
     static DWORD WINAPI StaticThreadProc(LPVOID lpdwThreadParam);
-    static void         StaticSaveServerCache(const std::map<CCachedKey, CCachedInfo>& serverCachedMap);
+    static void         StaticSaveServerCache();
 
     bool                              m_bListChanged;
     std::map<CCachedKey, CCachedInfo> m_ServerCachedMap;
@@ -159,11 +160,7 @@ bool CServerCache::LoadServerCache()
         if (const SString* pString = MapFind(item.attributeMap, "ip"))
             key.ulIp = inet_addr(*pString);
         if (const SString* pString = MapFind(item.attributeMap, "port"))
-        {
-            const int iPort = atoi(*pString);
-            if (iPort > 0 && iPort <= 0xFFFF)
-                key.usGamePort = static_cast<ushort>(iPort);
-        }
+            key.usGamePort = static_cast<ushort>(atoi(*pString));
         if (const SString* pString = MapFind(item.attributeMap, "nPlayers"))
             info.nPlayers.SetFromString(*pString);
         if (const SString* pString = MapFind(item.attributeMap, "nMaxPlayers"))
@@ -189,7 +186,7 @@ bool CServerCache::LoadServerCache()
         if (const SString* pString = MapFind(item.attributeMap, "strVersion"))
             info.strVersion = *pString;
 
-        if (key.ulIp == 0 || key.usGamePort == 0)
+        if (key.ulIp == 0)
             continue;
 
         MapSet(m_ServerCachedMap, key, info);
@@ -211,36 +208,37 @@ bool CServerCache::LoadServerCache()
 ///////////////////////////////////////////////////////////////
 void CServerCache::SaveServerCache(bool bWaitUntilFinished)
 {
-    // Finish the previous snapshot before checking for changes made during its save.
-    while (bWaitUntilFinished && ms_bIsSaving.load(std::memory_order_acquire))
-    {
-        Sleep(1);
-    }
-
     // Check if we need to save
-    if (m_bListChanged && !ms_bIsSaving.load(std::memory_order_acquire))
+    if (m_bListChanged && !ms_bIsSaving)
     {
-        auto* pServerCachedMap = new std::map<CCachedKey, CCachedInfo>(m_ServerCachedMap);
-        ms_bIsSaving.store(true, std::memory_order_release);
+        m_bListChanged = false;
+
+        // Copy vars for save thread
+        ms_ServerCachedMap = m_ServerCachedMap;
 
         // Start save thread
-        HANDLE hThread = CreateThread(NULL, 0, &CServerCache::StaticThreadProc, pServerCachedMap, 0, NULL);
+        HANDLE hThread = CreateThread(NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(CServerCache::StaticThreadProc), NULL, CREATE_SUSPENDED, NULL);
         if (!hThread)
         {
-            ms_bIsSaving.store(false, std::memory_order_release);
-            delete pServerCachedMap;
             CCore::GetSingleton().GetConsole()->Printf("Could not create server cache thread.");
         }
         else
         {
-            m_bListChanged = false;
+            ms_bIsSaving = true;
             SetThreadPriority(hThread, THREAD_PRIORITY_LOWEST);
+
+            if (ResumeThread(hThread) == static_cast<DWORD>(-1))
+            {
+                CCore::GetSingleton().GetConsole()->Printf("Could not start server cache thread.");
+                ms_bIsSaving = false;
+            }
+
             CloseHandle(hThread);
         }
     }
 
     // If required, wait until save thread is done
-    while (bWaitUntilFinished && ms_bIsSaving.load(std::memory_order_acquire))
+    while (bWaitUntilFinished && ms_bIsSaving)
     {
         Sleep(1);
     }
@@ -255,9 +253,8 @@ void CServerCache::SaveServerCache(bool bWaitUntilFinished)
 ///////////////////////////////////////////////////////////////
 DWORD WINAPI CServerCache::StaticThreadProc(LPVOID lpdwThreadParam)
 {
-    std::unique_ptr<std::map<CCachedKey, CCachedInfo>> pServerCachedMap{static_cast<std::map<CCachedKey, CCachedInfo>*>(lpdwThreadParam)};
-    StaticSaveServerCache(*pServerCachedMap);
-    ms_bIsSaving.store(false, std::memory_order_release);
+    StaticSaveServerCache();
+    ms_bIsSaving = false;
     return 0;
 }
 
@@ -270,7 +267,7 @@ DWORD WINAPI CServerCache::StaticThreadProc(LPVOID lpdwThreadParam)
 // but the file itself is never deleted. Servers are synced, not purged.
 //
 ///////////////////////////////////////////////////////////////
-void CServerCache::StaticSaveServerCache(const std::map<CCachedKey, CCachedInfo>& serverCachedMap)
+void CServerCache::StaticSaveServerCache()
 {
     CXMLFile* m_pConfigFile = CCore::GetSingleton().GetXML()->CreateXML(CalcMTASAPath(MTA_SERVER_CACHE_PATH));
     if (!m_pConfigFile)
@@ -290,8 +287,9 @@ void CServerCache::StaticSaveServerCache(const std::map<CCachedKey, CCachedInfo>
 
     // Transfer each item from m_ServerCachedMap into dataSet
     CDataInfoSet dataSet;
-    for (const auto& [key, info] : serverCachedMap)
+    for (const auto& [key, info] : ms_ServerCachedMap)
     {
+
         // Only exclude servers that have failed multiple consecutive query attempts
         if (info.uiCacheNoReplyCount > 3)
             continue;
@@ -358,8 +356,8 @@ void CServerCache::GetServerCachedInfo(CServerListItem* pItem)
             pItem->strMap = pInfo->strMap;
             pItem->strVersion = pInfo->strVersion;
             pItem->uiCacheNoReplyCount = pInfo->uiCacheNoReplyCount;
-            pItem->m_usHttpPort = static_cast<ushort>(pInfo->usHttpPort);
-            pItem->m_ucSpecialFlags = static_cast<uchar>(pInfo->ucSpecialFlags);
+            pItem->m_usHttpPort = static_cast<unsigned short>(pInfo->usHttpPort);
+            pItem->m_ucSpecialFlags = static_cast<unsigned char>(pInfo->ucSpecialFlags);
             pItem->PostChange();
         }
         else if (pItem->GetDataQuality() < SERVER_INFO_QUERY)
@@ -454,7 +452,7 @@ void CServerCache::GetServerListCachedInfo(CServerList* pList)
         CServerListItem* pItem = *it;
         if (!pItem)
             continue;
-        CCachedKey key;
+        CCachedKey       key;
         key.ulIp = pItem->Address.s_addr;
         key.usGamePort = pItem->usGamePort;
         if (CCachedInfo* pInfo = MapFind(m_ServerCachedMap, key))
@@ -496,6 +494,7 @@ bool CServerCache::GenerateServerList(CServerList* pList, bool bAllowNonRespondi
 
     for (const auto& [key, info] : m_ServerCachedMap)
     {
+
         // When master server is offline, include all cached servers. Otherwise exclude servers that
         // have consistently failed to respond (uiCacheNoReplyCount > 3). New servers without response data
         // should still be included since they may not have been queried yet.

@@ -21,7 +21,6 @@ CFxSystem* CFxManagerSA::CreateFxSystem(const char* szBlueprint, const CVector& 
     DWORD                 dwFunc = FUNC_FxManager_c__CreateFxSystem;
     CFxSystemSAInterface* pFxSystem;
 
-    // clang-format off
     __asm
     {
         mov     ecx, dwThis
@@ -32,7 +31,6 @@ CFxSystem* CFxManagerSA::CreateFxSystem(const char* szBlueprint, const CVector& 
         call    dwFunc
         mov     pFxSystem, eax
     }
-    // clang-format on
 
     if (pFxSystem)
     {
@@ -52,14 +50,12 @@ void CFxManagerSA::DestroyFxSystem(CFxSystem* pFxSystem)
 
     void* pFxSA = pFxSystem->GetInterface();
 
-    // clang-format off
     __asm
     {
         mov     ecx, dwThis
         push    pFxSA
         call    dwFunc
     }
-    // clang-format on
 }
 
 //

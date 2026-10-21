@@ -20,13 +20,13 @@ namespace
         ushort usNext;
         ushort usPrev;
 
-        ushort uiUnknown1;  // Parent ?
-        uchar  uiUnknown2;  // 0x12 when loading, 0x02 when finished loading
+        ushort uiUnknown1;            // Parent ?
+        uchar  uiUnknown2;            // 0x12 when loading, 0x02 when finished loading
         uchar  ucImgId;
 
         int  iBlockOffset;
         int  iBlockCount;
-        uint uiLoadflag;  // 0-not loaded  2-requested  3-loaded  1-processed
+        uint uiLoadflag;            // 0-not loaded  2-requested  3-loaded  1-processed
     };
 
     std::unordered_map<ushort, char*>         ms_ReplacementClothesFileDataMap;
@@ -59,7 +59,7 @@ namespace
         auto blockDiv = std::div(size, 2048);
         return (blockDiv.quot + (blockDiv.rem ? 1 : 0));
     }
-}  // namespace
+}            // namespace
 
 ////////////////////////////////////////////////////////////////
 //
@@ -73,15 +73,11 @@ void CRenderWareSA::ClothesAddReplacement(char* pFileData, size_t fileSize, usho
     if (!pFileData)
         return;
 
-    const size_t streamingSizeBlocks = GetSizeInBlocks(fileSize);
-    if (streamingSizeBlocks > 0xFFFF)
-        return;
-
     if (pFileData != MapFindRef(ms_ReplacementClothesFileDataMap, usFileId))
     {
         MapSet(ms_ReplacementClothesFileDataMap, usFileId, pFileData);
         MapSet(ms_OriginalStreamingSizesMap, usFileId, g_clothesDirectory->GetModelStreamingSize(usFileId));
-        g_clothesDirectory->SetModelStreamingSize(usFileId, static_cast<std::uint16_t>(streamingSizeBlocks));
+        g_clothesDirectory->SetModelStreamingSize(usFileId, static_cast<std::uint16_t>(GetSizeInBlocks(fileSize)));
 
         clothesReplacementChanged = true;
     }
@@ -149,10 +145,7 @@ bool CRenderWareSA::ClothesAddFile(const char* fileData, std::size_t fileSize, c
         return false;
 
     DirectoryInfoSA entry{};
-    const size_t    streamingSizeBlocks = GetSizeInBlocks(fileSize);
-    if (streamingSizeBlocks > 0xFFFF)
-        return false;
-    entry.m_streamingSize = static_cast<std::uint16_t>(streamingSizeBlocks);
+    entry.m_streamingSize = static_cast<std::uint16_t>(GetSizeInBlocks(fileSize));
 
     std::size_t nameSize = sizeof(entry.m_name) - 1;
     std::strncpy(entry.m_name, fileName, nameSize);
@@ -179,8 +172,6 @@ bool CRenderWareSA::ClothesRemoveFile(char* fileData)
     if (!fileData)
         return false;
 
-    bool removed = false;
-
     for (auto iter = ms_ClothesFileDataMap.begin(); iter != ms_ClothesFileDataMap.end();)
     {
         if (iter->second == fileData)
@@ -190,13 +181,12 @@ bool CRenderWareSA::ClothesRemoveFile(char* fileData)
 
             iter = ms_ClothesFileDataMap.erase(iter);
             clothesReplacementChanged = true;
-            removed = true;
         }
         else
             ++iter;
     }
 
-    return removed;
+    return clothesReplacementChanged;
 }
 
 ////////////////////////////////////////////////////////////////
@@ -229,8 +219,8 @@ __declspec(noinline) bool _cdecl OnCStreaming_RequestModel_Mid(int flags, SImgGT
     if (ms_ReplacementClothesFileDataMap.empty() && ms_ClothesFileDataMap.empty())
         return false;
 
-    static std::map<std::uint32_t, int>  blockOffsetToFileIdMap;
-    std::map<std::uint32_t, std::string> blockOffsetToFileNameMap;
+    static std::map<std::uint32_t, int>     blockOffsetToFileIdMap;
+    std::map<std::uint32_t, std::string>    blockOffsetToFileNameMap;
 
     if (blockOffsetToFileIdMap.empty() || ms_ClothesFileDataMap.size() > 0)
     {
@@ -270,8 +260,8 @@ __declspec(noinline) bool _cdecl OnCStreaming_RequestModel_Mid(int flags, SImgGT
     if (!replacementFileData)
         return false;
 
-    // If bLoadingBigModel is set, try to get it unset
-#define VAR_CStreaming_bLoadingBigModel 0x08E4A58
+        // If bLoadingBigModel is set, try to get it unset
+    #define VAR_CStreaming_bLoadingBigModel     0x08E4A58
     BYTE& bLoadingBigModel = *(BYTE*)VAR_CStreaming_bLoadingBigModel;
     if (bLoadingBigModel)
     {
@@ -295,15 +285,14 @@ __declspec(noinline) bool _cdecl OnCStreaming_RequestModel_Mid(int flags, SImgGT
 }
 
 // Hook info
-#define HOOKPOS_CStreaming_RequestModel_Mid  0x040895A
-#define HOOKSIZE_CStreaming_RequestModel_Mid 5
-DWORD                         RETURN_CStreaming_RequestModel_MidA = 0x0408960;
-DWORD                         RETURN_CStreaming_RequestModel_MidB = 0x0408990;
+#define HOOKPOS_CStreaming_RequestModel_Mid             0x040895A
+#define HOOKSIZE_CStreaming_RequestModel_Mid            5
+DWORD RETURN_CStreaming_RequestModel_MidA = 0x0408960;
+DWORD RETURN_CStreaming_RequestModel_MidB = 0x0408990;
 static void __declspec(naked) HOOK_CStreaming_RequestModel_Mid()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -334,7 +323,6 @@ static void __declspec(naked) HOOK_CStreaming_RequestModel_Mid()
         popad
         jmp     RETURN_CStreaming_RequestModel_MidB
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////

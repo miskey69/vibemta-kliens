@@ -24,16 +24,14 @@ int CTaskComplexWanderSA::GetWanderType()
     DWORD             dwFunc = ((TaskComplexWanderVTBL*)pTaskInterface->VTBL)->GetWanderType;
     int               iReturn = NO_WANDER_TYPE;
 
-    if (dwFunc && dwFunc != 0x82263A)  // some tasks have no wander type 0x82263A is purecal (assert?)
+    if (dwFunc && dwFunc != 0x82263A)            // some tasks have no wander type 0x82263A is purecal (assert?)
     {
-        // clang-format off
         __asm
         {
             mov     ecx, pTaskInterface
             call    dwFunc
             mov     iReturn, eax
         }
-        // clang-format on
     }
     return iReturn;
 }
@@ -60,7 +58,6 @@ CTaskComplexWanderStandardSA::CTaskComplexWanderStandardSA(const int iMoveState,
         return;
     DWORD dwFunc = FUNC_CTaskComplexWanderStandard__Constructor;
     DWORD dwThisInterface = (DWORD)GetInterface();
-    // clang-format off
     __asm
     {
         mov     ecx, dwThisInterface
@@ -69,5 +66,4 @@ CTaskComplexWanderStandardSA::CTaskComplexWanderStandardSA(const int iMoveState,
         push    iMoveState
         call    dwFunc
     }
-    // clang-format on
 }

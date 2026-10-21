@@ -40,7 +40,6 @@ CExplosion* CExplosionManagerSA::AddExplosion(CEntity* pExplodingEntity, CEntity
     CExplosion* explosion = CExplosionManagerSA::FindFreeExplosion();
     bool        bReturn;
     DWORD       dwFunc = FUNC_CExplosion_AddExplosion;
-    // clang-format off
     __asm
     {
         push    bNoDamage
@@ -69,7 +68,6 @@ returnhere:
         add     esp, 0x28
         mov     bReturn, al
     }
-    // clang-format on
     if (bReturn) return explosion;
 
     return NULL;

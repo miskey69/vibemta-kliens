@@ -150,8 +150,7 @@ void CShaderInstance::SetTextureValue(D3DXHANDLE hHandle, CTextureItem* pTexture
     // Set as texture
     pParam->cType = 't';
     pParam->pTextureItem = pTextureItem;
-    if (pParam->pTextureItem)
-        pParam->pTextureItem->AddRef();
+    pParam->pTextureItem->AddRef();
 }
 
 ////////////////////////////////////////////////////////////////
@@ -180,8 +179,7 @@ void CShaderInstance::SetFloatsValue(D3DXHANDLE hHandle, const float* pfValues, 
 {
     SShaderValue* pParam = GetParam(hHandle);
     // Set as float
-    const uint uiMaxCount = static_cast<uint>(NUMELMS(pParam->floatList));
-    uiCount = std::min(uiCount, uiMaxCount);
+    uiCount = std::min(uiCount, NUMELMS(pParam->floatList));
     pParam->cType = 'f';
     memcpy(pParam->floatList, pfValues, sizeof(float) * uiCount);
     pParam->cCount = static_cast<char>(uiCount);
@@ -223,8 +221,7 @@ bool CShaderInstance::CmpBoolValue(D3DXHANDLE hHandle, bool bValue)
 bool CShaderInstance::CmpFloatsValue(D3DXHANDLE hHandle, const float* pfValues, uint uiCount)
 {
     SShaderValue* pParam = GetParam(hHandle);
-    const uint    storedCount = static_cast<unsigned char>(pParam->cCount);
-    return pParam->cType == 'f' && storedCount == uiCount && memcmp(pParam->floatList, pfValues, sizeof(float) * uiCount) == 0;
+    return pParam->cType == 'f' && pParam->cCount == uiCount && memcmp(pParam->floatList, pfValues, sizeof(float) * uiCount) == 0;
 }
 
 ////////////////////////////////////////////////////////////////
@@ -286,40 +283,8 @@ void CShaderInstance::ApplyShaderParameters()
         switch (iter->second.cType)
         {
             case 't':
-            {
-                CTextureItem* pTextureItem = iter->second.pTextureItem;
-                if (!pTextureItem)
-                {
-                    pD3DEffect->SetTexture(iter->first, nullptr);
-                    break;
-                }
-
-                if (CRenderTargetItem* pRenderTarget = DynamicCast<CRenderTargetItem>(pTextureItem))
-                {
-                    if (!pRenderTarget->TryEnsureValid())
-                    {
-                        pD3DEffect->SetTexture(iter->first, nullptr);
-                        break;
-                    }
-                }
-                else if (CScreenSourceItem* pScreenSource = DynamicCast<CScreenSourceItem>(pTextureItem))
-                {
-                    if (!pScreenSource->TryEnsureValid())
-                    {
-                        pD3DEffect->SetTexture(iter->first, nullptr);
-                        break;
-                    }
-                }
-
-                if (!pTextureItem->m_pD3DTexture)
-                {
-                    pD3DEffect->SetTexture(iter->first, nullptr);
-                    break;
-                }
-
-                pD3DEffect->SetTexture(iter->first, pTextureItem->m_pD3DTexture);
+                pD3DEffect->SetTexture(iter->first, iter->second.pTextureItem->m_pD3DTexture);
                 break;
-            }
 
             case 'b':
                 pD3DEffect->SetBool(iter->first, iter->second.bValue);

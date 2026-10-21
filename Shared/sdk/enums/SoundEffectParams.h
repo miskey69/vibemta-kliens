@@ -2,7 +2,7 @@
  *
  *  PROJECT:     Multi Theft Auto
  *  LICENSE:     See LICENSE in the top level directory
- *  FILE:        sdk/enums/SoundEffectParams.h
+ *  FILE:        sdk/SoundEffectParams.h
  *  PURPOSE:     Header for common definitions
  *
  *  Multi Theft Auto is available from https://www.multitheftauto.com/
@@ -11,7 +11,7 @@
 
 #pragma once
 
-namespace SoundEffectParams
+namespace eSoundEffectParams
 {
     enum class Chorus
     {
@@ -99,4 +99,4 @@ namespace SoundEffectParams
         REVERB_TIME,
         HIGH_FREQ_RT_RATIO,
     };
-}  // namespace eSoundEffectParams
+}            // namespace eSoundEffectParams

@@ -21,21 +21,31 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
+
 /* Escape and unescape URL encoding in strings. The functions return a new
- * allocated string or NULL if an error occurred. */
+ * allocated string or NULL if an error occurred.  */
+
 #include "curl_setup.h"
+
+#include <curl/curl.h>
 
 struct Curl_easy;
 
 #include "urldata.h"
+#include "curlx/warnless.h"
 #include "escape.h"
+#include "strdup.h"
 #include "curlx/strparse.h"
+
+/* The last 3 #include files should be in this order */
 #include "curl_printf.h"
+#include "curl_memory.h"
+#include "memdebug.h"
 
 /* for ABI-compatibility with previous versions */
-char *curl_escape(const char *string, int length)
+char *curl_escape(const char *string, int inlength)
 {
-  return curl_easy_escape(NULL, string, length);
+  return curl_easy_escape(NULL, string, inlength);
 }
 
 /* for ABI-compatibility with previous versions */
@@ -47,25 +57,23 @@ char *curl_unescape(const char *string, int length)
 /* Escapes for URL the given unescaped string of given length.
  * 'data' is ignored since 7.82.0.
  */
-char *curl_easy_escape(CURL *curl, const char *string, int length)
+char *curl_easy_escape(CURL *data, const char *string,
+                       int inlength)
 {
-  size_t len;
+  size_t length;
   struct dynbuf d;
-  (void)curl;
+  (void)data;
 
-  if(!string || (length < 0))
+  if(!string || (inlength < 0))
     return NULL;
 
-  len = (length ? (size_t)length : strlen(string));
-  if(!len)
-    return curlx_strdup("");
+  length = (inlength ? (size_t)inlength : strlen(string));
+  if(!length)
+    return strdup("");
 
-  if(len > SIZE_MAX / 16)
-    return NULL;
+  curlx_dyn_init(&d, length * 3 + 1);
 
-  curlx_dyn_init(&d, (len * 3) + 1);
-
-  while(len--) {
+  while(length--) {
     /* treat the characters unsigned */
     unsigned char in = (unsigned char)*string++;
 
@@ -76,8 +84,8 @@ char *curl_easy_escape(CURL *curl, const char *string, int length)
     }
     else {
       /* encode it */
-      unsigned char out[3] = { '%' };
-      Curl_hexbyte(&out[1], in);
+      unsigned char out[3]={'%'};
+      Curl_hexbyte(&out[1], in, FALSE);
       if(curlx_dyn_addn(&d, out, 3))
         return NULL;
     }
@@ -113,7 +121,7 @@ CURLcode Curl_urldecode(const char *string, size_t length,
   DEBUGASSERT(ctrl >= REJECT_NADA); /* crash on TRUE/FALSE */
 
   alloc = (length ? length : strlen(string));
-  ns = curlx_malloc(alloc + 1);
+  ns = malloc(alloc + 1);
 
   if(!ns)
     return CURLE_OUT_OF_MEMORY;
@@ -126,8 +134,8 @@ CURLcode Curl_urldecode(const char *string, size_t length,
     if(('%' == in) && (alloc > 2) &&
        ISXDIGIT(string[1]) && ISXDIGIT(string[2])) {
       /* this is two hexadecimal digits following a '%' */
-      in = (unsigned char)((curlx_hexval(string[1]) << 4) |
-                           curlx_hexval(string[2]));
+      in = (unsigned char)((Curl_hexval(string[1]) << 4) |
+                           Curl_hexval(string[2]));
       string += 3;
       alloc -= 3;
     }
@@ -138,7 +146,7 @@ CURLcode Curl_urldecode(const char *string, size_t length,
 
     if(((ctrl == REJECT_CTRL) && (in < 0x20)) ||
        ((ctrl == REJECT_ZERO) && (in == 0))) {
-      curlx_safefree(*ostring);
+      Curl_safefree(*ostring);
       return CURLE_URL_MALFORMAT;
     }
 
@@ -160,25 +168,25 @@ CURLcode Curl_urldecode(const char *string, size_t length,
  * If olen == NULL, no output length is stored.
  * 'data' is ignored since 7.82.0.
  */
-char *curl_easy_unescape(CURL *curl, const char *string, int inlength,
-                         int *outlength)
+char *curl_easy_unescape(CURL *data, const char *string,
+                         int length, int *olen)
 {
   char *str = NULL;
-  (void)curl;
-  if(string && (inlength >= 0)) {
-    size_t inputlen = (size_t)inlength;
+  (void)data;
+  if(string && (length >= 0)) {
+    size_t inputlen = (size_t)length;
     size_t outputlen;
     CURLcode res = Curl_urldecode(string, inputlen, &str, &outputlen,
                                   REJECT_NADA);
     if(res)
       return NULL;
 
-    if(outlength) {
-      if(outputlen <= (size_t)INT_MAX)
-        *outlength = curlx_uztosi(outputlen);
+    if(olen) {
+      if(outputlen <= (size_t) INT_MAX)
+        *olen = curlx_uztosi(outputlen);
       else
         /* too large to return in an int, fail! */
-        curlx_safefree(str);
+        Curl_safefree(str);
     }
   }
   return str;
@@ -189,7 +197,7 @@ char *curl_easy_unescape(CURL *curl, const char *string, int inlength,
    the library's memory system */
 void curl_free(void *p)
 {
-  curlx_free(p);
+  free(p);
 }
 
 /*
@@ -204,8 +212,7 @@ void Curl_hexencode(const unsigned char *src, size_t len, /* input length */
   DEBUGASSERT(src && len && (olen >= 3));
   if(src && len && (olen >= 3)) {
     while(len-- && (olen >= 3)) {
-      out[0] = Curl_ldigits[*src >> 4];
-      out[1] = Curl_ldigits[*src & 0x0F];
+      Curl_hexbyte(out, *src, TRUE);
       ++src;
       out += 2;
       olen -= 2;
@@ -218,11 +225,14 @@ void Curl_hexencode(const unsigned char *src, size_t len, /* input length */
 
 /* Curl_hexbyte
  *
- * Output a single unsigned char as a two-digit UPPERCASE hex number.
+ * Output a single unsigned char as a two-digit hex number, lowercase or
+ * uppercase
  */
 void Curl_hexbyte(unsigned char *dest, /* must fit two bytes */
-                  unsigned char val)
+                  unsigned char val,
+                  bool lowercase)
 {
-  dest[0] = Curl_udigits[val >> 4];
-  dest[1] = Curl_udigits[val & 0x0F];
+  const unsigned char *t = lowercase ? Curl_ldigits : Curl_udigits;
+  dest[0] = t[val >> 4];
+  dest[1] = t[val & 0x0F];
 }

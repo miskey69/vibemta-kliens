@@ -37,7 +37,7 @@ CTaskSA::~CTaskSA()
     dwTasksAlive--;
 }
 
-// allocate memory for the task (amount nSize)
+// alocate memory for the task (ammount nSize)
 void CTaskSA::CreateTaskInterface(size_t nSize)
 {
     // Safety margin. I see GTA allocate more than we do for some tasks. We could create
@@ -46,7 +46,6 @@ void CTaskSA::CreateTaskInterface(size_t nSize)
 
     DWORD dwFunc = FUNC_CTask__Operator_New;
     DWORD dwReturn = 0;
-    // clang-format off
     __asm
     {
         push    nSize
@@ -54,7 +53,6 @@ void CTaskSA::CreateTaskInterface(size_t nSize)
         add     esp, 4
         mov     dwReturn, eax
     }
-    // clang-format on
 
     TaskInterface = (CTaskSAInterface*)dwReturn;
     Parent = 0;
@@ -65,14 +63,12 @@ CTask* CTaskSA::Clone()
     DWORD dwThisInterface = (DWORD)GetInterface();
     DWORD dwFunc = GetInterface()->VTBL->Clone;
     DWORD dwReturn = 0;
-    // clang-format off
     __asm
     {
         mov     ecx, dwThisInterface
         call    dwFunc
         mov     dwReturn, eax
     }
-    // clang-format on
     return (CTask*)dwReturn;
 }
 
@@ -97,14 +93,12 @@ CTask* CTaskSA::GetSubTask()
         return nullptr;
 
     DWORD dwReturn = 0;
-    // clang-format off
     __asm
     {
         mov     ecx, pTaskInterface
         call    dwFunc
         mov     dwReturn, eax
     }
-    // clang-format on
     return s_pTaskManagementSystem->GetTask((CTaskSAInterface*)dwReturn);
 }
 
@@ -113,14 +107,12 @@ bool CTaskSA::IsSimpleTask()
     DWORD dwThisInterface = (DWORD)GetInterface();
     DWORD dwFunc = GetInterface()->VTBL->IsSimpleTask;
     bool  bReturn = 0;
-    // clang-format off
     __asm
     {
         mov     ecx, dwThisInterface
         call    dwFunc
         mov     bReturn, al
     }
-    // clang-format on
     return bReturn;
 }
 
@@ -131,16 +123,14 @@ int CTaskSA::GetTaskType()
     DWORD dwFunc = pTaskInterface->VTBL->GetTaskType;
     int   iReturn = 9999;
 
-    if (dwFunc && dwFunc != 0x82263A)  // some functions have no task type 0x82263A is purecal (assert?)
+    if (dwFunc && dwFunc != 0x82263A)            // some functions have no task type 0x82263A is purecal (assert?)
     {
-        // clang-format off
         __asm
         {
             mov     ecx, pTaskInterface
             call    dwFunc
             mov     iReturn, eax
         }
-        // clang-format on
     }
     return iReturn;
 }
@@ -154,14 +144,12 @@ void CTaskSA::StopTimer(const CEvent* pEvent)
     DWORD dwFunc = GetInterface()->VTBL->StopTimer;
     if (dwFunc != 0x82263A && dwFunc)
     {
-        // clang-format off
         __asm
         {
             mov     ecx, dwThisInterface
             push    pEvent
             call    dwFunc
         }
-        // clang-format on
     }
 }
 
@@ -178,9 +166,8 @@ bool CTaskSA::MakeAbortable(CPed* pPed, const int iPriority, const CEvent* pEven
     DWORD dwThisInterface = (DWORD)GetInterface();
     DWORD dwFunc = GetInterface()->VTBL->MakeAbortable;
     bool  bReturn = 0;
-    if (dwFunc != 0x82263A && dwFunc)  // 82263A = purecall
+    if (dwFunc != 0x82263A && dwFunc)            // 82263A = purecall
     {
-        // clang-format off
         __asm
         {
             mov     ecx, dwThisInterface
@@ -190,7 +177,6 @@ bool CTaskSA::MakeAbortable(CPed* pPed, const int iPriority, const CEvent* pEven
             call    dwFunc
             mov     bReturn, al
         }
-        // clang-format on
     }
     return bReturn;
 }
@@ -209,36 +195,32 @@ const char* CTaskSA::GetTaskName()
 
 void CTaskSA::Destroy()
 {
-    if (m_bBeingDestroyed)  // we want to make sure we don't delete this twice or we get crashes :)
-        return;             // our hook in CTaskManagementSystem will try to delete this otherwise
+    if (m_bBeingDestroyed)            // we want to make sure we don't delete this twice or we get crashes :)
+        return;                       // our hook in CTaskManagementSystem will try to delete this otherwise
     m_bBeingDestroyed = true;
 
     DWORD dwThisInterface = (DWORD)GetInterface();
     DWORD dwFunc = GetInterface()->VTBL->DeletingDestructor;
     if (dwFunc)
     {
-        // clang-format off
         __asm
         {
             mov     ecx, dwThisInterface
             push    1           // delete the task too
             call    dwFunc
         }
-        // clang-format on
     }
 
     /*dwFunc = FUNC_CTask__Operator_Delete;
     DWORD thisInterface = (DWORD)GetInterface();
     if ( thisInterface )
     {
-        // clang-format off
         __asm
         {
             push    thisInterface
             call    dwFunc
             add     esp, 4
         }
-        // clang-format on
     }*/
 
     delete this;
@@ -246,8 +228,8 @@ void CTaskSA::Destroy()
 
 void CTaskSA::DestroyJustThis()
 {
-    if (m_bBeingDestroyed)  // we want to make sure we don't delete this twice or we get crashes :)
-        return;             // our hook in CTaskManagementSystem will try to delete this otherwise
+    if (m_bBeingDestroyed)            // we want to make sure we don't delete this twice or we get crashes :)
+        return;                       // our hook in CTaskManagementSystem will try to delete this otherwise
     m_bBeingDestroyed = true;
 
     delete this;
@@ -279,7 +261,6 @@ bool CTaskSimpleSA::ProcessPed(CPed* pPed)
     bool  bReturn = 0;
     if (dwFunc != 0x82263A && dwFunc)
     {
-        // clang-format off
         __asm
         {
             mov     ecx, dwThisInterface
@@ -287,7 +268,6 @@ bool CTaskSimpleSA::ProcessPed(CPed* pPed)
             call    dwFunc
             mov     bReturn, al
         }
-        // clang-format on
     }
     return bReturn;
 }
@@ -304,7 +284,6 @@ bool CTaskSimpleSA::SetPedPosition(CPed* pPed)
     bool  bReturn = 0;
     if (dwFunc != 0x82263A && dwFunc)
     {
-        // clang-format off
         __asm
         {
             mov     ecx, dwThisInterface
@@ -312,7 +291,6 @@ bool CTaskSimpleSA::SetPedPosition(CPed* pPed)
             call    dwFunc
             mov     bReturn, al
         }
-        // clang-format on
     }
     return bReturn;
 }
@@ -341,14 +319,12 @@ void CTaskComplexSA::SetSubTask(CTask* pSubTask)
     DWORD dwFunc = ((TaskComplexVTBL*)GetInterface()->VTBL)->SetSubTask;
     if (dwFunc != 0x82263A && dwFunc)
     {
-        // clang-format off
         __asm
         {
             mov     ecx, dwThisInterface
             push    dwTaskInterface
             call    dwFunc
         }
-        // clang-format on
     }
 }
 
@@ -368,7 +344,6 @@ CTask* CTaskComplexSA::CreateNextSubTask(CPed* pPed)
 
     DWORD dwPedInterface = (DWORD)pPedSA->GetInterface();
     DWORD dwReturn = 0;
-    // clang-format off
     __asm
     {
         mov     ecx, pTaskInterface
@@ -376,7 +351,6 @@ CTask* CTaskComplexSA::CreateNextSubTask(CPed* pPed)
         call    dwFunc
         mov     dwReturn, eax
     }
-    // clang-format on
     return pGame->GetTaskManagementSystem()->GetTask((CTaskSAInterface*)dwReturn);
 }
 
@@ -396,7 +370,6 @@ CTask* CTaskComplexSA::CreateFirstSubTask(CPed* pPed)
 
     DWORD dwPedInterface = (DWORD)pPedSA->GetInterface();
     DWORD dwReturn = 0;
-    // clang-format off
     __asm
     {
         mov     ecx, pTaskInterface
@@ -404,7 +377,6 @@ CTask* CTaskComplexSA::CreateFirstSubTask(CPed* pPed)
         call    dwFunc
         mov     dwReturn, eax
     }
-    // clang-format on
     return pGame->GetTaskManagementSystem()->GetTask((CTaskSAInterface*)dwReturn);
 }
 
@@ -424,7 +396,6 @@ CTask* CTaskComplexSA::ControlSubTask(CPed* pPed)
 
     DWORD dwPedInterface = (DWORD)pPedSA->GetInterface();
     DWORD dwReturn = 0;
-    // clang-format off
     __asm
     {
         mov     ecx, pTaskInterface
@@ -432,6 +403,5 @@ CTask* CTaskComplexSA::ControlSubTask(CPed* pPed)
         call    dwFunc
         mov     dwReturn, eax
     }
-    // clang-format on
     return pGame->GetTaskManagementSystem()->GetTask((CTaskSAInterface*)dwReturn);
 }

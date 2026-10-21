@@ -41,12 +41,12 @@ CVector* CPickupSA::GetPosition(CVector* vecPosition)
     return vecPosition;
 }
 
-PickupType::Enum CPickupSA::GetType()
+PickupType CPickupSA::GetType()
 {
-    return (PickupType::Enum)GetInterface()->Type;
+    return (PickupType)GetInterface()->Type;
 }
 
-void CPickupSA::SetType(PickupType::Enum type)
+void CPickupSA::SetType(PickupType type)
 {
     GetInterface()->Type = (BYTE)type;
 }
@@ -86,12 +86,12 @@ void CPickupSA::SetModel(WORD wModelIndex)
     GetInterface()->MI = wModelIndex;
 }
 
-PickupState::Enum CPickupSA::GetState()
+PickupState CPickupSA::GetState()
 {
-    return (PickupState::Enum)GetInterface()->State;
+    return (PickupState)GetInterface()->State;
 }
 
-void CPickupSA::SetState(PickupState::Enum bState)
+void CPickupSA::SetState(PickupState bState)
 {
     GetInterface()->State = (BYTE)bState;
 }
@@ -121,12 +121,11 @@ BYTE CPickupSA::IsNearby()
     return GetInterface()->bIsPickupNearby;
 }
 
-bool CPickupSA::GiveUsAPickUpObject(int ForcedObjectIndex)
+void CPickupSA::GiveUsAPickUpObject(int ForcedObjectIndex)
 {
     DWORD GiveUsAPickUpObject = FUNC_GIVEUSAPICKUP;
     DWORD dwObject = (DWORD) & (GetInterface()->pObject);
     DWORD dwThis = (DWORD)GetInterface();
-    // clang-format off
     __asm
     {
         push    ForcedObjectIndex
@@ -134,8 +133,6 @@ bool CPickupSA::GiveUsAPickUpObject(int ForcedObjectIndex)
         mov     ecx, dwThis
         call    GiveUsAPickUpObject
     }
-    // clang-format on
-
     if (GetInterface()->pObject)
     {
         if (object)
@@ -143,10 +140,9 @@ bool CPickupSA::GiveUsAPickUpObject(int ForcedObjectIndex)
             ((CEntitySA*)object)->DoNotRemoveFromGame = true;
             delete object;
         }
+
         object = new CObjectSA(GetInterface()->pObject);
-        return true;
     }
-    return false;
 }
 
 void CPickupSA::GetRidOfObjects()
@@ -158,29 +154,25 @@ void CPickupSA::GetRidOfObjects()
     {
         ((CEntitySA*)object)->DoNotRemoveFromGame = true;
         delete object;
-        object = nullptr;
+        object = NULL;
     }
-
-    GetInterface()->pObject = nullptr;
 }
 
 void CPickupSA::Remove()
 {
     DWORD dwFunc = FUNC_CPickup_Remove;
     DWORD dwThis = (DWORD)GetInterface();
-    // clang-format off
     __asm
     {
         mov     ecx, dwThis
         call    dwFunc
     }
-    // clang-format on
 
     // CPickup::Remove also destroys the owned object, so we need to delete our CObjectSA class
     if (object)
     {
         ((CEntitySA*)object)->DoNotRemoveFromGame = true;
         delete object;
-        object = nullptr;
+        object = NULL;
     }
 }

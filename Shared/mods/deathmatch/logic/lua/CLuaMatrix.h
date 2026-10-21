@@ -11,7 +11,18 @@
 
 #pragma once
 
-#include "CMatrix.h"
+class CLuaMatrix : public CMatrix
+{
+public:
+    CLuaMatrix();
+    CLuaMatrix(const CMatrix& matrix);
 
-// Alias CLuaMatrix to CMatrix now that script IDs and CIdArray registrations are removed for inline userdata
-using CLuaMatrix = CMatrix;
+    ~CLuaMatrix();
+
+    unsigned int GetScriptID() const { return m_uiScriptID; }
+
+    static CLuaMatrix* GetFromScriptID(unsigned int uiScriptID);
+
+private:
+    unsigned int m_uiScriptID;
+};

@@ -36,6 +36,8 @@ public:
     void Update();
 
 private:
+    void UnpremultiplyBitmap(lunasvg::Bitmap& bitmap);
+
     CClientVectorGraphic* m_pVectorGraphic;
 
     bool m_bIsCleared;

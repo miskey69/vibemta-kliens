@@ -21,9 +21,8 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
+
 #include "curl_setup.h"
-#include "urldata.h"
-#include "dict.h"
 
 #ifndef CURL_DISABLE_DICT
 
@@ -53,16 +52,62 @@
 #include <unistd.h>
 #endif
 
+#include "urldata.h"
+#include <curl/curl.h>
 #include "transfer.h"
-#include "curl_trc.h"
+#include "sendf.h"
 #include "escape.h"
+#include "progress.h"
+#include "dict.h"
+#include "curl_printf.h"
+#include "strcase.h"
+#include "curl_memory.h"
+/* The last #include file should be: */
+#include "memdebug.h"
 
-#define DICT_MATCH   "/MATCH:"
-#define DICT_MATCH2  "/M:"
-#define DICT_MATCH3  "/FIND:"
-#define DICT_DEFINE  "/DEFINE:"
+
+#define DICT_MATCH "/MATCH:"
+#define DICT_MATCH2 "/M:"
+#define DICT_MATCH3 "/FIND:"
+#define DICT_DEFINE "/DEFINE:"
 #define DICT_DEFINE2 "/D:"
 #define DICT_DEFINE3 "/LOOKUP:"
+
+
+/*
+ * Forward declarations.
+ */
+
+static CURLcode dict_do(struct Curl_easy *data, bool *done);
+
+/*
+ * DICT protocol handler.
+ */
+
+const struct Curl_handler Curl_handler_dict = {
+  "dict",                               /* scheme */
+  ZERO_NULL,                            /* setup_connection */
+  dict_do,                              /* do_it */
+  ZERO_NULL,                            /* done */
+  ZERO_NULL,                            /* do_more */
+  ZERO_NULL,                            /* connect_it */
+  ZERO_NULL,                            /* connecting */
+  ZERO_NULL,                            /* doing */
+  ZERO_NULL,                            /* proto_getsock */
+  ZERO_NULL,                            /* doing_getsock */
+  ZERO_NULL,                            /* domore_getsock */
+  ZERO_NULL,                            /* perform_getsock */
+  ZERO_NULL,                            /* disconnect */
+  ZERO_NULL,                            /* write_resp */
+  ZERO_NULL,                            /* write_resp_hd */
+  ZERO_NULL,                            /* connection_check */
+  ZERO_NULL,                            /* attach connection */
+  ZERO_NULL,                            /* follow */
+  PORT_DICT,                            /* defport */
+  CURLPROTO_DICT,                       /* protocol */
+  CURLPROTO_DICT,                       /* family */
+  PROTOPT_NONE | PROTOPT_NOURLQUERY     /* flags */
+};
 
 #define DYN_DICT_WORD 10000
 static char *unescape_word(const char *input)
@@ -100,7 +145,7 @@ static CURLcode sendf(struct Curl_easy *data, const char *fmt, ...)
   char *sptr;
   va_list ap;
   va_start(ap, fmt);
-  s = curl_mvaprintf(fmt, ap); /* returns an allocated string */
+  s = vaprintf(fmt, ap); /* returns an allocated string */
   va_end(ap);
   if(!s)
     return CURLE_OUT_OF_MEMORY; /* failure */
@@ -116,9 +161,9 @@ static CURLcode sendf(struct Curl_easy *data, const char *fmt, ...)
     if(result)
       break;
 
-    Curl_debug(data, CURLINFO_DATA_OUT, sptr, bytes_written);
+    Curl_debug(data, CURLINFO_DATA_OUT, sptr, (size_t)bytes_written);
 
-    if(bytes_written != write_len) {
+    if((size_t)bytes_written != write_len) {
       /* if not all was written at once, we must advance the pointer, decrease
          the size left and try again! */
       write_len -= bytes_written;
@@ -128,7 +173,7 @@ static CURLcode sendf(struct Curl_easy *data, const char *fmt, ...)
       break;
   }
 
-  curlx_free(s); /* free the output string */
+  free(s); /* free the output string */
 
   return result;
 }
@@ -153,9 +198,9 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done)
   if(result)
     return result;
 
-  if(curl_strnequal(path, DICT_MATCH, sizeof(DICT_MATCH) - 1) ||
-     curl_strnequal(path, DICT_MATCH2, sizeof(DICT_MATCH2) - 1) ||
-     curl_strnequal(path, DICT_MATCH3, sizeof(DICT_MATCH3) - 1)) {
+  if(strncasecompare(path, DICT_MATCH, sizeof(DICT_MATCH)-1) ||
+     strncasecompare(path, DICT_MATCH2, sizeof(DICT_MATCH2)-1) ||
+     strncasecompare(path, DICT_MATCH3, sizeof(DICT_MATCH3)-1)) {
 
     word = strchr(path, ':');
     if(word) {
@@ -198,11 +243,11 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done)
       failf(data, "Failed sending DICT request");
       goto error;
     }
-    Curl_xfer_setup_recv(data, FIRSTSOCKET, -1);
+    Curl_xfer_setup1(data, CURL_XFER_RECV, -1, FALSE); /* no upload */
   }
-  else if(curl_strnequal(path, DICT_DEFINE, sizeof(DICT_DEFINE) - 1) ||
-          curl_strnequal(path, DICT_DEFINE2, sizeof(DICT_DEFINE2) - 1) ||
-          curl_strnequal(path, DICT_DEFINE3, sizeof(DICT_DEFINE3) - 1)) {
+  else if(strncasecompare(path, DICT_DEFINE, sizeof(DICT_DEFINE)-1) ||
+          strncasecompare(path, DICT_DEFINE2, sizeof(DICT_DEFINE2)-1) ||
+          strncasecompare(path, DICT_DEFINE3, sizeof(DICT_DEFINE3)-1)) {
 
     word = strchr(path, ':');
     if(word) {
@@ -239,7 +284,7 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done)
       failf(data, "Failed sending DICT request");
       goto error;
     }
-    Curl_xfer_setup_recv(data, FIRSTSOCKET, -1);
+    Curl_xfer_setup1(data, CURL_XFER_RECV, -1, FALSE);
   }
   else {
 
@@ -261,37 +306,13 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done)
         goto error;
       }
 
-      Curl_xfer_setup_recv(data, FIRSTSOCKET, -1);
+      Curl_xfer_setup1(data, CURL_XFER_RECV, -1, FALSE);
     }
   }
 
 error:
-  curlx_free(eword);
-  curlx_free(path);
+  free(eword);
+  free(path);
   return result;
 }
-
-/*
- * DICT protocol
- */
-const struct Curl_protocol Curl_protocol_dict = {
-  ZERO_NULL,                            /* setup_connection */
-  dict_do,                              /* do_it */
-  ZERO_NULL,                            /* done */
-  ZERO_NULL,                            /* do_more */
-  ZERO_NULL,                            /* connect_it */
-  ZERO_NULL,                            /* connecting */
-  ZERO_NULL,                            /* doing */
-  ZERO_NULL,                            /* proto_pollset */
-  ZERO_NULL,                            /* doing_pollset */
-  ZERO_NULL,                            /* domore_pollset */
-  ZERO_NULL,                            /* perform_pollset */
-  ZERO_NULL,                            /* disconnect */
-  ZERO_NULL,                            /* write_resp */
-  ZERO_NULL,                            /* write_resp_hd */
-  ZERO_NULL,                            /* connection_is_dead */
-  ZERO_NULL,                            /* attach connection */
-  ZERO_NULL,                            /* follow */
-};
-
 #endif /* CURL_DISABLE_DICT */

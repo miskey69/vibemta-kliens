@@ -26,13 +26,11 @@ void CFireSA::Extinguish()
 {
     DWORD dwFunction = FUNC_Extinguish;
     DWORD dwPointer = (DWORD)internalInterface;
-    // clang-format off
     __asm
     {
         mov     ecx, dwPointer
         call    dwFunction
     }
-    // clang-format on
     internalInterface->bActive = false;
 }
 
@@ -186,7 +184,6 @@ void CFireSA::Ignite()
     CVector* vecPosition = GetPosition();
     DWORD    dwFunc = FUNC_CreateFxSysForStrength;
     DWORD    dwThis = (DWORD)internalInterface;
-    // clang-format off
     __asm
     {
         mov     ecx, dwThis
@@ -194,7 +191,6 @@ void CFireSA::Ignite()
         push    vecPosition
         call    dwFunc
     }
-    // clang-format on
 
     internalInterface->bBeingExtinguished = 0;
     internalInterface->bFirstGeneration = 1;
@@ -238,14 +234,13 @@ static void AbortFireTask(CEntitySAInterface* entityOnFire, DWORD returnAddress)
     taskManager->RemoveTaskSecondary(TASK_SECONDARY_PARTIAL_ANIM, TASK_SIMPLE_PLAYER_ON_FIRE);
 }
 
-#define HOOKPOS_CFire_Extinguish  0x539429
+#define HOOKPOS_CFire_Extinguish 0x539429
 #define HOOKSIZE_CFire_Extinguish 6
-static constexpr intptr_t     CONTINUE_CFire_Extinguish = 0x53942F;
+static constexpr intptr_t CONTINUE_CFire_Extinguish = 0x53942F;
 static void __declspec(naked) HOOK_CFire_Extinguish()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         mov     [eax+730h], edi
@@ -265,7 +260,6 @@ static void __declspec(naked) HOOK_CFire_Extinguish()
         pop     ebx
         jmp     CONTINUE_CFire_Extinguish
     }
-    // clang-format on
 }
 
 void CFireSA::StaticSetHooks()

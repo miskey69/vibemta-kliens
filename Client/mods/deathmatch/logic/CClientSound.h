@@ -19,7 +19,6 @@ class CBassAudio;
 #include "CClientSoundManager.h"
 #include "CClientEntity.h"
 #include "CSimulatedPlayPosition.h"
-#include "lua/LuaCommon.h"
 
 class CClientSound final : public CClientEntity
 {
@@ -84,16 +83,13 @@ public:
     bool SetPan(float fPan);
     bool GetPan(float& fPan);
 
-    void                 SetLuaDebugInfo(const SLuaDebugInfo& luaDebugInfo) noexcept { m_LuaDebugInfo = luaDebugInfo; }
-    const SLuaDebugInfo& GetLuaDebugInfo() const noexcept { return m_LuaDebugInfo; }
-
     bool SetFxEffect(uint uiFxEffect, bool bEnable);
     bool IsFxEffectEnabled(uint uiFxEffect);
 
     bool SetFxEffectParameters(uint uiFxEffect, void* params);
     bool GetFxEffectParameters(uint uiFxEffect, void* params);
 
-    void Unlink() {};
+    void Unlink(){};
 
     bool IsSoundStopped() { return m_pAudio == NULL; }
     bool IsFinished();
@@ -159,8 +155,6 @@ private:
     bool                       m_bDoneCreate;
     double                     m_dLength;
     std::map<SString, SString> m_SavedTags;
-    bool                       m_bStreamFailureWarned;
-    SLuaDebugInfo              m_LuaDebugInfo;
 
     // Playback altering stuff
     float m_fPitch;

@@ -94,11 +94,6 @@ public:
     bool           IsLocal() { return m_bLocal; }
     CClientEntity* GetSatchelAttachedTo();
 
-    unsigned char GetAlpha() const;
-    void          SetAlpha(unsigned char ucAlpha);
-    bool          IsFrozen() const { return m_bFrozen; }
-    void          SetFrozen(bool bFrozen);
-
 protected:
     CClientProjectileManager* m_pProjectileManager;
     bool                      m_bLinked;
@@ -118,6 +113,4 @@ protected:
     bool                     m_bInitiate;
     CProjectileInitiateData* m_pInitiateData;
     bool                     m_bCorrected;
-    unsigned char            m_ucAlpha;
-    bool                     m_bFrozen;
 };

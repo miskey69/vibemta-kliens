@@ -21,8 +21,10 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
+
 #include "curl_setup.h"
 
+#include <curl/curl.h>
 #include "strcase.h"
 
 /*
@@ -42,7 +44,7 @@ static int casecompare(const char *first, const char *second)
     second++;
   }
   /* If we are here either the strings are the same or the length is different.
-     We can test if the "current" character is non-zero for one and zero
+     We can just test if the "current" character is non-zero for one and zero
      for the other. Note that the characters may not be exactly the same even
      if they match, we only want to compare zero-ness. */
   return !*first == !*second;
@@ -57,39 +59,30 @@ static int ncasecompare(const char *first, const char *second, size_t max)
     first++;
     second++;
   }
-  if(max == 0)
+  if(0 == max)
     return 1; /* they are equal this far */
 
   return Curl_raw_toupper(*first) == Curl_raw_toupper(*second);
 }
 
-/*
- * Only "raw" case insensitive strings. This is meant to be locale independent
- * and only compare strings we know are safe for this.
- *
- * The function is capable of comparing a-z case insensitively.
- *
- * Result is 1 if text matches and 0 if not.
- */
-
 /* --- public function --- */
-int curl_strequal(const char *s1, const char *s2)
+int curl_strequal(const char *first, const char *second)
 {
-  if(s1 && s2)
+  if(first && second)
     /* both pointers point to something then compare them */
-    return casecompare(s1, s2);
+    return casecompare(first, second);
 
   /* if both pointers are NULL then treat them as equal */
-  return NULL == s1 && NULL == s2;
+  return NULL == first && NULL == second;
 }
 
 /* --- public function --- */
-int curl_strnequal(const char *s1, const char *s2, size_t n)
+int curl_strnequal(const char *first, const char *second, size_t max)
 {
-  if(s1 && s2)
+  if(first && second)
     /* both pointers point to something then compare them */
-    return ncasecompare(s1, s2, n);
+    return ncasecompare(first, second, max);
 
   /* if both pointers are NULL then treat them as equal if max is non-zero */
-  return NULL == s1 && NULL == s2 && n;
+  return NULL == first && NULL == second && max;
 }

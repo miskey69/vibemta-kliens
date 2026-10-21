@@ -3,7 +3,6 @@ project "Loader Proxy"
 	kind "SharedLib"
 	targetname "mtasa"
 	targetdir(buildpath("mta"))
-	clangtidy "On"
 
 	filter "configurations:Debug"
 		targetsuffix "_d"

@@ -26,7 +26,7 @@ void CLuaPostfxDefs::LoadFunctions()
         CLuaCFunctions::AddFunction(name, func);
 }
 
-float CLuaPostfxDefs::GetPostFXValue(PostFXType::Enum type)
+float CLuaPostfxDefs::GetPostFXValue(PostFXType type)
 {
     switch (type)
     {
@@ -47,11 +47,11 @@ float CLuaPostfxDefs::GetPostFXValue(PostFXType::Enum type)
 int CLuaPostfxDefs::GetPostFXMode()
 {
     return g_pCore->GetCVars()->GetValue<bool>("borderless_apply_fullscreen", false) ? 1
-           : g_pCore->GetCVars()->GetValue<bool>("borderless_apply_windowed", false) ? 2
-                                                                                     : 0;
+         : g_pCore->GetCVars()->GetValue<bool>("borderless_apply_windowed", false) ? 2
+         : 0;
 }
 
-bool CLuaPostfxDefs::IsPostFXEnabled(PostFXType::Enum type)
+bool CLuaPostfxDefs::IsPostFXEnabled(PostFXType type)
 {
     switch (type)
     {

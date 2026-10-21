@@ -21,7 +21,8 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-#include "curl_setup.h"
+
+#include "../curl_setup.h"
 
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
@@ -35,7 +36,7 @@
 #include <inet.h>
 #endif
 
-#include "curlx/nonblock.h"
+#include "nonblock.h"
 
 /*
  * curlx_nonblock() set the given socket to either blocking or non-blocking
@@ -45,7 +46,7 @@
 int curlx_nonblock(curl_socket_t sockfd,    /* operate on this */
                    int nonblock   /* TRUE or FALSE */)
 {
-#ifdef HAVE_FCNTL_O_NONBLOCK
+#if defined(HAVE_FCNTL_O_NONBLOCK)
   /* most recent Unix versions */
   int flags;
   flags = sfcntl(sockfd, F_GETFL, 0);
@@ -87,6 +88,6 @@ int curlx_nonblock(curl_socket_t sockfd,    /* operate on this */
   return setsockopt(sockfd, SOL_SOCKET, SO_NONBLOCK, &b, sizeof(b));
 
 #else
-#error "no non-blocking method was found/used/set"
+#  error "no non-blocking method was found/used/set"
 #endif
 }

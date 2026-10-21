@@ -18,7 +18,6 @@
 #include "CSettingsSA.h"
 #include "CCameraSA.h"
 #include "CCamSA.h"
-#include "CVehicleSA.h"
 
 extern CCoreInterface* g_pCore;
 extern CGameSA*        pGame;
@@ -27,9 +26,9 @@ static const float MOUSE_SENSITIVITY_MIN = 0.000312f;
 static const float MOUSE_SENSITIVITY_DEFAULT = 0.0025f;
 static const float MOUSE_SENSITIVITY_MAX = MOUSE_SENSITIVITY_DEFAULT * 2 - MOUSE_SENSITIVITY_MIN;
 
-#define VAR_CurVideoMode   (*((uint*)(0x08D6220)))
+#define VAR_CurVideoMode (*((uint*)(0x08D6220)))
 #define VAR_SavedVideoMode (*((uint*)(0x0BA6820)))
-#define VAR_CurAdapter     (*((uint*)(0x0C920F4)))
+#define VAR_CurAdapter (*((uint*)(0x0C920F4)))
 
 #define HOOKPOS_GetFxQuality 0x49EA50
 void HOOK_GetFxQuality();
@@ -37,57 +36,6 @@ void HOOK_GetFxQuality();
 #define HOOKPOS_StoreShadowForVehicle 0x70BDA0
 DWORD RETURN_StoreShadowForVehicle = 0x70BDA9;
 void  HOOK_StoreShadowForVehicle();
-
-namespace
-{
-    constexpr std::uintptr_t FUNC_FindPlayerVehicle = 0x56E0D0;
-    constexpr std::uintptr_t CALL_CShadows_RenderExtraPlayerShadows_FindPlayerVehicle = 0x707FB6;
-    constexpr std::uintptr_t FUNC_CStencilShadows_RenderForVehicle = 0x70FAE0;
-    constexpr std::uintptr_t CALL_CStencilShadows_Process_RenderForVehicle = 0x711E26;
-    struct VehicleStencilShadow
-    {
-        CVehicleSAInterface*  owner;
-        short                 faceCount;
-        BYTE                  type;
-        BYTE                  padding;
-        DWORD                 capacity;
-        DWORD                 vertexCount;
-        CVector*              vertices;
-        VehicleStencilShadow* next;
-        VehicleStencilShadow* previous;
-    };
-    static_assert(sizeof(VehicleStencilShadow) == 0x1C);
-    static_assert(offsetof(VehicleStencilShadow, vertexCount) == 0xC);
-
-    bool __cdecl IsVehicleShadowHidden(CVehicleSAInterface* vehicle)
-    {
-        // Native vehicles without an MTA wrapper must retain GTA's normal shadows.
-        auto* const entry = pGame->GetPools()->GetVehicle(reinterpret_cast<DWORD*>(vehicle));
-        return entry && entry->pEntity && entry->pEntity->GetAlpha() == 0;
-    }
-
-    CVehicleSAInterface* __cdecl FindPlayerVehicleForExtraShadows(int playerId, bool includeRemote)
-    {
-        using FindPlayerVehicle = CVehicleSAInterface*(__cdecl*)(int, bool);
-        auto* const vehicle = reinterpret_cast<FindPlayerVehicle>(FUNC_FindPlayerVehicle)(playerId, includeRemote);
-
-        // Returning no vehicle skips GTA's separate point-light shadows through its normal early exit.
-        return vehicle && IsVehicleShadowHidden(vehicle) ? nullptr : vehicle;
-    }
-
-    void __cdecl RenderVehicleStencilShadow(VehicleStencilShadow* shadow, CVector* cameraPosition)
-    {
-        if (IsVehicleShadowHidden(shadow->owner))
-        {
-            // Clear cached triangles too; GTA rebuilds them when alpha is restored.
-            shadow->vertexCount = 0;
-            return;
-        }
-
-        using RenderForVehicle = void(__cdecl*)(VehicleStencilShadow*, CVector*);
-        reinterpret_cast<RenderForVehicle>(FUNC_CStencilShadows_RenderForVehicle)(shadow, cameraPosition);
-    }
-}
 
 float ms_fVehicleLODDistance, ms_fTrainPlaneLODDistance, ms_fPedsLODDistance;
 
@@ -103,11 +51,9 @@ CSettingsSA::CSettingsSA()
     SetAspectRatio(ASPECT_RATIO_4_3);
     HookInstall(HOOKPOS_GetFxQuality, (DWORD)HOOK_GetFxQuality, 5);
     HookInstall(HOOKPOS_StoreShadowForVehicle, (DWORD)HOOK_StoreShadowForVehicle, 9);
-    HookInstallCall(CALL_CShadows_RenderExtraPlayerShadows_FindPlayerVehicle, reinterpret_cast<DWORD>(FindPlayerVehicleForExtraShadows));
-    HookInstallCall(CALL_CStencilShadows_Process_RenderForVehicle, reinterpret_cast<DWORD>(RenderVehicleStencilShadow));
     m_iDesktopWidth = 0;
     m_iDesktopHeight = 0;
-    MemPut<BYTE>(0x6FF420, 0xC3);  // Truncate CalculateAspectRatio
+    MemPut<BYTE>(0x6FF420, 0xC3);            // Truncate CalculateAspectRatio
 
     MemPut(0x732926, &ms_fVehicleLODDistance);
     MemPut(0x732940, &ms_fTrainPlaneLODDistance);
@@ -136,7 +82,7 @@ unsigned int CSettingsSA::GetNumVideoModes()
 VideoMode* CSettingsSA::GetVideoModeInfo(VideoMode* modeInfo, unsigned int modeIndex)
 {
     // RwEngineGetVideoModeInfo
-    return ((VideoMode * (__cdecl*)(VideoMode*, unsigned int))0x7F2CF0)(modeInfo, modeIndex);
+    return ((VideoMode*(__cdecl*)(VideoMode*, unsigned int))0x7F2CF0)(modeInfo, modeIndex);
 }
 
 unsigned int CSettingsSA::GetCurrentVideoMode()
@@ -204,10 +150,7 @@ unsigned int CSettingsSA::GetUsertrackMode()
 
 void CSettingsSA::SetUsertrackMode(unsigned int uiMode)
 {
-    if (uiMode > 2)
-        uiMode = 0;
-
-    m_pInterface->ucUsertrackMode = static_cast<BYTE>(uiMode);
+    m_pInterface->ucUsertrackMode = static_cast<unsigned char>(uiMode);
 }
 
 bool CSettingsSA::IsUsertrackAutoScan()
@@ -251,7 +194,7 @@ float CSettingsSA::GetDrawDistance()
 
 void CSettingsSA::SetDrawDistance(float fDistance)
 {
-    MemPutFast<float>(0x8CD800, fDistance);  // CRenderer::ms_lodDistScale
+    MemPutFast<float>(0x8CD800, fDistance);            // CRenderer::ms_lodDistScale
     m_pInterface->fDrawDistance = fDistance;
 }
 
@@ -274,13 +217,13 @@ unsigned int CSettingsSA::GetFXQuality()
 
 void CSettingsSA::SetFXQuality(unsigned int fxQualityId)
 {
-    MemPutFast<BYTE>(VAR_ucFxQuality, static_cast<BYTE>(fxQualityId));
+    MemPutFast(VAR_ucFxQuality, static_cast<BYTE>(fxQualityId));
 }
 
 float CSettingsSA::GetMouseSensitivity()
 {
     float fRawValue = *(float*)VAR_fMouseSensitivity;
-    return UnlerpClamped(MOUSE_SENSITIVITY_MIN, fRawValue, MOUSE_SENSITIVITY_MAX);  // Remap to 0-1
+    return UnlerpClamped(MOUSE_SENSITIVITY_MIN, fRawValue, MOUSE_SENSITIVITY_MAX);            // Remap to 0-1
 }
 
 void CSettingsSA::SetMouseSensitivity(float fSensitivity)
@@ -300,14 +243,12 @@ void CSettingsSA::SetAntiAliasing(unsigned int uiAntiAliasing, bool bOnRestart)
     if (!bOnRestart)
     {
         DWORD dwFunc = FUNC_SetAntiAliasing;
-        // clang-format off
         __asm
         {
             push    uiAntiAliasing
             call    dwFunc
             add     esp, 4
         }
-        // clang-format on
         SetCurrentVideoMode(m_pInterface->dwVideoMode, false);
     }
 
@@ -326,14 +267,12 @@ void CSettingsSA::SetMipMappingEnabled(bool bEnable)
 
 void CSettingsSA::Save()
 {
-    // clang-format off
     __asm
     {
         mov ecx, CLASS_CMenuManager
         mov eax, FUNC_CMenuManager_Save
         call eax
     }
-    // clang-format on
 }
 
 bool CSettingsSA::IsVolumetricShadowsEnabled() const noexcept
@@ -349,6 +288,7 @@ void CSettingsSA::SetVolumetricShadowsEnabled(bool bEnable)
     // if vehicle volumetric shadows are disabled because it looks a bit weird
     MemPut<BYTE>(0x5E682A + 1, bEnable);
 }
+
 
 bool CSettingsSA::GetVolumetricShadowsEnabledByVideoSetting() const noexcept
 {
@@ -391,6 +331,7 @@ bool CSettingsSA::ResetDynamicPedShadows() noexcept
     return true;
 }
 
+
 //
 // Volumetric shadow hooks
 //
@@ -409,11 +350,11 @@ __declspec(noinline) void _cdecl MaybeAlterFxQualityValue(DWORD dwAddrCalledFrom
         // These vehicles seem to have problems with volumetric shadows, so force blob shadows
         switch (usCallingForVehicleModel)
         {
-            case 460:  // Skimmer
-            case 511:  // Beagle
-            case 572:  // Mower
-            case 590:  // Box Freight
-            case 592:  // Andromada
+            case 460:            // Skimmer
+            case 511:            // Beagle
+            case 572:            // Mower
+            case 590:            // Box Freight
+            case 592:            // Andromada
                 dwFxQualityValue = 0;
         }
         usCallingForVehicleModel = 0;
@@ -421,9 +362,9 @@ __declspec(noinline) void _cdecl MaybeAlterFxQualityValue(DWORD dwAddrCalledFrom
     else
         // Handle all calls from CPed::PreRenderAfterTest
         if (dwAddrCalledFrom > 0x5E65A0 && dwAddrCalledFrom < 0x5E7680)
-        {
-            dwFxQualityValue = pGame->GetSettings()->IsDynamicPedShadowsEnabled() ? 2 : 0;
-        }
+    {
+        dwFxQualityValue = pGame->GetSettings()->IsDynamicPedShadowsEnabled() ? 2 : 0;
+    }
 }
 
 // Hooked from 0x49EA50
@@ -431,7 +372,6 @@ static void __declspec(naked) HOOK_GetFxQuality()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -447,27 +387,15 @@ static void __declspec(naked) HOOK_GetFxQuality()
         mov     eax, dwFxQualityValue
         retn
     }
-    // clang-format on
 }
 
-// Filter invisible vehicles before GTA selects static/dynamic blob shadows.
-// Unrefreshed static shadows expire normally. Also track the model for GetFxQuality.
+// Hook to discover what vehicle will be calling GetFxQuality
 static void __declspec(naked) HOOK_StoreShadowForVehicle()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
-        mov     eax, [esp+4]
-        push    eax
-        call    IsVehicleShadowHidden
-        add     esp, 4
-        test    al, al
-        jz      visible
-        retn
-
-    visible:
         // Hooked from 0x70BDA0  5 bytes
         mov     eax, [esp+4]            // Get vehicle
         mov     ax, [eax+34]            // pEntity->m_nModelIndex
@@ -478,7 +406,6 @@ static void __declspec(naked) HOOK_StoreShadowForVehicle()
         call    eax
         jmp     RETURN_StoreShadowForVehicle
     }
-    // clang-format on
 }
 
 ////////////////////////////////////////////////
@@ -516,7 +443,7 @@ void CSettingsSA::SetAspectRatio(eAspectRatio aspectRatio, bool bAdjustmentEnabl
     {
         fValue = 16 / 10.f;
     }
-    else  // ASPECT_RATIO_16_9
+    else            // ASPECT_RATIO_16_9
     {
         fValue = 16 / 9.f;
     }
@@ -567,7 +494,7 @@ void CSettingsSA::SetRadarMode(eRadarMode hudMode)
 ////////////////////////////////////////////////
 float ms_fFOV = 70;
 float ms_fFOVCar = 70;
-float ms_fFOVCarMax = 100;  // at high vehicle velocity
+float ms_fFOVCarMax = 100;            // at high vehicle velocity
 bool  ms_bFOVPlayerFromScript = false;
 bool  ms_bFOVVehicleFromScript = false;
 
@@ -1041,16 +968,15 @@ __declspec(noinline) int OnMY_SelectDevice()
 }
 
 // Hook info
-#define HOOKPOS_SelectDevice  0x0746219
+#define HOOKPOS_SelectDevice 0x0746219
 #define HOOKSIZE_SelectDevice 6
-DWORD                         RETURN_SelectDeviceSingle = 0x0746273;
-DWORD                         RETURN_SelectDeviceMultiHide = 0x074622C;
-DWORD                         RETURN_SelectDeviceMultiShow = 0x0746227;
+DWORD RETURN_SelectDeviceSingle = 0x0746273;
+DWORD RETURN_SelectDeviceMultiHide = 0x074622C;
+DWORD RETURN_SelectDeviceMultiShow = 0x0746227;
 static void __declspec(naked) HOOK_SelectDevice()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -1071,7 +997,6 @@ static void __declspec(naked) HOOK_SelectDevice()
         single:
         jmp     RETURN_SelectDeviceSingle
     }
-    // clang-format on
 }
 
 ////////////////////////////////////////////////

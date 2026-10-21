@@ -1,4 +1,3 @@
-#pragma once
 namespace EmbeddedLuaCode
 {
     const char* const inspect = R"~LUA~(

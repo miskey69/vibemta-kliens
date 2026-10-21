@@ -7,7 +7,6 @@ project "Server SDK"
 	language "C++"
 	kind "None"
 	targetname "sdk"
-	clangtidy "On"
 
 	vpaths {
 		["Headers/*"] = { "**.h", "**.hpp" },

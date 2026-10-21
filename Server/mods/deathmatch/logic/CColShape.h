@@ -45,7 +45,6 @@ public:
 
     void                CallHitCallback(CElement& Element);
     void                CallLeaveCallback(CElement& Element);
-    class CColCallback* GetCallback() { return m_pCallback; };
     class CColCallback* SetCallback(class CColCallback* pCallback) { return (m_pCallback = pCallback); };
 
     bool GetAutoCallEvent() { return m_bAutoCallEvent; };

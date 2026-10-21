@@ -26,12 +26,11 @@ static void CObject_PreRender(CObjectSAInterface* objectInterface)
         objectEntity->pEntity->SetPreRenderRequired(true);
 }
 
-const std::uintptr_t          RETURN_CCObject_PreRender = 0x59FD56;
+const std::uintptr_t RETURN_CCObject_PreRender = 0x59FD56;
 static void __declspec(naked) HOOK_CCObject_PreRender()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         push    ecx
@@ -42,7 +41,6 @@ static void __declspec(naked) HOOK_CCObject_PreRender()
         mov     esi, ecx
         jmp     RETURN_CCObject_PreRender
     }
-    // clang-format on
 }
 
 void CObjectSA::StaticSetHooks()
@@ -66,10 +64,10 @@ struct CFileObjectInstance
     float rx;
     float ry;
     float rz;
-    float rr;  // = 1
+    float rr;            // = 1
     DWORD modelId;
     DWORD areaNumber;
-    long  flags;  // = -1
+    long  flags;            // = -1
 };
 
 CObjectSA::CObjectSA(CObjectSAInterface* objectInterface)
@@ -93,7 +91,6 @@ CObjectSA::CObjectSA(DWORD dwModel, bool bBreakingDisabled)
 {
     DWORD CObjectCreate = FUNC_CObject_Create;
     DWORD dwObjectPtr = 0;
-    // clang-format off
     __asm
     {
         push    1
@@ -102,7 +99,6 @@ CObjectSA::CObjectSA(DWORD dwModel, bool bBreakingDisabled)
         add     esp, 8
         mov     dwObjectPtr, eax
     }
-    // clang-format on
 
     if (dwObjectPtr)
     {
@@ -171,13 +167,11 @@ void CObjectSA::Explode()
     DWORD dwFunc = FUNC_CObject_Explode;
     DWORD dwThis = (DWORD)GetInterface();
 
-    // clang-format off
     __asm
     {
         mov     ecx, dwThis
         call    dwFunc
     }
-    // clang-format on
 }
 
 void CObjectSA::Break()
@@ -185,9 +179,8 @@ void CObjectSA::Break()
     DWORD dwFunc = 0x5A0D90;
     DWORD dwThis = (DWORD)GetInterface();
 
-    float fHitVelocity = 1000.0f;  // has no direct influence, but should be high enough to trigger the break (effect)
+    float fHitVelocity = 1000.0f;            // has no direct influence, but should be high enough to trigger the break (effect)
 
-    // clang-format off
     __asm
     {
         push    32h // most cases: between 30 and 37
@@ -198,7 +191,6 @@ void CObjectSA::Break()
         mov     ecx, dwThis
         call    dwFunc
     }
-    // clang-format on
 
     if (IsGlass())
     {
@@ -207,7 +199,6 @@ void CObjectSA::Break()
         float fZ = 0.0f;
         dwFunc = FUNC_CGlass_WindowRespondsToCollision;
 
-        // clang-format off
         __asm
         {
             push 0
@@ -222,7 +213,6 @@ void CObjectSA::Break()
             call dwFunc
             add esp, 24h
         }
-        // clang-format on
     }
 }
 
@@ -273,7 +263,6 @@ bool CObjectSA::IsGlass()
     DWORD dwThis = (DWORD)GetInterface();
     bool  bResult;
 
-    // clang-format off
     __asm
     {
         push dwThis
@@ -281,7 +270,6 @@ bool CObjectSA::IsGlass()
         mov bResult, al
         add esp, 4
     }
-    // clang-format on
     return bResult;
 }
 

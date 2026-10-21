@@ -2,7 +2,6 @@ project "ksignals"
 	language "C++"
 	kind "StaticLib"
 	targetname "ksignals"
-	warnings "Off"
 
 	vpaths {
 		["Headers/*"] = "**.h",

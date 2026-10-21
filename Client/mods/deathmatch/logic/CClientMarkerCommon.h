@@ -59,6 +59,4 @@ public:
 
     virtual void SetIgnoreAlphaLimits(bool ignore) noexcept = 0;
     virtual bool AreAlphaLimitsIgnored() const noexcept = 0;
-
-    virtual class RpAtomic* GetAtomic() const = 0;
 };

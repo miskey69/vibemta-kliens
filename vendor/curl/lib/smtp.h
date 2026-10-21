@@ -23,8 +23,11 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-#ifndef CURL_DISABLE_SMTP
-extern const struct Curl_protocol Curl_protocol_smtp;
-#endif
+
+#include "pingpong.h"
+#include "curl_sasl.h"
+
+extern const struct Curl_handler Curl_handler_smtp;
+extern const struct Curl_handler Curl_handler_smtps;
 
 #endif /* HEADER_CURL_SMTP_H */

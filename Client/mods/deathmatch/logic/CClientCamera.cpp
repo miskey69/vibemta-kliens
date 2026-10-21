@@ -11,22 +11,20 @@
 #include <StdInc.h>
 #include <game/CCam.h>
 #include <array>
-#include <charconv>
 #include <cmath>
-#include <optional>
 #include <utility>
 
 #define PI_2 6.283185307179586476925286766559f
 
 // Camera FOV constants
-constexpr const std::uintptr_t VAR_CurrentCameraFOV = 0x8D5038;  // CCamera::CurrentFOV
+constexpr const std::uintptr_t VAR_CurrentCameraFOV = 0x8D5038; // CCamera::CurrentFOV
 
 namespace
 {
-    constexpr float       kPi = 3.1415926535897932384626433832795f;
-    constexpr float       kMatrixTolerance = 1e-4f;
-    constexpr float       kAngleTolerance = 1e-4f;
-    constexpr float       kRollLookupStep = 15.0f;
+    constexpr float kPi = 3.1415926535897932384626433832795f;
+    constexpr float kMatrixTolerance = 1e-4f;
+    constexpr float kAngleTolerance = 1e-4f;
+    constexpr float kRollLookupStep = 15.0f;
     constexpr std::size_t kRollLookupSize = static_cast<std::size_t>(360.0f / kRollLookupStep);
 
     struct RollLookupEntry
@@ -36,8 +34,7 @@ namespace
         float sinValue;
     };
 
-    const std::array<RollLookupEntry, kRollLookupSize> kRollLookup = []()
-    {
+    const std::array<RollLookupEntry, kRollLookupSize> kRollLookup = []() {
         std::array<RollLookupEntry, kRollLookupSize> table = {};
         for (std::size_t i = 0; i < kRollLookupSize; ++i)
         {
@@ -95,9 +92,9 @@ namespace
     inline bool RequiresOrthonormalization(const CMatrix& matrix) noexcept
     {
         constexpr float lengthTarget = 1.0f;
-        const bool      frontValid = AlmostEqual(matrix.vFront.LengthSquared(), lengthTarget, 1e-3f);
-        const bool      upValid = AlmostEqual(matrix.vUp.LengthSquared(), lengthTarget, 1e-3f);
-        const bool      orthogonal = AlmostEqual(matrix.vFront.DotProduct(&matrix.vUp), 0.0f, 1e-3f);
+        const bool frontValid = AlmostEqual(matrix.vFront.LengthSquared(), lengthTarget, 1e-3f);
+        const bool upValid = AlmostEqual(matrix.vUp.LengthSquared(), lengthTarget, 1e-3f);
+        const bool orthogonal = AlmostEqual(matrix.vFront.DotProduct(&matrix.vUp), 0.0f, 1e-3f);
         return !(frontValid && upValid && orthogonal);
     }
 
@@ -145,70 +142,6 @@ CClientCamera::CClientCamera(CClientManager* pManager) : ClassInit(this), CClien
     m_hasCenterOfWorld = false;
 }
 
-// GTA only remembers the view modes the change camera key cycles through in its save files, which
-// MTA never uses, so they reset every session; keep them in the client settings instead.
-void CClientCamera::PersistViewModes()
-{
-    if (!m_viewModesRestored)
-    {
-        // The camera is reinitialised while the game world comes up; restoring any earlier would
-        // get overwritten and the change tracker below would persist the defaults back
-        if (!g_pGame || g_pGame->GetSystemState() != SystemState::GS_PLAYING_GAME)
-            return;
-
-        m_viewModesRestored = true;
-
-        // Read as text and validate strictly; the settings file is hand editable, and a lenient
-        // numeric read would turn garbage or an empty value into mode zero
-        const auto GetStoredViewMode = [](const char* name, std::uint8_t minMode, std::uint8_t maxMode) -> std::optional<std::uint8_t>
-        {
-            std::string value;
-            g_pCore->GetCVars()->Get(name, value);
-
-            std::uint8_t parsedMode = 0;
-            const auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsedMode);
-            if (ec != std::errc{} || ptr != value.data() + value.size())
-                return std::nullopt;
-
-            return (parsedMode >= minMode && parsedMode <= maxMode) ? std::optional{parsedMode} : std::nullopt;
-        };
-
-        const std::optional<std::uint8_t> vehicleViewMode =
-            GetStoredViewMode("camera_vehicle_view", static_cast<std::uint8_t>(eVehicleCamMode::BUMPER), static_cast<std::uint8_t>(eVehicleCamMode::CINEMATIC));
-        // The native ped view modes run from 1 to 3; ePedCamMode does not match them
-        const std::optional<std::uint8_t> pedViewMode = GetStoredViewMode("camera_ped_view", 1, 3);
-
-        if (vehicleViewMode)
-            SetCameraVehicleViewMode(static_cast<eVehicleCamMode>(*vehicleViewMode));
-        if (pedViewMode)
-            SetCameraPedViewMode(static_cast<ePedCamMode>(*pedViewMode));
-
-        m_lastVehicleViewMode = static_cast<std::uint8_t>(GetCameraVehicleViewMode());
-        m_lastPedViewMode = static_cast<std::uint8_t>(GetCameraPedViewMode());
-
-        // Heal missing or mangled entries and flush right away; waiting for the quit save
-        // would lose them if the game does not close cleanly
-        if (vehicleViewMode != m_lastVehicleViewMode || pedViewMode != m_lastPedViewMode)
-        {
-            g_pCore->GetCVars()->Set("camera_vehicle_view", static_cast<int>(m_lastVehicleViewMode));
-            g_pCore->GetCVars()->Set("camera_ped_view", static_cast<int>(m_lastPedViewMode));
-            g_pCore->SaveConfig();
-        }
-        return;
-    }
-
-    const std::uint8_t vehicleViewMode = static_cast<std::uint8_t>(GetCameraVehicleViewMode());
-    const std::uint8_t pedViewMode = static_cast<std::uint8_t>(GetCameraPedViewMode());
-    if (vehicleViewMode == m_lastVehicleViewMode && pedViewMode == m_lastPedViewMode)
-        return;
-
-    m_lastVehicleViewMode = vehicleViewMode;
-    m_lastPedViewMode = pedViewMode;
-    g_pCore->GetCVars()->Set("camera_vehicle_view", static_cast<int>(vehicleViewMode));
-    g_pCore->GetCVars()->Set("camera_ped_view", static_cast<int>(pedViewMode));
-    g_pCore->SaveConfig();
-}
-
 CClientCamera::~CClientCamera()
 {
     // We need to be ingame
@@ -222,8 +155,6 @@ CClientCamera::~CClientCamera()
 
 void CClientCamera::DoPulse()
 {
-    PersistViewModes();
-
     InvalidateCachedTransforms();
 
     // If we're fixed, force the target vector
@@ -782,13 +713,6 @@ void CClientCamera::SetCameraClip(bool bObjects, bool bVehicles)
     m_pCamera->SetCameraClip(bObjects, bVehicles);
 }
 
-void CClientCamera::ResetCameraClip()
-{
-    if (!m_pCamera)
-        return;
-    m_pCamera->ResetCameraClip();
-}
-
 void CClientCamera::GetCameraClip(bool& bObjects, bool& bVehicles)
 {
     if (!m_pCamera)
@@ -863,7 +787,7 @@ CClientEntity* CClientCamera::GetTargetEntity()
     CClientEntity* pReturn = NULL;
     if (m_pCamera)
     {
-        CCam* pCam = m_pCamera->GetCam(m_pCamera->GetActiveCam());
+        CCam*    pCam = m_pCamera->GetCam(m_pCamera->GetActiveCam());
         if (!pCam)
             return nullptr;
 
@@ -940,7 +864,7 @@ CMatrix CClientCamera::GetGtaMatrix() const
     matResult.vFront = *pCam->GetFront();
     matResult.vUp = *pCam->GetUp();
     matResult.vPos = *pCam->GetSource();
-    matResult.vRight = -matResult.vRight;  // Camera has this the other way
+    matResult.vRight = -matResult.vRight;            // Camera has this the other way
     matResult.OrthoNormalize(CMatrix::AXIS_FRONT, CMatrix::AXIS_UP);
     return matResult;
 }
@@ -953,7 +877,9 @@ void CClientCamera::SetGtaMatrix(const CMatrix& matInNew, CCam* pCam) const
     if (!m_pCamera)
         return;
 
-    auto isFiniteVector = [](const CVector& vec) { return std::isfinite(vec.fX) && std::isfinite(vec.fY) && std::isfinite(vec.fZ); };
+    auto isFiniteVector = [](const CVector& vec) {
+        return std::isfinite(vec.fX) && std::isfinite(vec.fY) && std::isfinite(vec.fZ);
+    };
 
     if (!isFiniteVector(matInNew.vFront) || !isFiniteVector(matInNew.vUp) || !isFiniteVector(matInNew.vRight) || !isFiniteVector(matInNew.vPos))
         return;
@@ -964,7 +890,7 @@ void CClientCamera::SetGtaMatrix(const CMatrix& matInNew, CCam* pCam) const
 
     CMatrix matNew = matInNew;
     EnsureOrthonormal(matNew);
-    matNew.vRight = -matNew.vRight;  // Camera has this the other way
+    matNew.vRight = -matNew.vRight;            // Camera has this the other way
     m_pCamera->SetMatrix(&matNew);
     *targetCam->GetUp() = matNew.vUp;
     *targetCam->GetFront() = matNew.vFront;
@@ -1077,7 +1003,7 @@ CMatrix CClientCamera::GetInterpolatedCameraMatrix() const
     CMatrix matrix;
     if (m_pCamera && m_pCamera->GetTransitionMatrix(matrix))
         return matrix;
-
+    
     return CMatrix();
 }
 
@@ -1085,9 +1011,9 @@ float CClientCamera::GetAccurateFOV() const
 {
     if (!m_pCamera)
         return DEFAULT_FOV;
-
+    
     if (IsInCameraTransition())
         return m_pCamera->GetTransitionFOV();
-
+    
     return *(float*)VAR_CurrentCameraFOV;
 }

@@ -120,9 +120,15 @@ static int json_pointer_get_single_path(struct json_object *obj, char *path,
 	return 0;
 }
 
+static int json_object_array_put_idx_cb(struct json_object *parent, size_t idx,
+					struct json_object *value, void *priv)
+{
+	return json_object_array_put_idx(parent, idx, value);
+}
+
 static int json_pointer_set_single_path(struct json_object *parent, const char *path,
                                         struct json_object *value,
-					json_pointer_set_cb set_cb, int cb_handles_obj, void *priv)
+					json_pointer_array_set_cb array_set_cb, void *priv)
 {
 	if (json_object_is_type(parent, json_type_array))
 	{
@@ -132,23 +138,14 @@ static int json_pointer_set_single_path(struct json_object *parent, const char *
 			return json_object_array_add(parent, value);
 		if (!is_valid_index(path, &idx))
 			return -1;
-		return set_cb(parent, NULL, idx, value, priv);
+		return array_set_cb(parent, idx, value, priv);
 	}
 
 	/* path replacements should have been done in json_pointer_get_single_path(),
 	 * and we should still be good here
 	 */
 	if (json_object_is_type(parent, json_type_object))
-	{
-		if (cb_handles_obj)
-		{
-			return set_cb(parent, path, (size_t)-1, value, priv);
-		}
-		else
-		{
-			return json_object_object_add(parent, path, value);
-		}
-	}
+		return json_object_object_add(parent, path, value);
 
 	/* Getting here means that we tried to "dereference" a primitive JSON type
 	 * (like string, int, bool).i.e. add a sub-object to it
@@ -301,9 +298,9 @@ out:
 	return rc;
 }
 
-int json_pointer_set_with_cb(struct json_object **obj, const char *path,
+int json_pointer_set_with_array_cb(struct json_object **obj, const char *path,
 				   struct json_object *value,
-				   json_pointer_set_cb set_cb, int cb_handles_obj, void *priv)
+				   json_pointer_array_set_cb array_set_cb, void *priv)
 {
 	const char *endp;
 	char *path_copy = NULL;
@@ -333,7 +330,7 @@ int json_pointer_set_with_cb(struct json_object **obj, const char *path,
 	if ((endp = strrchr(path, '/')) == path)
 	{
 		path++;
-		return json_pointer_set_single_path(*obj, path, value, set_cb, cb_handles_obj, priv);
+		return json_pointer_set_single_path(*obj, path, value, array_set_cb, priv);
 	}
 
 	/* pass a working copy to the recursive call */
@@ -350,21 +347,12 @@ int json_pointer_set_with_cb(struct json_object **obj, const char *path,
 		return rc;
 
 	endp++;
-	return json_pointer_set_single_path(set, endp, value, set_cb, cb_handles_obj, priv);
-}
-
-static int default_put_cb(struct json_object *parent, const char *key, size_t idx,
-                          struct json_object *value, void *priv)
-{
-    if (key == NULL)
-        return json_object_array_put_idx(parent, idx, value);
-    else
-        return json_object_object_add(parent, key, value);
+	return json_pointer_set_single_path(set, endp, value, array_set_cb, priv);
 }
 
 int json_pointer_set(struct json_object **obj, const char *path, struct json_object *value)
 {
-	return json_pointer_set_with_cb(obj, path, value, default_put_cb, 1, NULL);
+	return json_pointer_set_with_array_cb(obj, path, value, json_object_array_put_idx_cb, NULL);
 }
 
 int json_pointer_setf(struct json_object **obj, struct json_object *value, const char *path_fmt,
@@ -419,57 +407,9 @@ int json_pointer_setf(struct json_object **obj, struct json_object *value, const
 
 set_single_path:
 	endp++;
-	rc = json_pointer_set_single_path(set, endp, value, default_put_cb, 1, NULL);
+	rc = json_pointer_set_single_path(set, endp, value,
+					  json_object_array_put_idx_cb, NULL);
 out:
 	free(path_copy);
 	return rc;
-}
-
-int json_pointer_set_with_limit_index(struct json_object **obj, const char *path,
-                                    struct json_object *value, size_t limit_index)
-{
-	// -1 means no limits
-    if (limit_index == (size_t)-1)
-    {
-        return json_pointer_set_with_cb(obj, path, value, default_put_cb, 1, NULL);
-    }
-    return json_pointer_set_with_cb(obj, path, value,
-                      json_object_array_put_with_idx_limit_cb, 0, &limit_index);
-}
-
-/* safe callback for array index limit */
-int json_object_array_put_with_idx_limit_cb(struct json_object *jso, const char *key, size_t idx,
-                                    		struct json_object *jso_new, void *priv)
-{
-	size_t max_idx;
-
-	if (key == NULL)
-	{
-		// array operation
-    	// use priv as a size_t pointer to pass in the maximum allowed index.
-		// The priv is required context for this callback and must not be NULL.
-		if (!priv)
-		{
-			errno = EFAULT;
-			return -1;
-		}
-
-    	max_idx = *(size_t*)priv;
-
-    	// Check against a maximum to prevent excessive memory allocations.
-		// An extremely large index, even if it doesn't overflow size_t,
-		// will cause a huge memory allocation request via realloc,
-		// leading to an OOM.
-		if (idx > max_idx)
-    	{
-        	errno = EINVAL;
-        	return -1;
-    	}
-    	return json_object_array_put_idx(jso, idx, jso_new);
-	}
-	else
-	{
-		// object operation
-        return json_object_object_add(jso, key, jso_new);
-	}
 }

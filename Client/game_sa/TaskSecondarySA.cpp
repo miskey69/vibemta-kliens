@@ -24,7 +24,6 @@ CTaskSimpleDuckSA::CTaskSimpleDuckSA(eDuckControlTypes nDuckControl, unsigned sh
     if (!IsValid())
         return;
     DWORD dwThisInterface = (DWORD)GetInterface();
-    // clang-format off
     __asm
     {
         mov     ecx, dwThisInterface
@@ -37,5 +36,4 @@ CTaskSimpleDuckSA::CTaskSimpleDuckSA(eDuckControlTypes nDuckControl, unsigned sh
         call    dwFunc
         pop     ebx
     }
-    // clang-format on
 }

@@ -16,7 +16,7 @@ using std::list;
 
 extern CClientGame* g_pClientGame;
 
-#define UNOCCUPIED_VEHICLE_SYNC_RATE (g_TickRateSettings.iUnoccupiedVehicle)
+#define UNOCCUPIED_VEHICLE_SYNC_RATE   ( g_TickRateSettings.iUnoccupiedVehicle )
 
 CUnoccupiedVehicleSync::CUnoccupiedVehicleSync(CClientVehicleManager* pVehicleManager)
 {
@@ -220,7 +220,7 @@ void CUnoccupiedVehicleSync::UpdateDamageModels()
         list<CDeathmatchVehicle*>::const_iterator iter = m_List.begin();
         for (; iter != m_List.end(); iter++)
         {
-            // Sync its damage model changes if necessary
+            // Sync its damage model changes if neccessary
             (*iter)->SyncDamageModel();
         }
     }
@@ -235,8 +235,7 @@ void CUnoccupiedVehicleSync::UpdateStates()
         !pPlayer->GetRealOccupiedVehicle())
     {
         // Make sure it's valid and add it to our list temporarily
-        pVehicle = dynamic_cast<CDeathmatchVehicle*>(pPlayer->GetOccupiedVehicle());
-        if (pVehicle)
+        if (auto* pVehicle = dynamic_cast<CDeathmatchVehicle*>(pPlayer->GetOccupiedVehicle()))
             m_List.push_front(pVehicle);
     }
 

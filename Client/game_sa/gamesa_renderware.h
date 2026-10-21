@@ -13,6 +13,7 @@
 #pragma once
 
 #include <game/RenderWare.h>
+#include <cstring>
 
 struct CColModelSAInterface;
 
@@ -21,8 +22,8 @@ struct CColModelSAInterface;
 /*****************************************************************************/
 
 /* RenderWare macros */
-#define RpGetFrame(__c)      ((RwFrame*)(((RwObject*)(__c))->parent))
-#define RpSetFrame(__c, __f) ((((RwObject*)(__c))->parent) = (void*)(__f))
+#define RpGetFrame(__c)            ((RwFrame*)(((RwObject *)(__c))->parent))
+#define RpSetFrame(__c,__f)        ((((RwObject *)(__c))->parent) = (void *)(__f))
 
 /* RenderWare function defines */
 typedef RpAtomic*(__cdecl* RpAtomicCreate_t)();
@@ -67,6 +68,7 @@ typedef int(__cdecl* RpMaterialDestroy_t)(RpMaterial* mat);
 typedef RwTexDictionary*(__cdecl* RwTexDictionarySetCurrent_t)(RwTexDictionary* dict);
 typedef const RwTexDictionary*(__cdecl* RwTexDictionaryForAllTextures_t)(const RwTexDictionary* dict, void* callback, void* data);
 typedef RwTexture*(__cdecl* RwTexDictionaryAddTexture_t)(RwTexDictionary* dict, RwTexture* texture);
+typedef RwTexture*(__cdecl* RwTexDictionaryRemoveTexture_t)(RwTexture* texture);
 typedef RwTexDictionary*(__cdecl* RwTexDictionaryGetCurrent_t)();
 typedef RwTexture*(__cdecl* RwTexDictionaryFindNamedTexture_t)(RwTexDictionary* dict, const char* name);
 typedef void(__cdecl* RpPrtStdGlobalDataSetStreamEmbedded_t)(void* value);
@@ -91,8 +93,6 @@ typedef int(__cdecl* RwStreamSkip_t)(RwStream* stream, uint size);
 typedef int(__cdecl* RpClumpDestroy_t)(RpClump* clump);
 using RpClumpForAllAtomicsCB_t = bool(__cdecl*)(RpAtomic*, void*);
 typedef RpClump*(__cdecl* RpClumpForAllAtomics_t)(RpClump* clump, RpClumpForAllAtomicsCB_t callback, void* pData);
-using RpGeometryForAllMaterialsCB_t = RpMaterial*(__cdecl*)(RpMaterial*, void*);
-typedef RpGeometry*(__cdecl* RpGeometryForAllMaterials_t)(RpGeometry* geometry, RpGeometryForAllMaterialsCB_t callback, void* pData);
 typedef RwTexDictionary*(__cdecl* RwTexDictionaryStreamRead_t)(RwStream* stream);
 typedef RwTexDictionary*(__cdecl* RwTexDictionaryGtaStreamRead_t)(RwStream* stream);
 typedef int(__cdecl* RwTexDictionaryStreamWrite_t)(RwTexDictionary* txd, RwStream* stream);
@@ -113,9 +113,9 @@ typedef RtQuat*(__cdecl* RtQuatRotate_t)(RtQuat* quat, const RwV3d* axis, float 
 /*****************************************************************************/
 
 #ifdef RWFUNC_IMPLEMENT
-    #define RWFUNC(a, b) a = b;
+    #define RWFUNC(a,b) a = b;
 #else
-    #define RWFUNC(a, b) extern a;
+    #define RWFUNC(a,b) extern a;
 #endif
 
 // US Versions
@@ -131,7 +131,6 @@ RWFUNC(RpClumpGetNumAtomics_t RpClumpGetNumAtomics, (RpClumpGetNumAtomics_t)0xDE
 RWFUNC(RwFrameTranslate_t RwFrameTranslate, (RwFrameTranslate_t)0xDEAD)
 RWFUNC(RwFrameTransform_t RwFrameTransform, (RwFrameTransform_t)0xDEAD)
 RWFUNC(RpClumpForAllAtomics_t RpClumpForAllAtomics, (RpClumpForAllAtomics_t)0xDEAD)
-RWFUNC(RpGeometryForAllMaterials_t RpGeometryForAllMaterials, (RpGeometryForAllMaterials_t)0xDEAD)
 RWFUNC(RwFrameAddChild_t RwFrameAddChild, (RwFrameAddChild_t)0xDEAD)
 RWFUNC(RpClumpAddAtomic_t RpClumpAddAtomic, (RpClumpAddAtomic_t)0xDEAD)
 RWFUNC(RpAtomicSetFrame_t RpAtomicSetFrame, (RpAtomicSetFrame_t)0xDEAD)
@@ -141,6 +140,7 @@ RWFUNC(RwTexDictionaryGetCurrent_t RwTexDictionaryGetCurrent, (RwTexDictionaryGe
 RWFUNC(RwTexDictionarySetCurrent_t RwTexDictionarySetCurrent, (RwTexDictionarySetCurrent_t)0xDEAD)
 RWFUNC(RwTexDictionaryForAllTextures_t RwTexDictionaryForAllTextures, (RwTexDictionaryForAllTextures_t)0xDEAD)
 RWFUNC(RwTexDictionaryAddTexture_t RwTexDictionaryAddTexture, (RwTexDictionaryAddTexture_t)0xDEAD)
+RWFUNC(RwTexDictionaryRemoveTexture_t RwTexDictionaryRemoveTexture, (RwTexDictionaryRemoveTexture_t)0xDEAD)
 RWFUNC(RwTexDictionaryStreamWrite_t RwTexDictionaryStreamWrite, (RwTexDictionaryStreamWrite_t)0xDEAD)
 RWFUNC(rwD3D9NativeTextureRead_t rwD3D9NativeTextureRead, (rwD3D9NativeTextureRead_t)0xDEAD)
 RWFUNC(RpPrtStdGlobalDataSetStreamEmbedded_t RpPrtStdGlobalDataSetStreamEmbedded, (RpPrtStdGlobalDataSetStreamEmbedded_t)0xDEAD)
@@ -204,12 +204,14 @@ RWFUNC(RtQuatRotate_t RtQuatRotate, (RtQuatRotate_t)0xDEAD)
 /*****************************************************************************/
 
 typedef bool(__cdecl* SetTextureDict_t)(unsigned short id);
-typedef bool(__cdecl* LoadClumpFile_t)(RwStream* stream, unsigned int id);  // (stream, model id)
-typedef bool(__cdecl* LoadModel_t)(RwBuffer* filename, unsigned int id);    // (memory chunk, model id)
+typedef bool(__cdecl* LoadClumpFile_t)(RwStream* stream, unsigned int id);            // (stream, model id)
+typedef bool(__cdecl* LoadModel_t)(RwBuffer* filename, unsigned int id);              // (memory chunk, model id)
 typedef void(__cdecl* LoadCollisionModel_t)(unsigned char*, CColModelSAInterface*, const char*);
 typedef void(__cdecl* LoadCollisionModelVer2_t)(unsigned char*, unsigned int, CColModelSAInterface*, const char*);
 typedef void(__cdecl* LoadCollisionModelVer3_t)(unsigned char*, unsigned int, CColModelSAInterface*,
-                                                const char*);  // buf, bufsize, ccolmodel&, keyname
+                                                const char*);            // buf, bufsize, ccolmodel&, keyname
+typedef void(__cdecl* LoadCollisionModelVer4_t)(unsigned char*, unsigned int, CColModelSAInterface*,
+                                                const char*);            // buf, bufsize, ccolmodel&, keyname
 typedef bool(__cdecl* CTxdStore_LoadTxd_t)(unsigned int id, RwStream* filename);
 typedef void(__cdecl* CTxdStore_RemoveTxd_t)(unsigned int id);
 typedef void(__cdecl* CTxdStore_RemoveRef_t)(unsigned int id);
@@ -224,6 +226,7 @@ RWFUNC(LoadModel_t LoadModel, (LoadModel_t)0xDEAD)
 RWFUNC(LoadCollisionModel_t LoadCollisionModel, (LoadCollisionModel_t)0xDEAD)
 RWFUNC(LoadCollisionModelVer2_t LoadCollisionModelVer2, (LoadCollisionModelVer2_t)0xDEAD)
 RWFUNC(LoadCollisionModelVer3_t LoadCollisionModelVer3, (LoadCollisionModelVer3_t)0xDEAD)
+RWFUNC(LoadCollisionModelVer4_t LoadCollisionModelVer4, (LoadCollisionModelVer4_t)0xDEAD)
 RWFUNC(CTxdStore_LoadTxd_t CTxdStore_LoadTxd, (CTxdStore_LoadTxd_t)0xDEAD)
 RWFUNC(CTxdStore_GetTxd_t CTxdStore_GetTxd, (CTxdStore_GetTxd_t)0xDEAD)
 RWFUNC(CTxdStore_RemoveTxd_t CTxdStore_RemoveTxd, (CTxdStore_RemoveTxd_t)0xDEAD)
@@ -241,8 +244,8 @@ inline void RwFrameCopyMatrix(RwFrame* dst, RwFrame* src)
 {
     if (dst == NULL || src == NULL)
         return;
-    MemCpyFast(&dst->modelling, &src->modelling, sizeof(RwMatrix));
-    MemCpyFast(&dst->ltm, &src->ltm, sizeof(RwMatrix));
+    std::memcpy(&dst->modelling, &src->modelling, sizeof(RwMatrix));
+    std::memcpy(&dst->ltm, &src->ltm, sizeof(RwMatrix));
 }
 
 // Recursive RwFrame children searching function

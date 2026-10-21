@@ -51,14 +51,13 @@ void OnMY_CWeapon_GenerateDamageEvent(DWORD calledFrom, CPedSAInterface* pPed, C
 }
 
 // Hook info
-#define HOOKPOS_CWeapon_GenerateDamageEvent  0x73A530
-#define HOOKSIZE_CWeapon_GenerateDamageEvent 7
-DWORD                         RETURN_CWeapon_GenerateDamageEvent = 0x73A537;
+#define HOOKPOS_CWeapon_GenerateDamageEvent                         0x73A530
+#define HOOKSIZE_CWeapon_GenerateDamageEvent                        7
+DWORD RETURN_CWeapon_GenerateDamageEvent = 0x73A537;
 static void __declspec(naked) HOOK_CWeapon_GenerateDamageEvent()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -77,7 +76,6 @@ static void __declspec(naked) HOOK_CWeapon_GenerateDamageEvent()
         push    848E10h
         jmp     RETURN_CWeapon_GenerateDamageEvent
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -89,8 +87,8 @@ static void __declspec(naked) HOOK_CWeapon_GenerateDamageEvent()
 //////////////////////////////////////////////////////////////////////////////////////////
 
 // Hook info
-#define HOOKPOS_CShotInfo_Update  0x739E60
-#define HOOKSIZE_CShotInfo_Update 6
+#define HOOKPOS_CShotInfo_Update                         0x739E60
+#define HOOKSIZE_CShotInfo_Update                        6
 DWORD RETURN_CShotInfo_Update = 0x739E66;
 
 // Clear all shotinfos
@@ -104,12 +102,11 @@ void ResetShotInfoArray()
         memcpy(pInfo + i, pInfo, sizeof(CFlameShotInfo));
 }
 
-#pragma warning(push)
-#pragma warning(disable : 4731)  // warning C4731: 'Call_CShotInfo_Update' : frame pointer register 'ebp' modified by inline assembly code
+#pragma warning( push )
+#pragma warning( disable : 4731 )   // warning C4731: 'Call_CShotInfo_Update' : frame pointer register 'ebp' modified by inline assembly code
 
 void Call_CShotInfo_Update()
 {
-    // clang-format off
     __asm
     {
         call inner
@@ -121,10 +118,9 @@ void Call_CShotInfo_Update()
         jmp     RETURN_CShotInfo_Update
     done:
     }
-    // clang-format on
 }
 
-#pragma warning(pop)
+#pragma warning( pop )
 
 // Our code for when CShotInfo_Update is called
 void OnMY_CShotInfo_Update()
@@ -152,7 +148,6 @@ static void __declspec(naked) HOOK_CShotInfo_Update()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -160,7 +155,6 @@ static void __declspec(naked) HOOK_CShotInfo_Update()
         popad
         retn
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -181,23 +175,22 @@ int OnMY_Fx_AddBulletImpact(int iType)
     if (iType == 2 || iType == 4)
     {
         if (ms_LastFxTimer.Get() > 500)
-            ms_LastFxTimer.Reset();  // Allow once every 500ms
+            ms_LastFxTimer.Reset();            // Allow once every 500ms
         else
-            iType = 1;  // Otherwise replace with spark
+            iType = 1;            // Otherwise replace with spark
     }
     return iType;
 }
 
 // Hook info
-#define HOOKPOS_Fx_AddBulletImpact  0x049F3E8
-#define HOOKSIZE_Fx_AddBulletImpact 5
+#define HOOKPOS_Fx_AddBulletImpact                         0x049F3E8
+#define HOOKSIZE_Fx_AddBulletImpact                        5
 DWORD RETURN_Fx_AddBulletImpact = 0x049F3ED;
 
 static void __declspec(naked) HOOK_Fx_AddBulletImpact()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         pushad
@@ -211,24 +204,22 @@ static void __declspec(naked) HOOK_Fx_AddBulletImpact()
         mov     eax, ds:0x0B6F03C
         jmp     RETURN_Fx_AddBulletImpact
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //
 // CVisibilityPlugins::RenderWeaponPedsForPC
-//
+// 
 // Fix for the bright objects after weapon change sometimes
-//
+// 
 //////////////////////////////////////////////////////////////////////////////////////////
-#define HOOKPOS_CVisibilityPlugins_RenderWeaponPedsForPC  0x733123
+#define HOOKPOS_CVisibilityPlugins_RenderWeaponPedsForPC 0x733123
 #define HOOKSIZE_CVisibilityPlugins_RenderWeaponPedsForPC 5
-static constexpr DWORD        CONTINUE_CVisibilityPlugins_RenderWeaponPedsForPC = 0x733128;
+static constexpr DWORD CONTINUE_CVisibilityPlugins_RenderWeaponPedsForPC = 0x733128;
 static void __declspec(naked) HOOK_CVisibilityPlugins_RenderWeaponPedsForPC()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         mov eax, 5DF4E0h
@@ -242,7 +233,6 @@ static void __declspec(naked) HOOK_CVisibilityPlugins_RenderWeaponPedsForPC()
 
         jmp CONTINUE_CVisibilityPlugins_RenderWeaponPedsForPC
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -265,7 +255,6 @@ static void _declspec(naked) HOOK_CWaterLevel_TestLineAgainstWater()
 {
     MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-    // clang-format off
     __asm
     {
         // [esp+4]  from.x
@@ -285,7 +274,6 @@ static void _declspec(naked) HOOK_CWaterLevel_TestLineAgainstWater()
         sub     esp, 88h
         jmp CONTINUE_CWaterLevel_TestLineAgainstWater
     }
-    // clang-format on
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////

@@ -21,6 +21,7 @@ void CLuaMatrixDefs::AddClass(lua_State* luaVM)
     lua_newclass(luaVM);
 
     lua_classmetamethod(luaVM, "__tostring", ToString);
+    lua_classmetamethod(luaVM, "__gc", Destroy);
 
     lua_classmetamethod(luaVM, "__add", Add);
     lua_classmetamethod(luaVM, "__sub", Sub);
@@ -101,7 +102,7 @@ int CLuaMatrixDefs::Create(lua_State* luaVM)
             matrix = CMatrix(vecPosition);
         }
     }
-    else if (argStream.NextIsMatrix())
+    else if (argStream.NextIsUserDataOfType<CLuaMatrix>())
     {
         argStream.ReadMatrix(matrix);
         matrix = CMatrix(matrix);
@@ -121,13 +122,15 @@ int CLuaMatrixDefs::Create(lua_State* luaVM)
 
 int CLuaMatrixDefs::Destroy(lua_State* luaVM)
 {
-    CMatrix* pMatrix = nullptr;
+    CLuaMatrix* pMatrix = NULL;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix);
 
     if (!argStream.HasErrors())
     {
+        delete pMatrix;
+        lua_addtotalbytes(luaVM, -LUA_GC_EXTRA_BYTES);
         lua_pushboolean(luaVM, true);
         return 1;
     }
@@ -142,7 +145,7 @@ int CLuaMatrixDefs::Destroy(lua_State* luaVM)
 
 int CLuaMatrixDefs::ToString(lua_State* luaVM)
 {
-    CMatrix* pMatrix = nullptr;
+    CLuaMatrix* pMatrix = NULL;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix);
@@ -167,8 +170,8 @@ int CLuaMatrixDefs::ToString(lua_State* luaVM)
 
 int CLuaMatrixDefs::TransformPosition(lua_State* luaVM)
 {
-    CMatrix* pMatrix1 = nullptr;
-    CVector  vector;
+    CLuaMatrix* pMatrix1 = NULL;
+    CVector     vector;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix1);
@@ -190,8 +193,8 @@ int CLuaMatrixDefs::TransformPosition(lua_State* luaVM)
 
 int CLuaMatrixDefs::TransformDirection(lua_State* luaVM)
 {
-    CMatrix* pMatrix1 = nullptr;
-    CVector  vector;
+    CLuaMatrix* pMatrix1 = NULL;
+    CVector     vector;
 
     CScriptArgReader argStream(luaVM);
 
@@ -214,7 +217,7 @@ int CLuaMatrixDefs::TransformDirection(lua_State* luaVM)
 
 int CLuaMatrixDefs::Inverse(lua_State* luaVM)
 {
-    CMatrix* pMatrix1 = nullptr;
+    CLuaMatrix* pMatrix1 = NULL;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix1);
@@ -235,7 +238,7 @@ int CLuaMatrixDefs::Inverse(lua_State* luaVM)
 
 int CLuaMatrixDefs::GetPosition(lua_State* luaVM)
 {
-    CMatrix* pMatrix = nullptr;
+    CLuaMatrix* pMatrix = NULL;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix);
@@ -256,7 +259,7 @@ int CLuaMatrixDefs::GetPosition(lua_State* luaVM)
 
 int CLuaMatrixDefs::GetRotation(lua_State* luaVM)
 {
-    CMatrix* pMatrix = nullptr;
+    CLuaMatrix* pMatrix = NULL;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix);
@@ -281,7 +284,7 @@ int CLuaMatrixDefs::GetRotation(lua_State* luaVM)
 
 int CLuaMatrixDefs::GetForward(lua_State* luaVM)
 {
-    CMatrix* pMatrix = nullptr;
+    CLuaMatrix* pMatrix = NULL;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix);
@@ -302,7 +305,7 @@ int CLuaMatrixDefs::GetForward(lua_State* luaVM)
 
 int CLuaMatrixDefs::GetRight(lua_State* luaVM)
 {
-    CMatrix* pMatrix = nullptr;
+    CLuaMatrix* pMatrix = NULL;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix);
@@ -323,7 +326,7 @@ int CLuaMatrixDefs::GetRight(lua_State* luaVM)
 
 int CLuaMatrixDefs::GetUp(lua_State* luaVM)
 {
-    CMatrix* pMatrix = nullptr;
+    CLuaMatrix* pMatrix = NULL;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix);
@@ -344,8 +347,8 @@ int CLuaMatrixDefs::GetUp(lua_State* luaVM)
 
 int CLuaMatrixDefs::SetPosition(lua_State* luaVM)
 {
-    CMatrix* pMatrix = nullptr;
-    CVector  vecPosition;
+    CLuaMatrix* pMatrix = NULL;
+    CVector     vecPosition;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix);
@@ -368,8 +371,8 @@ int CLuaMatrixDefs::SetPosition(lua_State* luaVM)
 
 int CLuaMatrixDefs::SetRotation(lua_State* luaVM)
 {
-    CMatrix* pMatrix = nullptr;
-    CVector  vecRotation;
+    CLuaMatrix* pMatrix = NULL;
+    CVector     vecRotation;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix);
@@ -394,8 +397,8 @@ int CLuaMatrixDefs::SetRotation(lua_State* luaVM)
 
 int CLuaMatrixDefs::SetForward(lua_State* luaVM)
 {
-    CMatrix* pMatrix = nullptr;
-    CVector  vecFront;
+    CLuaMatrix* pMatrix = NULL;
+    CVector     vecFront;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix);
@@ -418,8 +421,8 @@ int CLuaMatrixDefs::SetForward(lua_State* luaVM)
 
 int CLuaMatrixDefs::SetRight(lua_State* luaVM)
 {
-    CMatrix* pMatrix = nullptr;
-    CVector  vecRight;
+    CLuaMatrix* pMatrix = NULL;
+    CVector     vecRight;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix);
@@ -442,8 +445,8 @@ int CLuaMatrixDefs::SetRight(lua_State* luaVM)
 
 int CLuaMatrixDefs::SetUp(lua_State* luaVM)
 {
-    CMatrix* pMatrix = nullptr;
-    CVector  vecUp;
+    CLuaMatrix* pMatrix = NULL;
+    CVector     vecUp;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix);
@@ -466,8 +469,8 @@ int CLuaMatrixDefs::SetUp(lua_State* luaVM)
 
 int CLuaMatrixDefs::Add(lua_State* luaVM)
 {
-    CMatrix* pMatrix1 = nullptr;
-    CMatrix* pMatrix2 = nullptr;
+    CLuaMatrix* pMatrix1 = NULL;
+    CLuaMatrix* pMatrix2 = NULL;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix1);
@@ -489,8 +492,8 @@ int CLuaMatrixDefs::Add(lua_State* luaVM)
 
 int CLuaMatrixDefs::Sub(lua_State* luaVM)
 {
-    CMatrix* pMatrix1 = nullptr;
-    CMatrix* pMatrix2 = nullptr;
+    CLuaMatrix* pMatrix1 = NULL;
+    CLuaMatrix* pMatrix2 = NULL;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix1);
@@ -512,8 +515,8 @@ int CLuaMatrixDefs::Sub(lua_State* luaVM)
 
 int CLuaMatrixDefs::Mul(lua_State* luaVM)
 {
-    CMatrix* pMatrix1 = nullptr;
-    CMatrix* pMatrix2 = nullptr;
+    CLuaMatrix* pMatrix1 = NULL;
+    CLuaMatrix* pMatrix2 = NULL;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix1);
@@ -535,8 +538,8 @@ int CLuaMatrixDefs::Mul(lua_State* luaVM)
 
 int CLuaMatrixDefs::Div(lua_State* luaVM)
 {
-    CMatrix* pMatrix1 = nullptr;
-    CMatrix* pMatrix2 = nullptr;
+    CLuaMatrix* pMatrix1 = NULL;
+    CLuaMatrix* pMatrix2 = NULL;
 
     CScriptArgReader argStream(luaVM);
     argStream.ReadUserData(pMatrix1);

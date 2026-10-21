@@ -132,11 +132,7 @@ CVehicle::~CVehicle()
             if (pPed->GetVehicleAction() == CPed::VEHICLEACTION_EXITING)
             {
                 // Does it have an occupant and is the occupant the requesting ped?
-                const uint uiOccupiedSeat = pPed->GetOccupiedVehicleSeat();
-                if (uiOccupiedSeat > 0xFF)
-                    continue;
-
-                unsigned char occupiedSeat = static_cast<unsigned char>(uiOccupiedSeat);
+                unsigned int occupiedSeat = pPed->GetOccupiedVehicleSeat();
                 if (pPed == GetOccupant(occupiedSeat))
                 {
                     // Mark the ped/vehicle as empty
@@ -175,7 +171,7 @@ CVehicle::~CVehicle()
 
     CElementRefManager::RemoveElementRefs(ELEMENT_REF_DEBUG(this, "CVehicle"), &m_pTowedVehicle, &m_pTowedByVehicle, &m_pSyncer, &m_pJackingPed, NULL);
 
-    // Notify the vehicle manager that we are not to be respawned anymore if necessary
+    // Notify the vehicle manager that we are not to be respawned anymore if neccessary
     if (m_bRespawnEnabled)
         m_pVehicleManager->GetRespawnEnabledVehicles().remove(this);
 
@@ -869,22 +865,16 @@ void CVehicle::GenerateHandlingData() noexcept
 
 void CVehicle::SetVehicleSirenPosition(unsigned char ucSirenID, CVector vecPos)
 {
-    if (ucSirenID >= SIREN_COUNT_MAX)
-        return;
     m_tSirenBeaconInfo.m_tSirenInfo[ucSirenID].m_vecSirenPositions = vecPos;
 }
 
 void CVehicle::SetVehicleSirenMinimumAlpha(unsigned char ucSirenID, DWORD dwPercentage)
 {
-    if (ucSirenID >= SIREN_COUNT_MAX)
-        return;
     m_tSirenBeaconInfo.m_tSirenInfo[ucSirenID].m_dwMinSirenAlpha = dwPercentage;
 }
 
 void CVehicle::SetVehicleSirenColour(unsigned char ucSirenID, SColor tVehicleSirenColour)
 {
-    if (ucSirenID >= SIREN_COUNT_MAX)
-        return;
     m_tSirenBeaconInfo.m_tSirenInfo[ucSirenID].m_RGBBeaconColour = tVehicleSirenColour;
 }
 
@@ -897,7 +887,7 @@ void CVehicle::SetVehicleFlags(bool bEnable360, bool bEnableRandomiser, bool bEn
 }
 void CVehicle::RemoveVehicleSirens()
 {
-    for (int i = 0; i < SIREN_COUNT_MAX; i++)
+    for (unsigned char i = 0; i <= 7; i++)
     {
         m_tSirenBeaconInfo.m_tSirenInfo[i] = SSirenBeaconInfo();
         SetVehicleSirenPosition(i, CVector(0, 0, 0));

@@ -24,7 +24,9 @@
  *
  ***************************************************************************/
 /* Escape and unescape URL encoding in strings. The functions return a new
- * allocated string or NULL if an error occurred. */
+ * allocated string or NULL if an error occurred.  */
+
+#include "curl_ctype.h"
 
 enum urlreject {
   REJECT_NADA = 2,
@@ -40,6 +42,7 @@ void Curl_hexencode(const unsigned char *src, size_t len, /* input length */
                     unsigned char *out, size_t olen); /* output buffer size */
 
 void Curl_hexbyte(unsigned char *dest, /* must fit two bytes */
-                  unsigned char val);
+                  unsigned char val,
+                  bool lowercase);
 
 #endif /* HEADER_CURL_ESCAPE_H */

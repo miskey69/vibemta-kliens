@@ -2,7 +2,6 @@ project "libspeex"
 	language "C"
 	kind "StaticLib"
 	targetname "libspeex"
-	warnings "Off"
 
 	defines {
 		"HAVE_CONFIG_H"
@@ -45,6 +44,6 @@ project "libspeex"
 
 	filter "architecture:not x86"
 		flags { "ExcludeFromBuild" }
-
+	
 	filter "system:not windows"
 		flags { "ExcludeFromBuild" }

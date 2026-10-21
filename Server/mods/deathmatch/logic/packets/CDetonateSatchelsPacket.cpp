@@ -29,8 +29,8 @@ bool CDetonateSatchelsPacket::Write(NetBitStreamInterface& BitStream) const
     {
         BitStream.Write(m_pSourceElement->GetID());
 
-        const unsigned int   uiPing = static_cast<CPlayer*>(m_pSourceElement)->GetPing();
-        const unsigned short usLatency = uiPing <= 0xFFFF ? static_cast<unsigned short>(uiPing) : 0xFFFF;
+        unsigned int uiLatency = static_cast<CPlayer*>(m_pSourceElement)->GetPing();
+        auto         usLatency = static_cast<unsigned short>(uiLatency);
         BitStream.WriteCompressed(usLatency);
     }
     else

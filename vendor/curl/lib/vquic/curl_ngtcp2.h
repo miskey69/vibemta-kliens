@@ -23,9 +23,10 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-#include "curl_setup.h"
 
-#if !defined(CURL_DISABLE_HTTP) && defined(USE_NGTCP2) && defined(USE_NGHTTP3)
+#include "../curl_setup.h"
+
+#if defined(USE_NGTCP2) && defined(USE_NGHTTP3)
 
 #ifdef HAVE_NETINET_UDP_H
 #include <netinet/udp.h>
@@ -46,14 +47,18 @@
 
 struct Curl_cfilter;
 
-#include "urldata.h"
+#include "../urldata.h"
 
 void Curl_ngtcp2_ver(char *p, size_t len);
 
 CURLcode Curl_cf_ngtcp2_create(struct Curl_cfilter **pcf,
-                               struct Curl_easy *data,
-                               struct connectdata *conn,
-                               struct Curl_sockaddr_ex *addr);
+                             struct Curl_easy *data,
+                             struct connectdata *conn,
+                             const struct Curl_addrinfo *ai);
+
+bool Curl_conn_is_ngtcp2(const struct Curl_easy *data,
+                         const struct connectdata *conn,
+                         int sockindex);
 #endif
 
 #endif /* HEADER_CURL_VQUIC_CURL_NGTCP2_H */
