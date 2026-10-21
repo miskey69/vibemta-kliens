@@ -114,11 +114,12 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          set -o pipefail
-          ./linux-build.sh --arch=x64 2>&1 | tee build.log
-          rc=${PIPESTATUS[0]}
+          set +e
+          ./linux-build.sh --arch=x64 > build.log 2>&1
+          rc=$?
+          tail -60 build.log
           if [ $rc -ne 0 ]; then
-            grep -E "error|Error|ERROR|undefined reference" build.log | head -25 | while IFS= read -r l; do echo "::error::$l"; done
+            grep -E "error:|Error [0-9]|undefined reference|No such file" build.log | head -25 | while IFS= read -r l; do echo "::error::$l"; done
             tail -15 build.log | while IFS= read -r l; do echo "::warning::$l"; done
           fi
           exit $rc
