@@ -34,6 +34,7 @@
 #include "packets/CEntityRemoveTreePacket.h"
 #include "CResourceMapItem.h"
 #include "lua/CLuaFunctionParseHelpers.h"
+#include "CStaticFunctionDefinitions.h"         // VibeMTA: needed when MTASA_VERSION_BUILD != 0
 #include <net/SimHeaders.h>
 #include <zip.h>
 #include <glob/glob.h>
