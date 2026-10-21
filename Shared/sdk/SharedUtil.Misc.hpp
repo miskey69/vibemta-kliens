@@ -372,6 +372,16 @@ SString SharedUtil::GetMTASABaseDir()
             // Try to get base dir from parent process
             strInstallRoot = ExtractPath(GetParentProcessPathFilename(GetCurrentProcessId()));
         }
+#ifdef VIBEMTA
+        if (strInstallRoot.empty() && !IsGTAProcess())
+        {
+            // VibeMTA: the launch exe sits in the install root, next to the MTA folder. Use that before the
+            // registry, so a missing/other-view 'Last Run Location' (e.g. left by an older build) can't cause U01.
+            SString strLaunchDir = ExtractPath(GetLaunchPathFilename());
+            if (!strLaunchDir.empty() && DirectoryExists(PathJoin(strLaunchDir, "MTA")))
+                strInstallRoot = strLaunchDir;
+        }
+#endif
         if (strInstallRoot.empty())
         {
             strInstallRoot = GetRegistryValue("", "Last Run Location");
