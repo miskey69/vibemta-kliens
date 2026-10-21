@@ -110,7 +110,15 @@ jobs:
           set -uo pipefail
           note() { echo "::notice::$*"; echo "$*"; }
           fail() { echo "::error::$*"; exit 1; }
-          get() { curl -fsSL "$1" -o "$2" 2>/dev/null || wget -q "$1" -O "$2" 2>/dev/null; }
+          if ! command -v curl >/dev/null 2>&1; then
+            (apt-get update -qq && apt-get install -y -qq curl ca-certificates) >/dev/null 2>&1 || true
+          fi
+          get() {
+            if command -v curl >/dev/null 2>&1; then curl -fsSL --retry 3 "$1" -o "$2" && return 0; fi
+            if command -v wget >/dev/null 2>&1; then wget -q "$1" -O "$2" && return 0; fi
+            python3 -c "import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])" "$1" "$2" 2>/dev/null && return 0
+            echo "::warning::download failed: $1"; return 1
+          }
           ls -la Bin Bin/server Bin/server/x64 2>&1 | head -60
           mkdir -p Bin/server/x64 Bin/server/mods/deathmatch
           # configok (mtaserver.conf, acl.xml, ...)
