@@ -18,4 +18,4 @@
 
 // Own registry branch, so the official MTA install on the same PC is left alone
 // (HKLM\Software\Multi Theft Auto: San Andreas All\<branch>). GTA:SA path stays shared via "Common".
-#define VIBEMTA_REGISTRY_BRANCH "1.6-VibeMTA"
+#define VIBEMTA_REGISTRY_BRANCH "VibeMTA"

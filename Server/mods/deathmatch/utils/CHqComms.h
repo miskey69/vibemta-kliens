@@ -162,7 +162,7 @@ public:
         }
     }
 
-    // Messsage for this server from HQ
+    // Message for this server from HQ
     void ProcessMessage(CBitStream& bitStream)
     {
         int     iMessageAlwaysPrint = 0;

@@ -16,17 +16,12 @@
 #include <cef3/cef/include/cef_stream.h>
 #include <cef3/cef/include/wrapper/cef_stream_resource_handler.h>
 #include "CAjaxResourceHandler.h"
+#include "CWebAppAuth.h"  // IPC code generation
+#include "Wine.h"
 #include <cstdlib>
 
 namespace
 {
-    // Helper to detect Wine/Proton environment
-    bool IsRunningOnWine()
-    {
-        HMODULE hNtdll = GetModuleHandle("ntdll.dll");
-        return hNtdll && GetProcAddress(hNtdll, "wine_get_version");
-    }
-
     // Centralises command-line switch setup so both pre-launch callbacks stay in sync
     void ConfigureCommandLineSwitches(const CefRefPtr<CefCommandLine>& commandLine, const CefString& processType)
     {
@@ -62,8 +57,7 @@ namespace
         // Prevent Chromium from dropping privileges; required for elevated launches (see chromium/3960)
         commandLine->AppendSwitch("do-not-de-elevate");
 
-        // Must apply essential CEF switches regardless of WebCore availability
-        commandLine->AppendSwitch("disable-gpu-compositing");
+        // Enable external begin frame scheduling for MTA-controlled rendering
         commandLine->AppendSwitch("enable-begin-frame-scheduling");
         // Explicitly block account sign-in to avoid crashes when Google API keys are registered on the system
         commandLine->AppendSwitchWithValue("allow-browser-signin", "false");
@@ -76,6 +70,7 @@ namespace
         }
 
         bool disableGpu = false;
+        bool enableVideoAccel = true;
         if (g_pCore && IsReadablePointer(g_pCore, sizeof(void*)))
         {
             auto* cvars = g_pCore->GetCVars();
@@ -84,11 +79,13 @@ namespace
                 bool gpuEnabled = true;
                 cvars->Get("browser_enable_gpu", gpuEnabled);
                 disableGpu = !gpuEnabled;
+
+                cvars->Get("browser_enable_video_acceleration", enableVideoAccel);
             }
         }
 
         // Wine/Proton compatibility: Allow GPU unless explicitly disabled or forced software
-        if (IsRunningOnWine())
+        if (Wine::IsRunningOnWine())
         {
             if (std::getenv("MTA_FORCE_SOFTWARE_RENDERING"))
             {
@@ -97,13 +94,22 @@ namespace
             else
             {
                 // In Wine, we generally want to try GPU (DXVK handles it well)
-                // But disable-gpu-compositing is already set above which is key
                 // If user hasn't explicitly disabled GPU in cvars, let it run
             }
         }
 
         if (disableGpu)
+        {
             commandLine->AppendSwitch("disable-gpu");
+            // Also disable GPU compositing when GPU is disabled
+            commandLine->AppendSwitch("disable-gpu-compositing");
+        }
+
+        // Hardware video decoding - enable when GPU is enabled and video acceleration is requested
+        if (!disableGpu && enableVideoAccel)
+        {
+            commandLine->AppendSwitch("enable-accelerated-video-decode");
+        }
     }
 }  // namespace
 
@@ -127,6 +133,11 @@ void CWebApp::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_line)
 
     const CefString processType = command_line->GetSwitchValue("type");
     ConfigureCommandLineSwitches(command_line, processType);
+
+    // Attach IPC validation code for render processes
+    // This runs in browser process context where g_pCore and webCore are valid
+    // The auth code is generated in CWebCore constructor and passed to subprocesses
+    WebAppAuth::AttachAuthCodeToCommandLine(command_line);
 }
 
 CefRefPtr<CefBrowserProcessHandler> CWebApp::GetBrowserProcessHandler()
@@ -207,8 +218,8 @@ CefRefPtr<CefResourceHandler> CWebApp::Create(CefRefPtr<CefBrowser> browser, Cef
 
             if (pWebView->HasAjaxHandler(resourcePath))
             {
-                std::vector<SString> vecGet;
-                std::vector<SString> vecPost;
+                std::vector<std::string> vecGet;
+                std::vector<std::string> vecPost;
 
                 if (urlParts.query.str)
                 {

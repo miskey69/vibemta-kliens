@@ -717,7 +717,7 @@ void COMMAND_DumpPlayers(const char* szCmdLine)
 
         // End of the dump. Close it
         fclose(pFile);
-        g_pCore->GetConsole()->Print("dumpplayers: Dumping successfull");
+        g_pCore->GetConsole()->Print("dumpplayers: Dumping successful");
     }
     else
         g_pCore->GetConsole()->Print("dumpplayers: Unable to create file");
@@ -828,18 +828,15 @@ void COMMAND_GiveWeapon(const char* szCmdLine)
     if (!(szCmdLine && szCmdLine[0]))
         return;
 
-    int nWeaponID = atoi(szCmdLine);
-    /*
-     * Check validity of the command line weapon id.
-     */
+    const auto weaponId = static_cast<unsigned short>(atoi(szCmdLine));
 
-    if (!CClientPickupManager::IsValidWeaponID(nWeaponID))
+    if (!CClientPickupManager::IsValidWeaponID(weaponId))
         return;
 
     CClientPed* pPed = g_pClientGame->GetManager()->GetPlayerManager()->GetLocalPlayer();
     if (pPed)
     {
-        CWeapon* pPlayerWeapon = pPed->GiveWeapon((eWeaponType)nWeaponID, 9999);
+        CWeapon* pPlayerWeapon = pPed->GiveWeapon((eWeaponType)weaponId, 9999);
         if (pPlayerWeapon)
         {
             pPlayerWeapon->SetAsCurrentWeapon();

@@ -38,7 +38,7 @@ int __stdcall WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     {
         try
         {
-            return std::invoke(init);
+            return std::invoke_r<int>(init);
         }
         catch (...)
         {

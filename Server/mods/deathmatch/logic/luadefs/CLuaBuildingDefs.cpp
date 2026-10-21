@@ -45,11 +45,6 @@ CBuilding* CLuaBuildingDefs::CreateBuilding(lua_State* const luaVM, std::uint16_
     if (!pResource)
         throw std::logic_error("Cannot be done in current environment");
 
-    const CMtaVersion& minClientVersion = pResource->GetMinClientFromMetaXml();
-
-    if (minClientVersion < CMtaVersion(SERVERSIDE_BUILDING_MIN_CLIENT_VERSION))
-        throw std::logic_error("Expected client min_mta_version in meta.xml hinger or equal than " SERVERSIDE_BUILDING_MIN_CLIENT_VERSION);
-
     if (!CBuildingManager::IsValidModel(modelId))
         throw std::invalid_argument("Invalid building model id");
 
@@ -66,9 +61,20 @@ CBuilding* CLuaBuildingDefs::CreateBuilding(lua_State* const luaVM, std::uint16_
     if (!pBuilding)
         return nullptr;
 
+    CElementGroup* pGroup = pResource->GetElementGroup();
+    if (pGroup)
+    {
+        pGroup->Add(pBuilding);
+    }
+
     pBuilding->SetPosition(pos);
     pBuilding->SetRotation(rot.value());
     pBuilding->SetModel(modelId);
+
+    if (interior.has_value())
+    {
+        pBuilding->SetInterior(interior.value());
+    }
 
     if (pResource->IsClientSynced())
     {

@@ -16,7 +16,7 @@ env:
 jobs:
   windows:
     name: Windows (client + server x64)
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     steps:
       - uses: actions/checkout@v4
 
@@ -97,7 +97,7 @@ jobs:
     name: Linux server x64
     runs-on: ubuntu-latest
     container:
-      image: docker://ghcr.io/multitheftauto/mtasa-blue-build:1.6.0
+      image: docker://ghcr.io/multitheftauto/mtasa-blue-build:latest
     steps:
       - uses: actions/checkout@v4
 
@@ -127,7 +127,7 @@ jobs:
           # szerver net modul: fork-support, különben a sima fejlesztői
           if get "$BDATA/fork-support/net_64.so" Bin/server/x64/net.so; then
             note "fork-support net_64.so installed"
-          elif get "$BDATA/1.6/net_64.so" Bin/server/x64/net.so; then
+          elif get "$BDATA/net_64.so" Bin/server/x64/net.so; then
             echo "::warning::No fork-support net_64.so on the mirror, using the regular developer server net module"
           else
             fail "could not download any server net module"

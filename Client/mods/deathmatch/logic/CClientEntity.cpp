@@ -278,12 +278,12 @@ void CClientEntity::SetID(ElementID ID)
     }
 }
 
-CLuaArgument* CClientEntity::GetCustomData(const char* szName, bool bInheritData, bool* pbIsSynced)
+CLuaArgument* CClientEntity::GetCustomData(const CStringName& name, bool bInheritData, bool* pbIsSynced)
 {
-    assert(szName);
+    assert(name);
 
     // Grab it and return a pointer to the variable
-    SCustomData* pData = m_pCustomData->Get(szName);
+    SCustomData* pData = m_pCustomData->Get(name);
     if (pData)
     {
         if (pbIsSynced)
@@ -294,7 +294,7 @@ CLuaArgument* CClientEntity::GetCustomData(const char* szName, bool bInheritData
     // If none, try returning parent's custom data
     if (bInheritData && m_pParent)
     {
-        return m_pParent->GetCustomData(szName, true, pbIsSynced);
+        return m_pParent->GetCustomData(name, true, pbIsSynced);
     }
 
     // None available
@@ -314,10 +314,10 @@ CLuaArguments* CClientEntity::GetAllCustomData(CLuaArguments* table)
     return table;
 }
 
-bool CClientEntity::GetCustomDataString(const char* szName, SString& strOut, bool bInheritData)
+bool CClientEntity::GetCustomDataString(const CStringName& name, SString& strOut, bool bInheritData)
 {
     // Grab the custom data variable
-    CLuaArgument* pData = GetCustomData(szName, bInheritData);
+    CLuaArgument* pData = GetCustomData(name, bInheritData);
     if (pData)
     {
         // Write the content depending on what type it is
@@ -349,10 +349,10 @@ bool CClientEntity::GetCustomDataString(const char* szName, SString& strOut, boo
     return false;
 }
 
-bool CClientEntity::GetCustomDataInt(const char* szName, int& iOut, bool bInheritData)
+bool CClientEntity::GetCustomDataInt(const CStringName& name, int& iOut, bool bInheritData)
 {
     // Grab the custom data variable
-    CLuaArgument* pData = GetCustomData(szName, bInheritData);
+    CLuaArgument* pData = GetCustomData(name, bInheritData);
     if (pData)
     {
         // Write the content depending on what type it is
@@ -387,10 +387,10 @@ bool CClientEntity::GetCustomDataInt(const char* szName, int& iOut, bool bInheri
     return false;
 }
 
-bool CClientEntity::GetCustomDataFloat(const char* szName, float& fOut, bool bInheritData)
+bool CClientEntity::GetCustomDataFloat(const CStringName& name, float& fOut, bool bInheritData)
 {
     // Grab the custom data variable
-    CLuaArgument* pData = GetCustomData(szName, bInheritData);
+    CLuaArgument* pData = GetCustomData(name, bInheritData);
     if (pData)
     {
         // Write the content depending on what type it is
@@ -414,10 +414,10 @@ bool CClientEntity::GetCustomDataFloat(const char* szName, float& fOut, bool bIn
     return false;
 }
 
-bool CClientEntity::GetCustomDataBool(const char* szName, bool& bOut, bool bInheritData)
+bool CClientEntity::GetCustomDataBool(const CStringName& name, bool& bOut, bool bInheritData)
 {
     // Grab the custom data variable
-    CLuaArgument* pData = GetCustomData(szName, bInheritData);
+    CLuaArgument* pData = GetCustomData(name, bInheritData);
     if (pData)
     {
         // Write the content depending on what type it is
@@ -469,50 +469,50 @@ bool CClientEntity::GetCustomDataBool(const char* szName, bool& bOut, bool bInhe
     return false;
 }
 
-void CClientEntity::SetCustomData(const char* szName, const CLuaArgument& Variable, bool bSynchronized)
+void CClientEntity::SetCustomData(const CStringName& name, const CLuaArgument& Variable, bool bSynchronized)
 {
-    assert(szName);
-    if (strlen(szName) > MAX_CUSTOMDATA_NAME_LENGTH)
+    assert(name);
+    if (name->length() > MAX_CUSTOMDATA_NAME_LENGTH)
     {
         // Don't allow it to be set if the name is too long
-        CLogger::ErrorPrintf("Custom data name too long (%s)", *SStringX(szName).Left(MAX_CUSTOMDATA_NAME_LENGTH + 1));
+        CLogger::ErrorPrintf("Custom data name too long (%s)", *SStringX(name.ToCString()).Left(MAX_CUSTOMDATA_NAME_LENGTH + 1));
         return;
     }
 
     // Grab the old variable
     CLuaArgument oldVariable;
-    SCustomData* pData = m_pCustomData->Get(szName);
+    SCustomData* pData = m_pCustomData->Get(name);
     if (pData)
     {
         oldVariable = pData->Variable;
     }
 
     // Set the new data
-    m_pCustomData->Set(szName, Variable, bSynchronized);
+    m_pCustomData->Set(name, Variable, bSynchronized);
 
     // Trigger the onClientElementDataChange event on us
     CLuaArguments Arguments;
-    Arguments.PushString(szName);
+    Arguments.PushString(name);
     Arguments.PushArgument(oldVariable);
     Arguments.PushArgument(Variable);
     CallEvent("onClientElementDataChange", Arguments, true);
 }
 
-void CClientEntity::DeleteCustomData(const char* szName)
+void CClientEntity::DeleteCustomData(const CStringName& name)
 {
     // Grab the old variable
-    SCustomData* pData = m_pCustomData->Get(szName);
+    SCustomData* pData = m_pCustomData->Get(name);
     if (pData)
     {
         CLuaArgument oldVariable;
         oldVariable = pData->Variable;
 
         // Delete the custom data
-        m_pCustomData->Delete(szName);
+        m_pCustomData->Delete(name);
 
         // Trigger the onClientElementDataChange event on us
         CLuaArguments Arguments;
-        Arguments.PushString(szName);
+        Arguments.PushString(name);
         Arguments.PushArgument(oldVariable);
         Arguments.PushArgument(CLuaArgument());  // Use nil as the new value to indicate the data has been removed
         CallEvent("onClientElementDataChange", Arguments, true);
@@ -741,10 +741,14 @@ bool CClientEntity::AddEvent(CLuaMain* pLuaMain, const char* szName, const CLuaF
     return m_pEventManager->Add(pLuaMain, szName, iLuaFunction, bPropagated, eventPriority, fPriorityMod);
 }
 
-bool CClientEntity::CallEvent(const char* szName, const CLuaArguments& Arguments, bool bCallOnChildren)
+bool CClientEntity::CallEvent(const char* szName, const CLuaArguments& Arguments, bool bCallOnChildren, const char* minClientVersion)
 {
-    if (!g_pClientGame->GetDebugHookManager()->OnPreEvent(szName, Arguments, this, NULL))
-        return false;
+    CDebugHookManager* debugHookManager = g_pClientGame->GetDebugHookManager();
+    if (debugHookManager->HasPreEventHooks())
+    {
+        if (!debugHookManager->OnPreEvent(szName, Arguments, this, nullptr))
+            return false;
+    }
 
     TIMEUS startTime = GetTimeUs();
 
@@ -754,12 +758,12 @@ bool CClientEntity::CallEvent(const char* szName, const CLuaArguments& Arguments
     pEvents->PreEventPulse();
 
     // Call the event on our parents/us first
-    CallParentEvent(szName, Arguments, this);
+    CallParentEvent(szName, Arguments, this, minClientVersion);
 
     if (bCallOnChildren)
     {
         // Call it on all our children
-        CallEventNoParent(szName, Arguments, this);
+        CallEventNoParent(szName, Arguments, this, minClientVersion);
     }
 
     // Tell the event manager that we're done calling the event
@@ -772,19 +776,20 @@ bool CClientEntity::CallEvent(const char* szName, const CLuaArguments& Arguments
             TIMING_DETAIL(SString("Event: %s [%d ms]", szName, deltaTimeUs / 1000));
     }
 
-    g_pClientGame->GetDebugHookManager()->OnPostEvent(szName, Arguments, this, NULL);
+    if (debugHookManager->HasPostEventHooks())
+        debugHookManager->OnPostEvent(szName, Arguments, this, nullptr);
 
     // Return whether it got cancelled or not
     return (!pEvents->WasEventCancelled());
 }
 
-void CClientEntity::CallEventNoParent(const char* szName, const CLuaArguments& Arguments, CClientEntity* pSource)
+void CClientEntity::CallEventNoParent(const char* szName, const CLuaArguments& Arguments, CClientEntity* pSource, const char* minClientVersion)
 {
     // Call it on us if this isn't the same class it was raised on
     // TODO not sure why the null check is necessary (eAi)
     if (pSource != this && m_pEventManager != NULL && m_pEventManager->HasEvents())
     {
-        m_pEventManager->Call(szName, Arguments, pSource, this);
+        m_pEventManager->Call(szName, Arguments, pSource, this, minClientVersion);
     }
 
     // Call it on all our children
@@ -797,7 +802,7 @@ void CClientEntity::CallEventNoParent(const char* szName, const CLuaArguments& A
             {
                 if (!pEntity->m_pEventManager || pEntity->m_pEventManager->HasEvents() || !pEntity->m_Children.empty())
                 {
-                    pEntity->CallEventNoParent(szName, Arguments, pSource);
+                    pEntity->CallEventNoParent(szName, Arguments, pSource, minClientVersion);
                     if (m_bBeingDeleted)
                         break;
                 }
@@ -806,18 +811,18 @@ void CClientEntity::CallEventNoParent(const char* szName, const CLuaArguments& A
     }
 }
 
-void CClientEntity::CallParentEvent(const char* szName, const CLuaArguments& Arguments, CClientEntity* pSource)
+void CClientEntity::CallParentEvent(const char* szName, const CLuaArguments& Arguments, CClientEntity* pSource, const char* minClientVersion)
 {
     // Call the event on us
     if (m_pEventManager && m_pEventManager->HasEvents())
     {
-        m_pEventManager->Call(szName, Arguments, pSource, this);
+        m_pEventManager->Call(szName, Arguments, pSource, this, minClientVersion);
     }
 
     // Call parent's handler
     if (m_pParent)
     {
-        m_pParent->CallParentEvent(szName, Arguments, pSource);
+        m_pParent->CallParentEvent(szName, Arguments, pSource, minClientVersion);
     }
 }
 
@@ -1192,6 +1197,21 @@ void CClientEntity::DoAttaching()
 
         if (!SetMatrix(returnMatrix))
             SetPosition(returnMatrix.vPos);
+
+        // Moving us can run script events (a colshape firing hit/leave events here), and a
+        // handler may have detached us, so make sure we are still attached before going on
+        if (!m_pAttachedToEntity)
+            return;
+
+        // The game only recalculates an entity's surface brightness from its surroundings
+        // while it's not attached to anything (see CObject::PreRender), so an attached
+        // entity would otherwise stay stuck at its default (too bright) value forever.
+        // Keep it in sync with whatever it's attached to every frame, same as vanilla
+        // hand-held objects already do with their owning ped.
+        CPhysical* pThisPhysical = dynamic_cast<CPhysical*>(GetGameEntity());
+        CPhysical* pAttachedToPhysical = dynamic_cast<CPhysical*>(m_pAttachedToEntity->GetGameEntity());
+        if (pThisPhysical && pAttachedToPhysical)
+            pThisPhysical->SetLighting(pAttachedToPhysical->GetLighting());
     }
 }
 

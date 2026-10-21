@@ -9,6 +9,8 @@
  *****************************************************************************/
 
 #include "StdInc.h"
+#include <algorithm>
+#include <cmath>
 
 static bool         bWouldBeNewFrame = false;
 static unsigned int nLastFrameTime = 0;
@@ -16,11 +18,14 @@ static unsigned int nLastFrameTime = 0;
 constexpr float kOriginalTimeStep = 50.0f / 30.0f;
 
 // Fixes player movement issue while aiming and walking on high FPS.
+// Only rescales the compare threshold; m_MoveCmd's reset is NOPed separately in InitHooks_FrameRateFixes.
 #define HOOKPOS_CTaskSimpleUseGun__SetMoveAnim  0x61E4F2
 #define HOOKSIZE_CTaskSimpleUseGun__SetMoveAnim 0x6
-const unsigned int    RETURN_CTaskSimpleUseGun__SetMoveAnim = 0x61E4F8;
-void _declspec(naked) HOOK_CTaskSimpleUseGun__SetMoveAnim()
+const unsigned int            RETURN_CTaskSimpleUseGun__SetMoveAnim = 0x61E4F8;
+static void __declspec(naked) HOOK_CTaskSimpleUseGun__SetMoveAnim()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -39,9 +44,11 @@ void _declspec(naked) HOOK_CTaskSimpleUseGun__SetMoveAnim()
 // Fixes excessively fast camera shaking with setCameraShakeLevel on high FPS.
 #define HOOKPOS_CCamera__Process  0x52C723
 #define HOOKSIZE_CCamera__Process 0x12
-static const unsigned int    RETURN_CCamera__Process = 0x52C735;
-static void _declspec(naked) HOOK_CCamera__Process()
+static const unsigned int     RETURN_CCamera__Process = 0x52C735;
+static void __declspec(naked) HOOK_CCamera__Process()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -58,9 +65,11 @@ static void _declspec(naked) HOOK_CCamera__Process()
 // Fixes helicopters accelerating excessively during takeoff at high FPS.
 #define HOOKPOS_CHeli__ProcessFlyingCarStuff  0x6C4F13
 #define HOOKSIZE_CHeli__ProcessFlyingCarStuff 0x2A
-static const unsigned int    RETURN_CHeli__ProcessFlyingCarStuff = 0x6C4F3D;
-static void _declspec(naked) HOOK_CHeli__ProcessFlyingCarStuff()
+static const unsigned int     RETURN_CHeli__ProcessFlyingCarStuff = 0x6C4F3D;
+static void __declspec(naked) HOOK_CHeli__ProcessFlyingCarStuff()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -88,9 +97,11 @@ static void _declspec(naked) HOOK_CHeli__ProcessFlyingCarStuff()
 // Fixes excessively fast movement of fog on high FPS.
 #define HOOKPOS_CClouds__MovingFog_Update  0x716BA6
 #define HOOKSIZE_CClouds__MovingFog_Update 0x16
-static const unsigned int    RETURN_CClouds__MovingFog_Update = 0x716BBC;
-static void _declspec(naked) HOOK_CClouds__MovingFog_Update()
+static const unsigned int     RETURN_CClouds__MovingFog_Update = 0x716BBC;
+static void __declspec(naked) HOOK_CClouds__MovingFog_Update()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -111,9 +122,11 @@ static void _declspec(naked) HOOK_CClouds__MovingFog_Update()
 // Fixes glass shards spinning and moving at excessive speeds on high FPS.
 #define HOOKPOS_CFallingGlassPane__Update_A  0x71AABF
 #define HOOKSIZE_CFallingGlassPane__Update_A 0x6
-static const unsigned int    RETURN_CFallingGlassPane__Update_A = 0x71AAC5;
-static void _declspec(naked) HOOK_CFallingGlassPane__Update_A()
+static const unsigned int     RETURN_CFallingGlassPane__Update_A = 0x71AAC5;
+static void __declspec(naked) HOOK_CFallingGlassPane__Update_A()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -137,9 +150,11 @@ static void _declspec(naked) HOOK_CFallingGlassPane__Update_A()
 // Fixes glass shards spinning and moving at excessive speeds on high FPS.
 #define HOOKPOS_CFallingGlassPane__Update_B  0x71AAEA
 #define HOOKSIZE_CFallingGlassPane__Update_B 0x6
-static const unsigned int    RETURN_CFallingGlassPane__Update_B = 0x71AAF0;
-static void _declspec(naked) HOOK_CFallingGlassPane__Update_B()
+static const unsigned int     RETURN_CFallingGlassPane__Update_B = 0x71AAF0;
+static void __declspec(naked) HOOK_CFallingGlassPane__Update_B()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -165,9 +180,11 @@ static void _declspec(naked) HOOK_CFallingGlassPane__Update_B()
 // Fixes glass shards spinning and moving at excessive speeds on high FPS.
 #define HOOKPOS_CFallingGlassPane__Update_C  0x71AB29
 #define HOOKSIZE_CFallingGlassPane__Update_C 0x6
-static const unsigned int    RETURN_CFallingGlassPane__Update_C = 0x71AB2F;
-static void _declspec(naked) HOOK_CFallingGlassPane__Update_C()
+static const unsigned int     RETURN_CFallingGlassPane__Update_C = 0x71AB2F;
+static void __declspec(naked) HOOK_CFallingGlassPane__Update_C()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -193,8 +210,10 @@ static void _declspec(naked) HOOK_CFallingGlassPane__Update_C()
 // Ensure that CTimer::CurrentFrame is updated only every 33+ milliseconds.
 #define HOOKPOS_CTimer__Update  0x561C5D
 #define HOOKSIZE_CTimer__Update 0xE
-static void _declspec(naked) HOOK_CTimer__Update()
+static void __declspec(naked) HOOK_CTimer__Update()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -223,9 +242,11 @@ static void _declspec(naked) HOOK_CTimer__Update()
 // Fixes premature despawning of broken breakable objects on high FPS.
 #define HOOKPOS_BreakObject_c__Update  0x59E420
 #define HOOKSIZE_BreakObject_c__Update 0xB
-static const unsigned int    RETURN_BreakObject_c__Update = 0x59E42B;
-static void _declspec(naked) HOOK_BreakObject_c__Update()
+static const unsigned int     RETURN_BreakObject_c__Update = 0x59E42B;
+static void __declspec(naked) HOOK_BreakObject_c__Update()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -247,10 +268,12 @@ static void _declspec(naked) HOOK_BreakObject_c__Update()
 // Fixes limited reach of the water cannon on high FPS.
 #define HOOKPOS_CWaterCannon__Update_OncePerFrame  0x72A29B
 #define HOOKSIZE_CWaterCannon__Update_OncePerFrame 0x5
-static const unsigned int    RETURN_CWaterCannon__Update_OncePerFrame = 0x72A2A0;
-static const unsigned int    RETURN_CWaterCannon__Update_OncePerFrame_SKIP = 0x72A2BB;
-static void _declspec(naked) HOOK_CWaterCannon__Update_OncePerFrame()
+static const unsigned int     RETURN_CWaterCannon__Update_OncePerFrame = 0x72A2A0;
+static const unsigned int     RETURN_CWaterCannon__Update_OncePerFrame_SKIP = 0x72A2BB;
+static void __declspec(naked) HOOK_CWaterCannon__Update_OncePerFrame()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -271,10 +294,12 @@ static void _declspec(naked) HOOK_CWaterCannon__Update_OncePerFrame()
 // Fixes money animation issues on high FPS.
 #define HOOKPOS_CPlayerInfo__Process  0x5700F5
 #define HOOKSIZE_CPlayerInfo__Process 0x6
-static const unsigned int    RETURN_CPlayerInfo__Process = 0x5700FB;
-static const unsigned int    RETURN_CPlayerInfo__Process_SKIP = 0x57015B;
-static void _declspec(naked) HOOK_CPlayerInfo__Process()
+static const unsigned int     RETURN_CPlayerInfo__Process = 0x5700FB;
+static const unsigned int     RETURN_CPlayerInfo__Process_SKIP = 0x57015B;
+static void __declspec(naked) HOOK_CPlayerInfo__Process()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -294,10 +319,12 @@ static void _declspec(naked) HOOK_CPlayerInfo__Process()
 // Fixes excessive effects spawning from rocket launchers on high FPS.
 #define HOOKPOS_CProjectileInfo__Update  0x738C63
 #define HOOKSIZE_CProjectileInfo__Update 0x5
-static const unsigned int    RETURN_CProjectileInfo__Update = 0x738C68;
-static const unsigned int    RETURN_CProjectileInfo__Update_SKIP = 0x738F22;
-static void _declspec(naked) HOOK_CProjectileInfo__Update()
+static const unsigned int     RETURN_CProjectileInfo__Update = 0x738C68;
+static const unsigned int     RETURN_CProjectileInfo__Update_SKIP = 0x738F22;
+static void __declspec(naked) HOOK_CProjectileInfo__Update()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -318,9 +345,11 @@ static void _declspec(naked) HOOK_CProjectileInfo__Update()
 // Fixes excessive surface effects spawning from wheels on high FPS.
 #define HOOKPOS_CVehicle__AddWheelDirtAndWater  0x6D2D50
 #define HOOKSIZE_CVehicle__AddWheelDirtAndWater 0x6
-static const unsigned int    RETURN_CVehicle__AddWheelDirtAndWater = 0x6D2D56;
-static void _declspec(naked) HOOK_CVehicle__AddWheelDirtAndWater()
+static const unsigned int     RETURN_CVehicle__AddWheelDirtAndWater = 0x6D2D56;
+static void __declspec(naked) HOOK_CVehicle__AddWheelDirtAndWater()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -342,10 +371,12 @@ static void _declspec(naked) HOOK_CVehicle__AddWheelDirtAndWater()
 // Fixes excessive smoke trail particle spawning from stuntplanes and cropdusters on high FPS.
 #define HOOKPOS_CPlane__PreRender  0x6CA937
 #define HOOKSIZE_CPlane__PreRender 0x6
-static const unsigned int    RETURN_CPlane__PreRender = 0x6CA93D;
-static const unsigned int    RETURN_CPlane__PreRender_SKIP = 0x6CAA93;
-static void _declspec(naked) HOOK_CPlane__PreRender()
+static const unsigned int     RETURN_CPlane__PreRender = 0x6CA93D;
+static const unsigned int     RETURN_CPlane__PreRender_SKIP = 0x6CAA93;
+static void __declspec(naked) HOOK_CPlane__PreRender()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -365,10 +396,12 @@ static void _declspec(naked) HOOK_CPlane__PreRender()
 // Fixes increased frequency of water cannon pushing peds on high FPS.
 #define HOOKPOS_CWaterCannon__Update_OncePerFrame_PushPedFix  0x72A37B
 #define HOOKSIZE_CWaterCannon__Update_OncePerFrame_PushPedFix 0x6
-static const unsigned int    RETURN_CWaterCannon__Update_OncePerFrame_PushPedFix = 0x72A381;
-static const unsigned int    RETURN_CWaterCannon__Update_OncePerFrame_PushPedFix_SKIP = 0x72A38E;
-static void _declspec(naked) HOOK_CWaterCannon__Update_OncePerFrame_PushPedFix()
+static const unsigned int     RETURN_CWaterCannon__Update_OncePerFrame_PushPedFix = 0x72A381;
+static const unsigned int     RETURN_CWaterCannon__Update_OncePerFrame_PushPedFix_SKIP = 0x72A38E;
+static void __declspec(naked) HOOK_CWaterCannon__Update_OncePerFrame_PushPedFix()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -388,10 +421,12 @@ static void _declspec(naked) HOOK_CWaterCannon__Update_OncePerFrame_PushPedFix()
 // Fixes excessive particle spawning from water cannons on high FPS.
 #define HOOKPOS_CWaterCannon__Render_FxFix  0x729437
 #define HOOKSIZE_CWaterCannon__Render_FxFix 0x5
-static const unsigned int    RETURN_CWaterCannon__Render_FxFix = 0x729440;
-static const unsigned int    RETURN_CWaterCannon__Render_FxFix_SKIP = 0x7294EE;
-static void _declspec(naked) HOOK_CWaterCannon__Render_FxFix()
+static const unsigned int     RETURN_CWaterCannon__Render_FxFix = 0x729440;
+static const unsigned int     RETURN_CWaterCannon__Render_FxFix_SKIP = 0x7294EE;
+static void __declspec(naked) HOOK_CWaterCannon__Render_FxFix()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -409,10 +444,12 @@ static void _declspec(naked) HOOK_CWaterCannon__Render_FxFix()
 // Fixes excessive particle spawning with setPedHeadless on high FPS.
 #define HOOKPOS_CPed__PreRenderAfterTest  0x5E7181
 #define HOOKSIZE_CPed__PreRenderAfterTest 0x6
-static const unsigned int    RETURN_CPed__PreRenderAfterTest = 0x5E7187;
-static const unsigned int    RETURN_CPed__PreRenderAfterTest_SKIP = 0x5E722D;
-static void _declspec(naked) HOOK_CPed__PreRenderAfterTest()
+static const unsigned int     RETURN_CPed__PreRenderAfterTest = 0x5E7187;
+static const unsigned int     RETURN_CPed__PreRenderAfterTest_SKIP = 0x5E722D;
+static void __declspec(naked) HOOK_CPed__PreRenderAfterTest()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -432,9 +469,11 @@ static void _declspec(naked) HOOK_CPed__PreRenderAfterTest()
 // Fixes excessive particle spawning from boats on high FPS.
 #define HOOKPOS_cBuoyancy__AddSplashParticles  0x6C34E0
 #define HOOKSIZE_cBuoyancy__AddSplashParticles 0x6
-static const unsigned int    RETURN_cBuoyancy__AddSplashParticles = 0x6C34E6;
-static void _declspec(naked) HOOK_cBuoyancy__AddSplashParticles()
+static const unsigned int     RETURN_cBuoyancy__AddSplashParticles = 0x6C34E6;
+static void __declspec(naked) HOOK_cBuoyancy__AddSplashParticles()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -454,9 +493,11 @@ static void _declspec(naked) HOOK_cBuoyancy__AddSplashParticles()
 // Fixes excessive weather particle spawning on high FPS.
 #define HOOKPOS_CWeather__AddRain  0x72AAA8
 #define HOOKSIZE_CWeather__AddRain 0x6
-static const unsigned int    RETURN_CWeather__AddRain = 0x72AAAE;
-static void _declspec(naked) HOOK_CWeather__AddRain()
+static const unsigned int     RETURN_CWeather__AddRain = 0x72AAAE;
+static void __declspec(naked) HOOK_CWeather__AddRain()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -478,10 +519,12 @@ static void _declspec(naked) HOOK_CWeather__AddRain()
 // Fixes excessive damage particle spawning from airplanes on high FPS.
 #define HOOKPOS_CPlane__ProcessFlyingCarStuff  0x6CBE4B
 #define HOOKSIZE_CPlane__ProcessFlyingCarStuff 0x6
-static const unsigned int    RETURN_CPlane__ProcessFlyingCarStuff = 0x6CBE51;
-static const unsigned int    RETURN_CPlane__ProcessFlyingCarStuff_SKIP = 0x6CC0D9;
-static void _declspec(naked) HOOK_CPlane__ProcessFlyingCarStuff()
+static const unsigned int     RETURN_CPlane__ProcessFlyingCarStuff = 0x6CBE51;
+static const unsigned int     RETURN_CPlane__ProcessFlyingCarStuff_SKIP = 0x6CC0D9;
+static void __declspec(naked) HOOK_CPlane__ProcessFlyingCarStuff()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -501,10 +544,12 @@ static void _declspec(naked) HOOK_CPlane__ProcessFlyingCarStuff()
 // Fixes excessive spawning of sand and water particles from vehicles on high FPS.
 #define HOOKPOS_CAutomobile__UpdateWheelMatrix  0x6AA78A
 #define HOOKSIZE_CAutomobile__UpdateWheelMatrix 0x5
-static const unsigned int    RETURN_CAutomobile__UpdateWheelMatrix = 0x6AA78F;
-static const unsigned int    RETURN_CAutomobile__UpdateWheelMatrix_SKIP = 0x6AAAD0;
-static void _declspec(naked) HOOK_CAutomobile__UpdateWheelMatrix()
+static const unsigned int     RETURN_CAutomobile__UpdateWheelMatrix = 0x6AA78F;
+static const unsigned int     RETURN_CAutomobile__UpdateWheelMatrix_SKIP = 0x6AAAD0;
+static void __declspec(naked) HOOK_CAutomobile__UpdateWheelMatrix()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -524,9 +569,11 @@ static void _declspec(naked) HOOK_CAutomobile__UpdateWheelMatrix()
 // Fixes excessive particle spawning from boats on high FPS.
 #define HOOKPOS_CVehicle__DoBoatSplashes  0x6DD130
 #define HOOKSIZE_CVehicle__DoBoatSplashes 0x6
-static const unsigned int    RETURN_CVehicle__DoBoatSplashes = 0x6DD136;
-static void _declspec(naked) HOOK_CVehicle__DoBoatSplashes()
+static const unsigned int     RETURN_CVehicle__DoBoatSplashes = 0x6DD136;
+static void __declspec(naked) HOOK_CVehicle__DoBoatSplashes()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -546,9 +593,11 @@ static void _declspec(naked) HOOK_CVehicle__DoBoatSplashes()
 // Fixes excessive rain particle spawning on vehicles on high FPS.
 #define HOOKPOS_CVehicle__AddWaterSplashParticles  0x6DDF60
 #define HOOKSIZE_CVehicle__AddWaterSplashParticles 0x6
-static const unsigned int    RETURN_CVehicle__AddWaterSplashParticles = 0x6DDF66;
-static void _declspec(naked) HOOK_CVehicle__AddWaterSplashParticles()
+static const unsigned int     RETURN_CVehicle__AddWaterSplashParticles = 0x6DDF66;
+static void __declspec(naked) HOOK_CVehicle__AddWaterSplashParticles()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -568,10 +617,12 @@ static void _declspec(naked) HOOK_CVehicle__AddWaterSplashParticles()
 // Fixes excessive particle spawning from airplanes when damaged on high FPS.
 #define HOOKPOS_CPlane__ProcessControl  0x6C939A
 #define HOOKSIZE_CPlane__ProcessControl 0x5
-static const unsigned int    RETURN_CPlane__ProcessControl = 0x6C939F;
-static const unsigned int    RETURN_CPlane__ProcessControl_SKIP = 0x6C9463;
-static void _declspec(naked) HOOK_CPlane__ProcessControl()
+static const unsigned int     RETURN_CPlane__ProcessControl = 0x6C939F;
+static const unsigned int     RETURN_CPlane__ProcessControl_SKIP = 0x6C9463;
+static void __declspec(naked) HOOK_CPlane__ProcessControl()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -592,9 +643,11 @@ static void _declspec(naked) HOOK_CPlane__ProcessControl()
 // Fixes excessive exhaust particle spawning from vehicles on high FPS.
 #define HOOKPOS_CVehicle__AddExhaustParticles  0x6DE240
 #define HOOKSIZE_CVehicle__AddExhaustParticles 0x6
-static const unsigned int    RETURN_CVehicle__AddExhaustParticles = 0x6DE246;
-static void _declspec(naked) HOOK_CVehicle__AddExhaustParticles()
+static const unsigned int     RETURN_CVehicle__AddExhaustParticles = 0x6DE246;
+static void __declspec(naked) HOOK_CVehicle__AddExhaustParticles()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -614,10 +667,12 @@ static void _declspec(naked) HOOK_CVehicle__AddExhaustParticles()
 // Fixes excessive particle spawning while swimming on high FPS.
 #define HOOKPOS_CTaskSimpleSwim__ProcessEffects  0x68AD3B
 #define HOOKSIZE_CTaskSimpleSwim__ProcessEffects 0x6
-static const unsigned int    RETURN_CTaskSimpleSwim__ProcessEffects = 0x68AD41;
-static const unsigned int    RETURN_CTaskSimpleSwim__ProcessEffects_SKIP = 0x68AFDB;
-static void _declspec(naked) HOOK_CTaskSimpleSwim__ProcessEffects()
+static const unsigned int     RETURN_CTaskSimpleSwim__ProcessEffects = 0x68AD41;
+static const unsigned int     RETURN_CTaskSimpleSwim__ProcessEffects_SKIP = 0x68AFDB;
+static void __declspec(naked) HOOK_CTaskSimpleSwim__ProcessEffects()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -638,10 +693,12 @@ static void _declspec(naked) HOOK_CTaskSimpleSwim__ProcessEffects()
 // Fixes excessive particle spawning while swimming on high FPS.
 #define HOOKPOS_CTaskSimpleSwim__ProcessEffectsBubbleFix  0x68AC31
 #define HOOKSIZE_CTaskSimpleSwim__ProcessEffectsBubbleFix 0x7
-static const unsigned int    RETURN_CTaskSimpleSwim__ProcessEffectsBubbleFix = 0x68AC38;
-static const unsigned int    RETURN_CTaskSimpleSwim__ProcessEffectsBubbleFix_SKIP = 0x68AD36;
-static void _declspec(naked) HOOK_CTaskSimpleSwim__ProcessEffectsBubbleFix()
+static const unsigned int     RETURN_CTaskSimpleSwim__ProcessEffectsBubbleFix = 0x68AC38;
+static const unsigned int     RETURN_CTaskSimpleSwim__ProcessEffectsBubbleFix_SKIP = 0x68AD36;
+static void __declspec(naked) HOOK_CTaskSimpleSwim__ProcessEffectsBubbleFix()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -659,12 +716,144 @@ static void _declspec(naked) HOOK_CTaskSimpleSwim__ProcessEffectsBubbleFix()
     // clang-format on
 }
 
+// Fixes boat water resistance and deceleration scaling on high FPS.
+#define HOOKPOS_CVehicle__ApplyBoatWaterResistance  0x6D2771
+#define HOOKSIZE_CVehicle__ApplyBoatWaterResistance 6
+static const unsigned int     RETURN_CVehicle__ApplyBoatWaterResistance = 0x6D2777;
+static void __declspec(naked) HOOK_CVehicle__ApplyBoatWaterResistance()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
+    {
+        fmul    ds:[0x871DDC]           // Original constant used in code
+        fmul    ds:[0xB7CB5C]           // Multiply by current timestep
+        fdiv    kOriginalTimeStep       // Divide by desired 30 FPS timestep
+        jmp     RETURN_CVehicle__ApplyBoatWaterResistance
+    }
+    // clang-format on
+}
+
+// Fixes ped swimming resistance and speed on high FPS.
+#define HOOKPOS_CTaskSimpleSwim__ProcessSwimmingResistance  0x68A4EF
+#define HOOKSIZE_CTaskSimpleSwim__ProcessSwimmingResistance 6
+static const unsigned int     RETURN_CTaskSimpleSwim__ProcessSwimmingResistance = 0x68A50E;
+static void __declspec(naked) HOOK_CTaskSimpleSwim__ProcessSwimmingResistance()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
+    {
+        fsub    st, st(1)
+
+        fld     dword ptr [esp + 16]
+        lea     eax, [esi + 44h]
+        mov     ecx, eax
+        fmul    st, st(1)
+
+        fdiv    ds:[0xB7CB5C]
+        fmul    kOriginalTimeStep
+
+        fstp    dword ptr [esp + 28]
+
+        fld     dword ptr [esp + 20]
+        fmul    st, st(1)
+
+        fdiv    ds:[0xB7CB5C]
+        fmul    kOriginalTimeStep
+
+        fstp    dword ptr [esp + 32]
+        fmul    dword ptr [esp + 24]
+
+        fdiv    ds:[0xB7CB5C]
+        fmul    kOriginalTimeStep
+
+        jmp     RETURN_CTaskSimpleSwim__ProcessSwimmingResistance
+    }
+    // clang-format on
+}
+
+// Fixes diving too deep on high FPS (#3344). HOOK_CTaskSimpleSwim__ProcessSwimmingResistance above scales every
+// component of the target velocity by kOriginalTimeStep / timestep, which is right for x and y (per-frame animation
+// shifts) but not for the dive velocity in z, an absolute speed. Scale it the other way here so the two cancel out.
+#define HOOKPOS_CTaskSimpleSwim__ProcessSwimmingResistance_DiveSpeed  0x68A42B
+#define HOOKSIZE_CTaskSimpleSwim__ProcessSwimmingResistance_DiveSpeed 6
+static constexpr std::uintptr_t RETURN_CTaskSimpleSwim__ProcessSwimmingResistance_DiveSpeed = 0x68A431;
+static void __declspec(naked)   HOOK_CTaskSimpleSwim__ProcessSwimmingResistance_DiveSpeed()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
+    {
+        fmul    ds:[0x858EF4]           // Original: the dive speed, -0.1f
+        fmul    ds:[0xB7CB5C]           // CTimer::ms_fTimeStep
+        fdiv    kOriginalTimeStep       // 1.666f
+        jmp     RETURN_CTaskSimpleSwim__ProcessSwimmingResistance_DiveSpeed
+    }
+    // clang-format on
+}
+
+// Same for the constant buoyancy of the underwater swim state, which every dive ends in, against the same
+// HOOK_CTaskSimpleSwim__ProcessSwimmingResistance scaling
+#define HOOKPOS_CTaskSimpleSwim__ProcessSwimmingResistance_Buoyancy  0x68A4CA
+#define HOOKSIZE_CTaskSimpleSwim__ProcessSwimmingResistance_Buoyancy 6
+static constexpr std::uintptr_t RETURN_CTaskSimpleSwim__ProcessSwimmingResistance_Buoyancy = 0x68A4D0;
+static void __declspec(naked)   HOOK_CTaskSimpleSwim__ProcessSwimmingResistance_Buoyancy()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
+    {
+        fld     ds:[0x8708CC]           // Original: the buoyancy of the underwater state, 0.01f
+        fmul    ds:[0xB7CB5C]           // CTimer::ms_fTimeStep
+        fdiv    kOriginalTimeStep       // 1.666f
+        faddp   st(1), st               // Original: add it to the target velocity
+        jmp     RETURN_CTaskSimpleSwim__ProcessSwimmingResistance_Buoyancy
+    }
+    // clang-format on
+}
+
+// cBuoyancy::CalcBuoyancyForce takes the whole vertical momentum off the upward impulse once the entity rises faster
+// than four times what the impulse gives it. The impulse scales with the timestep, the momentum does not, so on high
+// FPS the damping sets in at a fraction of the 30 FPS rise speed and holds a surfacing ped down. Scale the momentum
+// by the same ratio for peds, which covers every ped in water, not only the swimming local player.
+#define HOOKPOS_cBuoyancy__CalcBuoyancyForce_Damping  0x6C27B7
+#define HOOKSIZE_cBuoyancy__CalcBuoyancyForce_Damping 6
+static constexpr std::uintptr_t RETURN_cBuoyancy__CalcBuoyancyForce_Damping = 0x6C27BD;
+static void __declspec(naked)   HOOK_cBuoyancy__CalcBuoyancyForce_Damping()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
+    {
+        fld     dword ptr [eax+8Ch]     // Original: CPhysical::m_fMass, multiplied with the vertical speed next
+        push    edx
+        mov     dl, byte ptr [eax+36h]  // CEntitySAInterface::nType, a 3 bit field
+        and     dl, 7
+        cmp     dl, ENTITY_TYPE_PED
+        pop     edx
+        jne     done
+        fmul    ds:[0xB7CB5C]           // CTimer::ms_fTimeStep
+        fdiv    kOriginalTimeStep       // 1.666f
+    done:
+        jmp     RETURN_cBuoyancy__CalcBuoyancyForce_Damping
+    }
+    // clang-format on
+}
+
 // Fixes invisible weapon particles (extinguisher, spraycan, flamethrower) at high FPS
 #define HOOKPOS_CWeapon_Update  0x73DC3D
 #define HOOKSIZE_CWeapon_Update 5
 static constexpr std::uintptr_t RETURN_CWeapon_Update = 0x073DC42;
 static void __declspec(naked)   HOOK_CWeapon_Update()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -702,11 +891,327 @@ static void __declspec(naked)   HOOK_CWeapon_Update()
     // clang-format on
 }
 
+static float scaledVehicleStillVelocityThreshold = 0.0045f;
+
+// In GTA:SA (30 FPS, timeStep = 1.66667f), vehicles sleep after 10 still frames (~333 ms).
+// At high framerates (e.g. 240 FPS), 10 frames elapse in only ~41 ms, putting unoccupied
+// vehicles to sleep prematurely while suspension springs are still oscillating or settling.
+// Scaling GTA:SA's 10-frame threshold by (kOriginalTimeStep / timeStep) preserves
+// an invariant ~333 ms stillness window across all framerates with zero magic numbers.
+static uint8 __cdecl CalculateVehicleSleepFrameThreshold() noexcept
+{
+    const float timeStep = *reinterpret_cast<const float*>(0xB7CB5C);
+    if (timeStep <= 0.0001f)
+        return 10;
+
+    // Scale the stationary vehicle damping velocity threshold (0.0045f in GTA:SA)
+    // to preserve framerate-invariant stillness sensitivity across all framerates.
+    scaledVehicleStillVelocityThreshold = 0.0045f * (timeStep / kOriginalTimeStep);
+
+    constexpr float originalSleepFrames = 10.0f;
+    const float     rawThreshold = originalSleepFrames * (kOriginalTimeStep / timeStep);
+    return static_cast<uint8>(std::clamp(std::round(rawThreshold), 10.0f, 240.0f));
+}
+
+// Fixes bottomed-out or stretched vehicle suspension when spawning or dropping at high framerates.
+// CAutomobile::ProcessControl
+#define HOOKPOS_CAutomobile__ProcessControl_SleepThreshold  0x6B1D34
+#define HOOKSIZE_CAutomobile__ProcessControl_SleepThreshold 10
+static const unsigned int     RETURN_CAutomobile__ProcessControl_SleepThreshold = 0x6B1D3E;
+static void __declspec(naked) HOOK_CAutomobile__ProcessControl_SleepThreshold()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
+    {
+        push ecx
+        push edx
+        call CalculateVehicleSleepFrameThreshold
+        mov bl, al
+        pop edx
+        pop ecx
+
+        mov al, dl
+        cmp al, bl
+        mov [esi+0xB8], dl
+        jmp RETURN_CAutomobile__ProcessControl_SleepThreshold
+    }
+    // clang-format on
+}
+
+// Fixes bottomed-out or stretched bike suspension when spawning or dropping at high framerates.
+// CBike::ProcessControl
+#define HOOKPOS_CBike__ProcessControl_SleepThreshold  0x6B997C
+#define HOOKSIZE_CBike__ProcessControl_SleepThreshold 8
+static const unsigned int     RETURN_CBike__ProcessControl_SleepThreshold = 0x6B9984;
+static void __declspec(naked) HOOK_CBike__ProcessControl_SleepThreshold()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
+    {
+        push ecx
+        push edx
+        call CalculateVehicleSleepFrameThreshold
+        pop edx
+        pop ecx
+
+        cmp cl, al
+        mov [esi+0xB8], cl
+        jmp RETURN_CBike__ProcessControl_SleepThreshold
+    }
+    // clang-format on
+}
+
+// CBike::ProcessControl sleep counter clamp
+#define HOOKPOS_CBike__ProcessControl_SleepClamp  0x6B99C5
+#define HOOKSIZE_CBike__ProcessControl_SleepClamp 16
+static const unsigned int     RETURN_CBike__ProcessControl_SleepClamp = 0x6B99D5;
+static void __declspec(naked) HOOK_CBike__ProcessControl_SleepClamp()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
+    {
+        push ecx
+        push edx
+        call CalculateVehicleSleepFrameThreshold
+        pop edx
+        pop ecx
+
+        cmp [esi+0xB8], al
+        jbe clamp_done
+        mov [esi+0xB8], al
+
+    clamp_done:
+        jmp RETURN_CBike__ProcessControl_SleepClamp
+    }
+    // clang-format on
+}
+
+// Governs pedestrian push velocity on unoccupied vehicles during collisions.
+// In GTA:SA, CPhysical::ApplyCollision adds an impulse to velocity on every contact frame.
+// At high framerates, these impulses occur far more frequently than at 30 FPS, overpowering
+// tire friction and causing the vehicle to accelerate unnaturally fast.
+// This caps push velocity using momentum conservation to maintain consistent vehicle weight across framerates.
+static void GovernPedPushVehicleVelocity(CPhysicalSAInterface* vehicle, CPhysicalSAInterface* ped, const CVector& initialLinearVelocity,
+                                         const CVector& initialAngularVelocity, const CVector& pedLinearVelocity, CVector& currentLinearVelocity,
+                                         CVector& currentAngularVelocity)
+{
+    if (!vehicle || !ped)
+        return;
+
+    // Only govern collisions on unoccupied vehicles (no driver present)
+    const auto* vehicleInterface = reinterpret_cast<const CVehicleSAInterface*>(vehicle);
+    if (vehicleInterface->pDriver != nullptr)
+        return;
+
+    // Prevent vehicle tilting or flipping from push contact
+    currentAngularVelocity.fX = initialAngularVelocity.fX;
+    currentAngularVelocity.fY = initialAngularVelocity.fY;
+
+    // Keep vertical velocity unaffected by push contact
+    currentLinearVelocity.fZ = initialLinearVelocity.fZ;
+
+    const CVector deltaVelocity = currentLinearVelocity - initialLinearVelocity;
+    const float   deltaMagnitudeSquared = (deltaVelocity.fX * deltaVelocity.fX) + (deltaVelocity.fY * deltaVelocity.fY);
+    if (deltaMagnitudeSquared <= 0.000001f)
+        return;
+
+    const float deltaMagnitude = std::sqrt(deltaMagnitudeSquared);
+    const float pushDirectionX = deltaVelocity.fX / deltaMagnitude;
+    const float pushDirectionY = deltaVelocity.fY / deltaMagnitude;
+
+    const float pedForwardSpeed = (pedLinearVelocity.fX * pushDirectionX) + (pedLinearVelocity.fY * pushDirectionY);
+    if (pedForwardSpeed <= 0.0f)
+    {
+        currentLinearVelocity = initialLinearVelocity;
+        currentAngularVelocity = initialAngularVelocity;
+        return;
+    }
+
+    const float     timeStep = *reinterpret_cast<const float*>(0xB7CB5C);
+    constexpr float baselineTimeStep = 1.0f;
+    const float     timeStepRatio = std::clamp(timeStep / baselineTimeStep, 0.001f, 1.0f);
+
+    constexpr float playerPushMassMultiplier = 10.0f;
+    const float     effectivePedMass = ped->m_fMass * playerPushMassMultiplier;
+    const float     vehicleMass = vehicle->m_fMass;
+    const float     maximumPushVelocity = pedForwardSpeed * (effectivePedMass / (effectivePedMass + vehicleMass));
+
+    float forwardX = 0.0f;
+    float forwardY = 1.0f;
+    float rightX = 1.0f;
+    float rightY = 0.0f;
+
+    if (vehicle->matrix != nullptr)
+    {
+        forwardX = vehicle->matrix->vFront.fX;
+        forwardY = vehicle->matrix->vFront.fY;
+        rightX = vehicle->matrix->vRight.fX;
+        rightY = vehicle->matrix->vRight.fY;
+    }
+    else
+    {
+        const float heading = vehicle->m_transform.m_heading;
+        forwardX = -std::sin(heading);
+        forwardY = std::cos(heading);
+        rightX = std::cos(heading);
+        rightY = std::sin(heading);
+    }
+
+    const float forwardLen = std::sqrt((forwardX * forwardX) + (forwardY * forwardY));
+    if (forwardLen > 0.0001f)
+    {
+        forwardX /= forwardLen;
+        forwardY /= forwardLen;
+    }
+
+    const float rightLen = std::sqrt((rightX * rightX) + (rightY * rightY));
+    if (rightLen > 0.0001f)
+    {
+        rightX /= rightLen;
+        rightY /= rightLen;
+    }
+
+    const float initialForwardSpeed = (initialLinearVelocity.fX * forwardX) + (initialLinearVelocity.fY * forwardY);
+    const float initialLateralSpeed = (initialLinearVelocity.fX * rightX) + (initialLinearVelocity.fY * rightY);
+
+    float currentForwardSpeed = (currentLinearVelocity.fX * forwardX) + (currentLinearVelocity.fY * forwardY);
+    float currentLateralSpeed = (currentLinearVelocity.fX * rightX) + (currentLinearVelocity.fY * rightY);
+
+    const float deltaForwardSpeed = currentForwardSpeed - initialForwardSpeed;
+    currentForwardSpeed = initialForwardSpeed + (deltaForwardSpeed * timeStepRatio);
+
+    constexpr float wakeUpThreshold = 0.008f;
+    if (std::abs(initialForwardSpeed) < 0.001f && std::abs(currentForwardSpeed) < wakeUpThreshold && std::abs(deltaForwardSpeed) > 0.001f)
+    {
+        currentForwardSpeed = (deltaForwardSpeed > 0.0f) ? wakeUpThreshold : -wakeUpThreshold;
+    }
+
+    const float allowedForwardSpeedMax = std::max(initialForwardSpeed, maximumPushVelocity);
+    const float allowedForwardSpeedMin = std::min(initialForwardSpeed, -maximumPushVelocity);
+    currentForwardSpeed = std::clamp(currentForwardSpeed, allowedForwardSpeedMin, allowedForwardSpeedMax);
+
+    const float deltaLateralSpeed = currentLateralSpeed - initialLateralSpeed;
+    currentLateralSpeed = initialLateralSpeed + (deltaLateralSpeed * timeStepRatio);
+
+    constexpr float lateralScrubRatio = 0.10f;
+    const float     maximumLateralVelocity = maximumPushVelocity * lateralScrubRatio;
+    const float     allowedLateralSpeedMax = std::max(initialLateralSpeed, maximumLateralVelocity);
+    const float     allowedLateralSpeedMin = std::min(initialLateralSpeed, -maximumLateralVelocity);
+    currentLateralSpeed = std::clamp(currentLateralSpeed, allowedLateralSpeedMin, allowedLateralSpeedMax);
+
+    currentLinearVelocity.fX = (currentForwardSpeed * forwardX) + (currentLateralSpeed * rightX);
+    currentLinearVelocity.fY = (currentForwardSpeed * forwardY) + (currentLateralSpeed * rightY);
+
+    // Scale collision yaw impulse so rotational torque delivered per second is invariant across framerates
+    const float deltaAngularZ = currentAngularVelocity.fZ - initialAngularVelocity.fZ;
+    currentAngularVelocity.fZ = initialAngularVelocity.fZ + (deltaAngularZ * timeStepRatio);
+
+    // Physical angular velocity limit derived from conservation of angular momentum at the vehicle corner
+    constexpr float cornerLeverArm = 2.2f;
+    const float     vehicleTurnMass = (vehicle->m_fTurnMass > 0.0f) ? vehicle->m_fTurnMass : (vehicleMass * 2.5f);
+    const float     maximumAngularVelocity =
+        (cornerLeverArm * effectivePedMass * pedForwardSpeed) / (vehicleTurnMass + (effectivePedMass * cornerLeverArm * cornerLeverArm));
+
+    const float allowedYawSpeedMax = std::max(initialAngularVelocity.fZ, maximumAngularVelocity);
+    const float allowedYawSpeedMin = std::min(initialAngularVelocity.fZ, -maximumAngularVelocity);
+    currentAngularVelocity.fZ = std::clamp(currentAngularVelocity.fZ, allowedYawSpeedMin, allowedYawSpeedMax);
+}
+
+#define CALL_CPhysical__ApplyCollision_1    0x54BDB2
+#define CALL_CPhysical__ApplyCollision_2    0x54BF78
+#define CALL_CPhysical__ApplyCollision_3    0x54C23A
+#define CALL_CPhysical__ApplyCollision_4    0x54C435
+#define CALL_CPhysical__ApplyCollision_5    0x54D17E
+#define CALL_CPhysical__ApplyCollision_6    0x54D27E
+#define CALL_CPhysical__ApplyCollision_7    0x54D3FE
+#define CALL_CPhysical__ApplyCollision_8    0x54D4D2
+#define CALL_CPhysical__ApplyCollisionAlt_1 0x54C9FA
+#define CALL_CPhysical__ApplyCollisionAlt_2 0x54CAC2
+
+static bool __fastcall HOOK_CPhysical__ApplyCollision(CPhysicalSAInterface* thisEntity, void* /*edx*/, CEntitySAInterface* collidedEntity,
+                                                      CColPointSAInterface* colPoint, float* thisDamageIntensity, float* collidedDamageIntensity)
+{
+    const CVector initialThisLinearVelocity = thisEntity ? thisEntity->m_vecLinearVelocity : CVector{};
+    const CVector initialThisAngularVelocity = thisEntity ? thisEntity->m_vecAngularVelocity : CVector{};
+
+    auto*   collidedPhysical = reinterpret_cast<CPhysicalSAInterface*>(collidedEntity);
+    CVector initialCollidedLinearVelocity{};
+    CVector initialCollidedAngularVelocity{};
+    if (collidedPhysical)
+    {
+        initialCollidedLinearVelocity = collidedPhysical->m_vecLinearVelocity;
+        initialCollidedAngularVelocity = collidedPhysical->m_vecAngularVelocity;
+    }
+
+    using ApplyCollisionFn = bool(__thiscall*)(CPhysicalSAInterface*, CEntitySAInterface*, CColPointSAInterface*, float*, float*);
+    const auto originalApplyCollision = reinterpret_cast<ApplyCollisionFn>(0x548680);
+
+    const bool result = originalApplyCollision(thisEntity, collidedEntity, colPoint, thisDamageIntensity, collidedDamageIntensity);
+
+    if (result && thisEntity && collidedEntity)
+    {
+        // Entity types: 2 = Vehicle, 3 = Ped (from CEntitySAInterface::nType bitfield)
+        const uint8 thisType = thisEntity->nType;
+        const uint8 collidedType = collidedEntity->nType;
+
+        if (thisType == 2 && collidedType == 3 && collidedPhysical)
+        {
+            GovernPedPushVehicleVelocity(thisEntity, collidedPhysical, initialThisLinearVelocity, initialThisAngularVelocity, initialCollidedLinearVelocity,
+                                         thisEntity->m_vecLinearVelocity, thisEntity->m_vecAngularVelocity);
+        }
+        else if (thisType == 3 && collidedType == 2 && collidedPhysical)
+        {
+            GovernPedPushVehicleVelocity(collidedPhysical, thisEntity, initialCollidedLinearVelocity, initialCollidedAngularVelocity, initialThisLinearVelocity,
+                                         collidedPhysical->m_vecLinearVelocity, collidedPhysical->m_vecAngularVelocity);
+        }
+    }
+
+    return result;
+}
+
+static bool __fastcall HOOK_CPhysical__ApplyCollisionAlt(CPhysicalSAInterface* thisEntity, void* /*edx*/, CPhysicalSAInterface* collidedEntity,
+                                                         CColPointSAInterface* colPoint, float* damageIntensity, CVector* outLinearVelocity,
+                                                         CVector* outAngularVelocity)
+{
+    const CVector initialLinearVelocity = outLinearVelocity ? *outLinearVelocity : CVector{};
+    const CVector initialAngularVelocity = outAngularVelocity ? *outAngularVelocity : CVector{};
+
+    const CVector collidedLinearVelocity = collidedEntity ? collidedEntity->m_vecLinearVelocity : CVector{};
+
+    using ApplyCollisionAltFn = bool(__thiscall*)(CPhysicalSAInterface*, CPhysicalSAInterface*, CColPointSAInterface*, float*, CVector*, CVector*);
+    const auto originalApplyCollisionAlt = reinterpret_cast<ApplyCollisionAltFn>(0x544D50);
+
+    const bool result = originalApplyCollisionAlt(thisEntity, collidedEntity, colPoint, damageIntensity, outLinearVelocity, outAngularVelocity);
+
+    if (result && thisEntity && collidedEntity && outLinearVelocity && outAngularVelocity)
+    {
+        // Entity types: 2 = Vehicle, 3 = Ped
+        const uint8 thisType = thisEntity->nType;
+        const uint8 collidedType = collidedEntity->nType;
+
+        if (thisType == 2 && collidedType == 3)
+        {
+            GovernPedPushVehicleVelocity(thisEntity, collidedEntity, initialLinearVelocity, initialAngularVelocity, collidedLinearVelocity, *outLinearVelocity,
+                                         *outAngularVelocity);
+        }
+    }
+
+    return result;
+}
+
 #define HOOKPOS_CPhysical__ApplyAirResistance  0x544D29
 #define HOOKSIZE_CPhysical__ApplyAirResistance 5
-static const unsigned int    RETURN_CPhysical__ApplyAirResistance = 0x544D4D;
-static void _declspec(naked) HOOK_CPhysical__ApplyAirResistance()
+static const unsigned int     RETURN_CPhysical__ApplyAirResistance = 0x544D4D;
+static void __declspec(naked) HOOK_CPhysical__ApplyAirResistance()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -731,9 +1236,60 @@ static void _declspec(naked) HOOK_CPhysical__ApplyAirResistance()
     // clang-format on
 }
 
-template <unsigned int returnAddress>
-static void _declspec(naked) HOOK_VehicleRapidStopFix()
+// Fixes excessive chassis roll acceleration and violent swaying at high FPS by scaling the lateral impulse by delta time.
+#define HOOKPOS_CDoor__Process_ChassisImpulse  0x6F42D5
+#define HOOKSIZE_CDoor__Process_ChassisImpulse 0xE
+static const unsigned int     RETURN_CDoor__Process_ChassisImpulse = 0x6F42E3;
+static void __declspec(naked) HOOK_CDoor__Process_ChassisImpulse()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
+    {
+        fld ds:[0x872328]           // 0.025f (DOOR_APPLY_RATE_CHASSIS)
+        fmul ds:[0xB7CB5C]          // CTimer::ms_fTimeStep
+        fdiv kOriginalTimeStep      // 50.0f / 30.0f (1.6666667f)
+        fmul st, st(1)              // * z
+        fadd dword ptr [esi+0x14]   // + m_fAngVel
+        fstp dword ptr [esi+0x14]   // store m_fAngVel
+        jmp RETURN_CDoor__Process_ChassisImpulse
+    }
+    // clang-format on
+}
+
+// Fixes high-frequency chassis oscillation and visual wheel protrusion by integrating angular velocity proportionally to delta time.
+#define HOOKPOS_CDoor__Process_ChassisAngle  0x6F4422
+#define HOOKSIZE_CDoor__Process_ChassisAngle 0x8
+static const unsigned int     RETURN_CDoor__Process_ChassisAngle = 0x6F442A;
+static void __declspec(naked) HOOK_CDoor__Process_ChassisAngle()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
+    {
+        fld dword ptr [esi+0x14]    // m_fAngVel
+        mov ecx, ebx                // ecx = m_nDirn
+
+        test bp, bp                 // DOOR_EXTRA_CHASSIS (0x40)
+        jz not_chassis
+
+        fmul ds:[0xB7CB5C]          // CTimer::ms_fTimeStep
+        fdiv kOriginalTimeStep      // 50.0f / 30.0f (1.6666667f)
+
+    not_chassis:
+        fadd dword ptr [esi+0x0C]   // + m_fAngle
+        jmp RETURN_CDoor__Process_ChassisAngle
+    }
+    // clang-format on
+}
+
+template <unsigned int returnAddress>
+static void __declspec(naked) HOOK_VehicleRapidStopFix()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     static unsigned int RETURN_VehicleRapidStopFix = returnAddress;
     // clang-format off
     __asm
@@ -789,6 +1345,10 @@ void CMultiplayerSA::InitHooks_FrameRateFixes()
     EZHookInstall(CFallingGlassPane__Update_B);
     EZHookInstall(CFallingGlassPane__Update_C);
 
+    // Fixes camera jitter while aiming and walking at high FPS.
+    // CTaskSimpleUseGun::SetMoveAnim
+    MemSet((void*)0x61E5E4, 0x90, 0x6);
+
     // Fixes slow camera movement towards the back of the vehicle on high FPS.
     // CCam::Process_FollowCar_SA
     MemSet((void*)0x524FD7, 0x90, 0x1B);
@@ -796,6 +1356,12 @@ void CMultiplayerSA::InitHooks_FrameRateFixes()
     // Fixes slow boat movement on high FPS.
     // CVehicle::ProcessBoatControl
     MemPut(0x6DC23F, &kOriginalTimeStep);
+
+    // Fixes climbing over certain objects killing player on high FPS or low game speed.
+    // GitHub Issue #602
+    MemPut(0x6811E9, &kOriginalTimeStep);
+    MemPut(0x68128A, &kOriginalTimeStep);
+    MemPut(0x68131B, &kOriginalTimeStep);
 
     // CTimer::m_FrameCounter fixes
     EZHookInstall(CTimer__Update);
@@ -816,10 +1382,50 @@ void CMultiplayerSA::InitHooks_FrameRateFixes()
     EZHookInstall(CAutomobile__UpdateWheelMatrix);
     EZHookInstall(CVehicle__DoBoatSplashes);
     EZHookInstall(CVehicle__AddWaterSplashParticles);
+    EZHookInstall(CVehicle__ApplyBoatWaterResistance);
     EZHookInstall(CPlane__ProcessControl);
     EZHookInstall(CVehicle__AddExhaustParticles);
     EZHookInstall(CTaskSimpleSwim__ProcessEffects);
     EZHookInstall(CTaskSimpleSwim__ProcessEffectsBubbleFix);
+    EZHookInstall(CTaskSimpleSwim__ProcessSwimmingResistance);
+    EZHookInstall(CTaskSimpleSwim__ProcessSwimmingResistance_DiveSpeed);
+    EZHookInstall(CTaskSimpleSwim__ProcessSwimmingResistance_Buoyancy);
+    EZHookInstall(cBuoyancy__CalcBuoyancyForce_Damping);
 
     EZHookInstall(CWeapon_Update);
+    EZHookInstall(CDoor__Process_ChassisImpulse);
+    EZHookInstall(CDoor__Process_ChassisAngle);
+
+    EZHookInstall(CAutomobile__ProcessControl_SleepThreshold);
+    EZHookInstall(CBike__ProcessControl_SleepThreshold);
+    EZHookInstall(CBike__ProcessControl_SleepClamp);
+
+    // Prevent unoccupied vehicles from instantly sleeping on frame 1 via the idle bypass flag,
+    // which froze vehicle suspension stretched at spawn before gravity could settle the chassis.
+    MemSet((void*)0x6B1AF5, 0x90, 5);
+    MemSet((void*)0x6B9850, 0x90, 5);
+
+    // Prevent stationary damping from wiping vertical velocity (moveSpeed.z = 0), which
+    // choked gravitational settling at high FPS where per-frame gravity is below 0.0045f.
+    MemSet((void*)0x6B361C, 0x90, 3);
+    MemSet((void*)0x6BC18F, 0x90, 3);
+
+    // Scale the stationary damping threshold (0.0045f) to preserve framerate-invariant stillness sensitivity.
+    MemPut(0x6B33F8, &scaledVehicleStillVelocityThreshold);
+    MemPut(0x6B340E, &scaledVehicleStillVelocityThreshold);
+    MemPut(0x6B3424, &scaledVehicleStillVelocityThreshold);
+    MemPut(0x6BC103, &scaledVehicleStillVelocityThreshold);
+    MemPut(0x6BC119, &scaledVehicleStillVelocityThreshold);
+    MemPut(0x6BC12B, &scaledVehicleStillVelocityThreshold);
+
+    HookInstallCall(CALL_CPhysical__ApplyCollision_1, (DWORD)HOOK_CPhysical__ApplyCollision);
+    HookInstallCall(CALL_CPhysical__ApplyCollision_2, (DWORD)HOOK_CPhysical__ApplyCollision);
+    HookInstallCall(CALL_CPhysical__ApplyCollision_3, (DWORD)HOOK_CPhysical__ApplyCollision);
+    HookInstallCall(CALL_CPhysical__ApplyCollision_4, (DWORD)HOOK_CPhysical__ApplyCollision);
+    HookInstallCall(CALL_CPhysical__ApplyCollision_5, (DWORD)HOOK_CPhysical__ApplyCollision);
+    HookInstallCall(CALL_CPhysical__ApplyCollision_6, (DWORD)HOOK_CPhysical__ApplyCollision);
+    HookInstallCall(CALL_CPhysical__ApplyCollision_7, (DWORD)HOOK_CPhysical__ApplyCollision);
+    HookInstallCall(CALL_CPhysical__ApplyCollision_8, (DWORD)HOOK_CPhysical__ApplyCollision);
+    HookInstallCall(CALL_CPhysical__ApplyCollisionAlt_1, (DWORD)HOOK_CPhysical__ApplyCollisionAlt);
+    HookInstallCall(CALL_CPhysical__ApplyCollisionAlt_2, (DWORD)HOOK_CPhysical__ApplyCollisionAlt);
 }

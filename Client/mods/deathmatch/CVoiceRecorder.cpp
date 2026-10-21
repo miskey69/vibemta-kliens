@@ -131,7 +131,7 @@ void CVoiceRecorder::Init(bool bEnabled, unsigned int uiServerSampleRate, unsign
     if (m_pSpeexEncoderState)
     {
         speex_encoder_ctl(m_pSpeexEncoderState, SPEEX_GET_FRAME_SIZE, &m_iSpeexOutgoingFrameSampleCount);
-        int iQuality = m_ucQuality;
+        int iQuality = static_cast<int>(m_ucQuality);
         speex_encoder_ctl(m_pSpeexEncoderState, SPEEX_SET_QUALITY, &iQuality);
         iBitRate = (int)uiBitrate;
         if (iBitRate)
@@ -329,16 +329,16 @@ void CVoiceRecorder::DoPulse()
     if (!m_pOutgoingBuffer && m_VoiceState != VOICESTATE_RECORDING_LAST_PACKET)
         return;
 
-    unsigned char* pInputBuffer;
-    unsigned char  audioBuffer[2048]{};
-    // One frame at the highest Speex rate (32 kHz ultra-wideband) is 1280 bytes;
-    // the check keeps the local buffer in step with the largest Speex frame
-    static_assert(640 * sizeof(short) <= sizeof(audioBuffer), "Voice frame exceeds the local audio buffer");
-    unsigned int   uiTotalBufferSize = m_uiBufferSizeBytes * FRAME_OUTGOING_BUFFER_COUNT;
-
     // Only send every 100 ms, or flush the last packet right away on release
     if ((CClientTime::GetTime() - m_ulTimeOfLastSend > 100 || m_VoiceState == VOICESTATE_RECORDING_LAST_PACKET) && m_VoiceState != VOICESTATE_AWAITING_INPUT)
     {
+        unsigned char* pInputBuffer;
+        unsigned char  audioBuffer[2048]{};
+        // One frame at the highest Speex rate (32 kHz ultra-wideband) is 1280 bytes;
+        // the check keeps the local buffer in step with the largest Speex frame
+        static_assert(640 * sizeof(short) <= sizeof(audioBuffer), "Voice frame exceeds the local audio buffer");
+        unsigned int uiTotalBufferSize = m_uiBufferSizeBytes * FRAME_OUTGOING_BUFFER_COUNT;
+
         unsigned int uiBytesAvailable = 0;
 
         if (m_bOutgoingBufferFull)

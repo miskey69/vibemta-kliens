@@ -23,6 +23,7 @@ void InitRwFunctions()
     RwFrameTransform = (RwFrameTransform_t)0x007F0F70;
     RwFrameTranslate = (RwFrameTranslate_t)0x007F0E30;
     RpClumpForAllAtomics = (RpClumpForAllAtomics_t)0x00749B70;
+    RpGeometryForAllMaterials = (RpGeometryForAllMaterials_t)0x0074C790;
     RwFrameAddChild = (RwFrameAddChild_t)0x007F0B00;
     RpClumpAddAtomic = (RpClumpAddAtomic_t)0x0074A490;
     RpAtomicSetFrame = (RpAtomicSetFrame_t)0x0074BF20;
@@ -89,7 +90,7 @@ void InitRwFunctions()
     RpHAnimIDGetIndex = (RpHAnimIDGetIndex_t)0x7C51A0;
     RpHAnimHierarchyGetMatrixArray = (RpHAnimHierarchyGetMatrixArray_t)0x7C5120;
     RtQuatRotate = (RtQuatRotate_t)0x7EB7C0;
-    
+
     SetTextureDict = (SetTextureDict_t)0x007319C0;
     LoadClumpFile = (LoadClumpFile_t)0x005371F0;
     LoadModel = (LoadModel_t)0x0040C6B0;

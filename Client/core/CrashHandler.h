@@ -194,19 +194,7 @@ struct ENHANCED_EXCEPTION_INFO
     bool        isFatal{};
     std::string additionalInfo{};
 
-    [[nodiscard]] bool operator==(const ENHANCED_EXCEPTION_INFO& other) const
-    {
-        return exceptionCode == other.exceptionCode && exceptionAddress == other.exceptionAddress && moduleName == other.moduleName &&
-               modulePathName == other.modulePathName && moduleBaseName == other.moduleBaseName && moduleOffset == other.moduleOffset &&
-               timestamp == other.timestamp && threadId == other.threadId && processId == other.processId && stackTrace == other.stackTrace &&
-               capturedException == other.capturedException && uncaughtExceptionCount == other.uncaughtExceptionCount &&
-               exceptionDescription == other.exceptionDescription && hasDetailedStackTrace == other.hasDetailedStackTrace && eax == other.eax &&
-               ebx == other.ebx && ecx == other.ecx && edx == other.edx && esi == other.esi && edi == other.edi && ebp == other.ebp && esp == other.esp &&
-               eip == other.eip && eflags == other.eflags && cs == other.cs && ds == other.ds && ss == other.ss && es == other.es && fs == other.fs &&
-               gs == other.gs && exceptionType == other.exceptionType && isFatal == other.isFatal && additionalInfo == other.additionalInfo;
-    }
-
-    [[nodiscard]] bool operator!=(const ENHANCED_EXCEPTION_INFO& other) const { return !(*this == other); }
+    [[nodiscard]] auto operator<=>(const ENHANCED_EXCEPTION_INFO&) const = default;
 };
 using PENHANCED_EXCEPTION_INFO = ENHANCED_EXCEPTION_INFO*;
 

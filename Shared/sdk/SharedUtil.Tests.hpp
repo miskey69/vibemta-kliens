@@ -114,15 +114,15 @@ void SString_Tests()
     {
         TEST_FUNCTION
         std::vector<SString> parts;
-        source.Split(delim, parts, maxAmmount, minAmmount);
+        source.Split(delim, parts, maxAmount, minAmount);
         assert(parts.front() == resultFirst);
         assert(parts.back() == resultLast);
         assert(parts.size() == resultCount);
         TEST_VARS
         SString     source;
         const char* delim;
-        uint        maxAmmount;
-        uint        minAmmount;
+        uint        maxAmount;
+        uint        minAmount;
         const char* resultFirst;
         const char* resultLast;
         uint        resultCount;
@@ -790,7 +790,7 @@ void SharedUtil_Hash_Tests()
         switch (algorithm)
         {
             case HmacAlgorithm::MD5:
-                hmacResult = SharedUtil::Hmac<CryptoPP::MD5>(data, key);
+                hmacResult = SharedUtil::Hmac<CryptoPP::Weak::MD5>(data, key);
                 break;
             case HmacAlgorithm::SHA1:
                 hmacResult = SharedUtil::Hmac<CryptoPP::SHA1>(data, key);

@@ -19,7 +19,7 @@ rem Update discord-rpc
 utils\premake5.exe %PREMAKE5_FLAGS% install_discord
 
 rem Generate solutions
-utils\premake5.exe %PREMAKE5_FLAGS% vs2022
+utils\premake5.exe %PREMAKE5_FLAGS% vs2026
 
 rem Create symlink from utils\settings.VisualStudio.json to Build\settings.VisualStudio.json
 if exist "%~dp0\Build\settings.VisualStudio.json" del "%~dp0\Build\settings.VisualStudio.json"

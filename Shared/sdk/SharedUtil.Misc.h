@@ -27,6 +27,32 @@
 #include "SharedUtil.Map.h"
 #include "SharedUtil.Logging.h"
 
+#if __cplusplus >= 201703L  // C++17
+    #ifndef __GLIBCXX__
+namespace std
+{
+    namespace filesystem
+    {
+        class path;
+    }
+}
+    #else
+namespace std
+{
+    namespace filesystem
+    {
+        inline namespace __cxx11 __attribute__((__abi_tag__("cxx11"))) {
+        }
+        inline _GLIBCXX_BEGIN_NAMESPACE_CXX11
+
+            class path;
+
+        _GLIBCXX_END_NAMESPACE_CXX11
+    }
+}
+    #endif
+#endif
+
 #ifdef WIN32
     // Forward declare basic windows types to avoid including windows.h here
     #ifdef STRICT
@@ -110,9 +136,7 @@ namespace SharedUtil
     // Output a UTF8 encoded messagebox
     // Used in the Win32 Client only
     //
-    #ifdef _WINDOWS_
     int MessageBoxUTF8(HWND hWnd, SString lpText, SString lpCaption, UINT uType);
-    #endif
 
     //
     // Return full path and filename of parent exe
@@ -187,7 +211,7 @@ namespace SharedUtil
     class GlobalUnlockGuard
     {
     public:
-        using MutexGuard = std::lock_guard<std::mutex>;
+        using MutexGuard = std::scoped_lock<std::mutex>;
 
         GlobalUnlockGuard() noexcept = default;
         explicit GlobalUnlockGuard(WinHGlobalHandle handle) noexcept : m_handle(handle) {}
@@ -231,13 +255,7 @@ namespace SharedUtil
 
         [[nodiscard]] WinHGlobalHandle release() noexcept
         {
-            return WithLock(
-                [&]() noexcept
-                {
-                    WinHGlobalHandle temp = m_handle;
-                    m_handle = nullptr;
-                    return temp;
-                });
+            return WithLock([&]() noexcept { return std::exchange(m_handle, nullptr); });
         }
 
         [[nodiscard]] WinHGlobalHandle get() const noexcept
@@ -259,15 +277,14 @@ namespace SharedUtil
         }
 
         template <typename Fn>
-        auto WithLock(Fn&& fn) const noexcept(noexcept(fn())) -> decltype(fn())
+        decltype(auto) WithLock(Fn&& fn) const noexcept(noexcept(std::invoke(std::forward<Fn>(fn))))
         {
             MutexGuard lock(m_mutex);
-            return fn();
+            return std::invoke(std::forward<Fn>(fn));
         }
 
         template <typename Fn>
-        auto WithLock(Fn&& fn) noexcept(noexcept(static_cast<const GlobalUnlockGuard*>(this)->WithLock(std::forward<Fn>(fn))))
-            -> decltype(static_cast<const GlobalUnlockGuard*>(this)->WithLock(std::forward<Fn>(fn)))
+        decltype(auto) WithLock(Fn&& fn) noexcept(noexcept(static_cast<const GlobalUnlockGuard*>(this)->WithLock(std::forward<Fn>(fn))))
         {
             return static_cast<const GlobalUnlockGuard*>(this)->WithLock(std::forward<Fn>(fn));
         }
@@ -397,12 +414,8 @@ namespace SharedUtil
     void    SetClipboardText(const SString& strText);
     SString GetClipboardText();
 
-    // Version checks
-    bool IsWindowsVersionOrGreater(WORD wMajorVersion, WORD wMinorVersion, WORD wServicePackMajor);
-    bool IsWindowsXPSP3OrGreater();
-    bool IsWindowsVistaOrGreater();
-    bool IsWindows7OrGreater();
-    bool IsWindows8OrGreater();
+    // Version check
+    bool IsWindows10OrGreater();
 
     bool QueryThreadEntryPointAddress(void* thread, DWORD* entryPointAddress);
 
@@ -457,6 +470,10 @@ namespace SharedUtil
     //
     // string stuff
     //
+
+#if __cplusplus >= 201703L  // C++17
+    std::string UTF8FilePath(const std::filesystem::path& input);
+#endif
 
     std::wstring MbUTF8ToUTF16(const SString& s);
 

@@ -67,18 +67,20 @@ void _cdecl OnPreCreateDevice(IDirect3D9* pDirect3D, UINT Adapter, D3DDEVTYPE De
 // Hook info
 #define HOOKPOS_PreCreateDevice  0x007F675B
 #define HOOKSIZE_PreCreateDevice 6
-DWORD                 RETURN_PreCreateDevice = 0x07F6781;
-void _declspec(naked) HOOK_PreCreateDevice()
+DWORD                         RETURN_PreCreateDevice = 0x07F6781;
+static void __declspec(naked) HOOK_PreCreateDevice()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
         // Run replaced code - these pushes create the original function parameters
         mov     ecx,dword ptr ds:[0C97C20h]        // pDirect3D
         push    0C97C28h                           // ppReturnedDeviceInterface
-        push    0C9C040h                           // pPresentationParameters
+        push    0C9C040h                           // pPresentationParameters  
         push    eax                                // BehaviorFlags (original eax)
-        mov     eax,dword ptr ds:[00C97C1Ch]
+        mov     eax,dword ptr ds:[00C97C1Ch]       
         mov     edx,  [ecx]
         push    eax                                // hFocusWindow
         mov     eax,dword ptr ds:[008E2428h]
@@ -92,7 +94,7 @@ void _declspec(naked) HOOK_PreCreateDevice()
         // Stack layout at ESP: [pDirect3D][Adapter][DeviceType][hFocusWindow][BehaviorFlags][pPresentationParameters][ppReturnedDeviceInterface]
 
         pushad  // Save all registers (32 bytes), ESP now at ESP-32
-
+        
         // Pass parameters to OnPreCreateDevice
         // After pushad, params start at ESP+32. Each push decreases ESP by 4,
         // so [esp+32+4*6] effectively walks backward through the params:
@@ -166,10 +168,12 @@ HRESULT _cdecl OnPostCreateDevice(HRESULT hResult)
 // Hook info
 #define HOOKPOS_PostCreateDevice  0x07F6784
 #define HOOKSIZE_PostCreateDevice 6
-DWORD                 RETURN_PostCreateDevice = 0x07F678A;
-DWORD                 RETURN_PostCreateDeviceB = 0x07F6799;
-void _declspec(naked) HOOK_PostCreateDevice()
+DWORD                         RETURN_PostCreateDevice = 0x07F678A;
+DWORD                         RETURN_PostCreateDeviceB = 0x07F6799;
+static void __declspec(naked) HOOK_PostCreateDevice()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {

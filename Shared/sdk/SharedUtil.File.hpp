@@ -25,15 +25,8 @@
 #include <cctype>
 #include <cstring>
 
-#if !defined(__cpp_lib_filesystem) || __cpp_lib_filesystem < 201703L
-    #ifndef _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING
-        #define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING 1
-    #endif
-    #include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#else
+#if __cplusplus >= 201703L  // C++17
     #include <filesystem>
-namespace fs = std::filesystem;
 #endif
 
 #ifdef _WIN32
@@ -68,6 +61,7 @@ namespace SharedUtil
 bool SharedUtil::FileExists(const std::string& strFilename) noexcept
 {
 #if __cplusplus >= 201703L
+    namespace fs = std::filesystem;
     std::error_code errorCode;
     return fs::is_regular_file(strFilename.c_str(), errorCode);
 #else
@@ -105,6 +99,7 @@ bool SharedUtil::FileExists(const std::string& strFilename) noexcept
 bool SharedUtil::DirectoryExists(const std::string& strPath) noexcept
 {
 #if __cplusplus >= 201703L
+    namespace fs = std::filesystem;
     std::error_code errorCode;
     return fs::is_directory(strPath.c_str(), errorCode);
 #else

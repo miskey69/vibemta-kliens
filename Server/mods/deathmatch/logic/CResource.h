@@ -11,7 +11,6 @@
 
 #pragma once
 
-#include <unordered_set>
 #include "packets/CResourceStartPacket.h"
 #include "packets/CResourceStopPacket.h"
 #include "packets/CEntityRemovePacket.h"
@@ -21,7 +20,8 @@
 #include <unzip.h>
 #include <list>
 #include <vector>
-#include <ehs/ehs.h>
+#include <functional>
+#include "httpd/Types.h"
 #include <time.h>
 
 #define MAX_AUTHOR_LENGTH        255
@@ -132,20 +132,22 @@ enum class EResourceState : unsigned char
     Stopping,  // the resource is stopping
 };
 
-// Return value for AddPlayerResourceStart. Used to distinguish normal race conditions
-// (resource stopped before ack arrived) from actually duplicate acks.
+// Result of CanPlayerTriggerResourceStart. Distinguishes a benign race (resource
+// stopped or restarted between server send and client ack) from a real duplicate
+// ack so the caller can rate-limit only the latter.
 enum class EPlayerResourceStartAck : unsigned char
 {
-    Accepted,    // ack is valid for the current start, event should fire
-    RaceMiss,    // resource not running or stale generation - normal race, no token charge
-    Duplicate,   // player already had their ack accepted for this start - genuine duplicate
+    Accepted,   // ack matches the current start cycle, fire onPlayerResourceStart
+    RaceMiss,   // resource not running for this start cycle, normal during start/stop races
+    Duplicate,  // ack already accepted for this start cycle, charge rate-limit token
 };
 
 // A resource is either a directory with files or a ZIP file which contains the content of such directory.
 // The directory or ZIP file must contain a meta.xml file, which describes the required content by the resource.
 // It's a process-like environment for scripts, maps, images and other files.
-class CResource : public EHS
+class CResource
 {
+    friend class CResourceManager;  // Allow CResourceManager access to protected members
     using KeyValueMap = CFastHashMap<SString, SString>;
 
 public:
@@ -163,7 +165,7 @@ public:
 
     void Reload();
 
-    EPlayerResourceStartAck AddPlayerResourceStart(CPlayer* player, unsigned int uiStartGeneration, bool bHasStartGeneration);
+    EPlayerResourceStartAck CanPlayerTriggerResourceStart(CPlayer* player, unsigned int playerStartCounter);
 
     // Get a resource default setting
     bool GetDefaultSetting(const char* szName, char* szValue, size_t sizeBuffer);
@@ -237,6 +239,19 @@ public:
 
     bool IsClientSynced() const noexcept { return m_bClientSync; }
 
+    // Runs the callback now if our elements have already reached the clients, otherwise holds onto it and runs it
+    // right after they do (see Start()). Used for things that need to tell clients about an element created moments
+    // earlier in onResourceStart, which wouldn't make sense to the client yet (e.g. warpPedIntoVehicle on a vehicle
+    // created in the same event) - dropping it outright would leave the server and clients permanently disagreeing
+    // about that element's state instead.
+    void RunOrDeferUntilClientSynced(std::function<void()> callback)
+    {
+        if (m_bClientSync)
+            callback();
+        else
+            m_PendingClientSyncCallbacks.push_back(std::move(callback));
+    }
+
     const SString& GetName() const noexcept { return m_strResourceName; }
 
     CLuaMain*       GetVirtualMachine() { return m_pVM; }
@@ -276,8 +291,6 @@ public:
 
     void           SetNetID(unsigned short usNetID) { m_usNetID = usNetID; }
     unsigned short GetNetID() const noexcept { return m_usNetID; }
-
-    unsigned int GetStartCounter() const noexcept { return m_startCounter; }
 
     uint GetScriptID() const noexcept { return m_uiScriptID; }
 
@@ -359,7 +372,7 @@ protected:
     void RefreshAutoPermissions(CXMLNode* pNodeAclRequest);
 
     void CommitAclRequest(const SAclRequest& request);
-    bool FindAclRequest(SAclRequest& request);
+    bool FindAclRequest(SAclRequest& result);
 
 private:
     bool CheckState();  // if the resource has no Dependents, stop it, if it has, start it. returns true if the resource is started.
@@ -382,6 +395,8 @@ private:
 private:
     EResourceState m_eState = EResourceState::None;
     bool           m_bClientSync = false;
+
+    std::vector<std::function<void()>> m_PendingClientSyncCallbacks;
 
     unsigned short m_usNetID = -1;
     uint           m_uiScriptID = -1;
@@ -410,8 +425,8 @@ private:
     CElementGroup* m_pDefaultElementGroup = nullptr;  // stores elements created by scripts in this resource
     CLuaMain*      m_pVM = nullptr;
 
-    unsigned int                      m_startCounter{};
-    std::unordered_set<CPlayer*>      m_playersStarted;
+    unsigned int                 m_startCounter{};
+    std::unordered_set<CPlayer*> m_isRunningForPlayer;
 
     KeyValueMap                    m_Info;
     std::list<CIncludedResources*> m_IncludedResources;  // we store them here temporarily, then read them once all the resources are loaded

@@ -47,22 +47,26 @@ void CClientModelManager::Add(const std::shared_ptr<CClientModel>& pModel)
 bool CClientModelManager::Remove(const std::shared_ptr<CClientModel>& pModel)
 {
     int modelId = pModel->GetModelID();
+
     if (m_Models[modelId] != nullptr)
     {
         CResource* parentResource = m_Models[modelId]->GetParentResource();
+
         if (parentResource)
-            parentResource->GetResourceModelStreamer()->FullyReleaseModel(modelId);
+            parentResource->GetResourceModelStreamer()->FullyReleaseModel(static_cast<std::uint16_t>(modelId));
+
         m_Models[modelId]->RestoreEntitiesUsingThisModel();
         m_Models[modelId] = nullptr;
         m_modelCount--;
         return true;
     }
+
     return false;
 }
 
 int CClientModelManager::GetFirstFreeModelID(void)
 {
-    const unsigned int uiMaxModelID = g_pGame->GetBaseIDforCOL();
+    const unsigned int uiMaxModelID = MAX_MODEL_DFF_ID;
     for (unsigned int i = 0; i < uiMaxModelID; i++)
     {
         CModelInfo* pModelInfo = g_pGame->GetModelInfo(i, true);
@@ -76,17 +80,20 @@ int CClientModelManager::GetFirstFreeModelID(void)
 
 int CClientModelManager::GetFreeTxdModelID()
 {
-    std::uint16_t usTxdId = g_pGame->GetPools()->GetTxdPool().GetFreeTextureDictonarySlot();
+    std::uint32_t usTxdId = g_pGame->GetPools()->GetTxdPool().GetFreeTextureDictonarySlot();
+
     if (usTxdId == -1)
         return INVALID_MODEL_ID;
+
     return MAX_MODEL_DFF_ID + usTxdId;
 }
 
-std::shared_ptr<CClientModel>  CClientModelManager::FindModelByID(int iModelID)
+std::shared_ptr<CClientModel> CClientModelManager::FindModelByID(int iModelID)
 {
     int32_t iMaxModelId = g_pGame->GetBaseIDforCOL();
 
-    if (iModelID < iMaxModelId)
+    // Lua-facing callers can supply invalid IDs, so check both bounds before indexing the model array.
+    if (iModelID >= 0 && iModelID < iMaxModelId)
         return m_Models[iModelID];
 
     return nullptr;

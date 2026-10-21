@@ -1922,10 +1922,12 @@ void CVersionUpdater::_DialogDownloading()
 ///////////////////////////////////////////////////////////////
 void CVersionUpdater::_DialogServerSaysUpdateQuestion()
 {
-    // Display message
+    // Include both versions so players can update manually if the auto-updater fails
+    // (e.g. blocked mirrors).
     GetQuestionBox().Reset();
     GetQuestionBox().SetTitle(_("MANDATORY UPDATE"));
-    GetQuestionBox().SetMessage(_("To join this server, you must update MTA.\n\n Do you want to update now ?"));
+    GetQuestionBox().SetMessage(SString(_("This server requires version %s.\nYou are currently running version %s.\n\nDo you want to update now?"),
+                                        *m_strServerSaysData, *GetProductVersion()));
     GetQuestionBox().SetButton(0, _("No"));
     GetQuestionBox().SetButton(1, _("Yes"));
     GetQuestionBox().Show();
@@ -1941,10 +1943,13 @@ void CVersionUpdater::_DialogServerSaysUpdateQuestion()
 ///////////////////////////////////////////////////////////////
 void CVersionUpdater::_DialogServerSaysRecommendQuestion()
 {
-    // Display message
+    // Include both versions so players can update manually if the auto-updater fails
+    // (e.g. blocked mirrors).
     GetQuestionBox().Reset();
     GetQuestionBox().SetTitle(_("OPTIONAL UPDATE"));
-    GetQuestionBox().SetMessage(_("Server says an update is recommended, but not essential.\n\n Do you want to update now ?"));
+    GetQuestionBox().SetMessage(
+        SString(_("This server recommends version %s, but it is not essential.\nYou are currently running version %s.\n\nDo you want to update now?"),
+                *m_strServerSaysData, *GetProductVersion()));
     GetQuestionBox().SetButton(0, _("No"));
     GetQuestionBox().SetButton(1, _("Yes"));
     GetQuestionBox().Show();
@@ -3652,8 +3657,20 @@ int CVersionUpdater::DoSendDownloadRequestToNextServer()
         iReqKB3035131 = IsHotFixInstalled("KB3035131") ? 0 : 1;
     }
 
-    bool bSecureBootEnabled =
-        (GetSystemRegistryValue((uint)HKEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Control\\SecureBoot\\State", "UEFISecureBootEnabled") == "\x01");
+    int           secureBootStatus = 0;
+    const SString secureBootValue =
+        GetSystemRegistryValue((uint)HKEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Control\\SecureBoot\\State", "UEFISecureBootEnabled", &secureBootStatus);
+    bool bSecureBootEnabled = false;
+    if (secureBootStatus > 0)
+    {
+        // Parse the registry value into a numeric flag
+        char*      secureBootEnd = nullptr;
+        const long secureBootNumeric = strtol(secureBootValue.c_str(), &secureBootEnd, 10);
+        if (secureBootEnd != secureBootValue.c_str() && *secureBootEnd == '\0')
+        {
+            bSecureBootEnabled = secureBootNumeric != 0;
+        }
+    }
     // Compile some system stats
     SDxStatus dxStatus;
     g_pGraphics->GetRenderItemManager()->GetDxStatus(dxStatus);

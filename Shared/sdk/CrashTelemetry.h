@@ -99,7 +99,7 @@ namespace CrashTelemetry
             }
 
             template <typename Callback>
-            void VisitNewestFirst(Callback&& callback) const
+            void VisitNewestFirst(Callback&& callback) const noexcept
             {
                 for (std::size_t i = 0; i < size; ++i)
                 {
@@ -146,7 +146,7 @@ namespace CrashTelemetry
         }
     }  // namespace detail
 
-    inline void SetAllocationContext(std::size_t sizeBytes, const void* resourcePtr, const char* resourceTag, const char* detail)
+    inline void SetAllocationContext(std::size_t sizeBytes, const void* resourcePtr, const char* resourceTag, const char* detail) noexcept
     {
         Context& current = detail::GetThreadState().current;
         current.requestedSize = sizeBytes;
@@ -189,7 +189,7 @@ namespace CrashTelemetry
         return state.current.requestedSize;
     }
 
-    inline std::string BuildAllocationTelemetryNote()
+    inline std::string BuildAllocationTelemetryNote() noexcept
     {
         std::array<Context, detail::kHistoryCapacity> snapshot{};
         std::size_t                                   snapshotCount = 0;
@@ -307,7 +307,8 @@ namespace CrashTelemetry
     class Scope
     {
     public:
-        Scope(std::size_t sizeBytes, const void* resourcePtr, const char* resourceTag, const char* detail) : m_previous(CaptureContext()), m_restore(true)
+        Scope(std::size_t sizeBytes, const void* resourcePtr, const char* resourceTag, const char* detail) noexcept
+            : m_previous(CaptureContext()), m_restore(true)
         {
             SetAllocationContext(sizeBytes, resourcePtr, resourceTag, detail);
             // Every CrashTelemetry::Scope marks a meaningful execution point. Add these to crash-prone hot paths
@@ -315,18 +316,11 @@ namespace CrashTelemetry
             // including nullptr dereferences, retains the last context in telemetry dumps.
             detail::RecordManualScopeSnapshot();
         }
-        ~Scope() noexcept
+        ~Scope()
         {
-            try
+            if (m_restore)
             {
-                if (m_restore)
-                {
-                    RestoreContext(m_previous);
-                }
-            }
-            catch (...)
-            {
-                // Destructor must not throw
+                RestoreContext(m_previous);
             }
         }
 
@@ -347,7 +341,7 @@ namespace CrashTelemetry
     {
         return 0;
     }
-    inline void SetAllocationContext(std::size_t, const void*, const char*, const char*)
+    inline void SetAllocationContext(std::size_t, const void*, const char*, const char*) noexcept
     {
     }
 
@@ -362,23 +356,16 @@ namespace CrashTelemetry
     inline void RestoreContext(const Context&) noexcept
     {
     }
-    inline std::string BuildAllocationTelemetryNote()
+    inline std::string BuildAllocationTelemetryNote() noexcept
     {
-        try
-        {
-            return {};
-        }
-        catch (...)
-        {
-            return {};
-        }
+        return {};
     }
 
     class Scope
     {
     public:
         Scope(std::size_t, const void*, const char*, const char*) noexcept {}
-        ~Scope() noexcept = default;
+        ~Scope() = default;
 
         Scope(const Scope&) = delete;
         Scope& operator=(const Scope&) = delete;

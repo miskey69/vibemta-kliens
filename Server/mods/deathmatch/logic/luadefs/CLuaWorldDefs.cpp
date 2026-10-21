@@ -203,14 +203,11 @@ int CLuaWorldDefs::getWaveHeight(lua_State* luaVM)
 
 int CLuaWorldDefs::getFPSLimit(lua_State* luaVM)
 {
-    unsigned short usLimit;
-    if (CStaticFunctionDefinitions::GetFPSLimit(usLimit))
-    {
-        lua_pushnumber(luaVM, usLimit);
-        return 1;
-    }
+    // int getFPSLimit ()
+    std::uint16_t fpsLimit;
+    CStaticFunctionDefinitions::GetFPSLimit(fpsLimit);
 
-    lua_pushboolean(luaVM, false);
+    lua_pushnumber(luaVM, fpsLimit);
     return 1;
 }
 
@@ -455,7 +452,7 @@ int CLuaWorldDefs::setWeatherBlended(lua_State* luaVM)
 
     if (!argStream.HasErrors())
     {
-        if (CStaticFunctionDefinitions::SetWeatherBlended(iWeather))
+        if (CStaticFunctionDefinitions::SetWeatherBlended(static_cast<unsigned char>(iWeather)))
         {
             lua_pushboolean(luaVM, true);
             return 1;
@@ -1131,15 +1128,15 @@ int CLuaWorldDefs::RestoreAllWorldModels(lua_State* luaVM)
 
 int CLuaWorldDefs::setFPSLimit(lua_State* luaVM)
 {
-    //  bool setFPSLimit ( int fpsLimit )
-    unsigned short usLimit;
+    // bool setFPSLimit ( int fpsLimit )
+    std::uint16_t fps;
 
     CScriptArgReader argStream(luaVM);
-    argStream.ReadNumber(usLimit);
+    argStream.ReadNumber(fps);
 
     if (!argStream.HasErrors())
     {
-        if (CStaticFunctionDefinitions::SetFPSLimit(usLimit, false))
+        if (CStaticFunctionDefinitions::SetFPSLimit(fps, false))
         {
             lua_pushboolean(luaVM, true);
             return 1;

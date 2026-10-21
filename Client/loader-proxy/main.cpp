@@ -535,7 +535,7 @@ BOOL WINAPI MyGetVersionExA(LPOSVERSIONINFOA versionInfo)
     // Execute the original function with the given parameter.
     BOOL result = Win32GetVersionExA(versionInfo);
 
-    // Restore the function pointer we've overriden to get here.
+    // Restore the function pointer we've overridden to get here.
     SetImportProcAddress("kernel32.dll", "GetVersionExA", FunctionPtrToFarProc(Win32GetVersionExA));
 
     // Run our startup code.
@@ -807,7 +807,7 @@ auto GetSystemErrorMessage(DWORD errorCode) -> std::wstring
 void ApplyDpiAwareness()
 {
     // Minimum version: Windows 10, version 1607
-    static BOOL(WINAPI * Win32SetProcessDpiAwarenessContext)(DPI_AWARENESS_CONTEXT value) = ([] {
+    static BOOL(WINAPI * Win32SetProcessDpiAwarenessContext)(DPI_AWARENESS_CONTEXT value) = ([]() -> decltype(Win32SetProcessDpiAwarenessContext) {
         HMODULE user32 = LoadLibraryW(L"user32");
         return user32 ? GetProcAddressAs<decltype(Win32SetProcessDpiAwarenessContext)>(user32, "SetProcessDpiAwarenessContext") : nullptr;
     })();
@@ -819,7 +819,7 @@ void ApplyDpiAwareness()
     }
 
     // Minimum version: Windows 8.1
-    static HRESULT(WINAPI * Win32SetProcessDpiAwareness)(PROCESS_DPI_AWARENESS value) = ([] {
+    static HRESULT(WINAPI * Win32SetProcessDpiAwareness)(PROCESS_DPI_AWARENESS value) = ([]() -> decltype(Win32SetProcessDpiAwareness) {
         HMODULE shcore = LoadLibraryW(L"shcore");
         return shcore ? GetProcAddressAs<decltype(Win32SetProcessDpiAwareness)>(shcore, "SetProcessDpiAwareness") : nullptr;
     })();

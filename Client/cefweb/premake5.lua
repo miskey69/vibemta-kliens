@@ -1,13 +1,12 @@
 project "Client Webbrowser"
 	language "C++"
-	cppdialect "C++20"
 	kind "SharedLib"
 	targetname "cefweb"
 	targetdir(buildpath("mta"))
+	clangtidy "On"
 
 	filter "system:windows"
 		includedirs { "../../vendor/sparsehash/src/windows" }
-		linkoptions { "/SAFESEH:NO" }
 		buildoptions { "-Zm130" }
 
 	filter {}

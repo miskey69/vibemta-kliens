@@ -49,7 +49,9 @@ class CVehicleSAInterface;
 
 // CPedClothesDesc && CClothes
 #define FUNC_CPedClothesDesc__SetTextureAndModel 0x5A8080  // CPedClothesDesc::SetTextureAndModel
+#define FUNC_CPedClothesDesc__Initialise         0x5A78F0  // CPedClothesDesc::Initialise
 #define FUNC_CClothes__RebuildPlayer             0x5A82C0  // CClothes::RebuildPlayer
+#define SIZEOF_CPedClothesDesc                   0x78
 
 // CAEPedWeaponAudioEntity
 #define FUNC_CAEPedWeaponAudioEntity__AddAudioEvent 0x4E69F0  // CAEPedWeaponAudioEntity::AddAudioEvent
@@ -65,7 +67,7 @@ public:
     unsigned int bIsStanding : 1;           // is ped standing on something
     unsigned int bWasStanding : 1;          // was ped standing on something
     unsigned int bIsLooking : 1;            // is ped looking at something or in a direction
-    unsigned int bIsRestoringLook : 1;      // is ped restoring head postion from a look
+    unsigned int bIsRestoringLook : 1;      // is ped restoring head position from a look
     unsigned int bIsAimingGun : 1;          // is ped aiming gun
     unsigned int bIsRestoringGun : 1;       // is ped moving gun back to default posn
     unsigned int bCanPointGunAtTarget : 1;  // can ped point gun at target
@@ -229,6 +231,15 @@ static_assert(sizeof(CPedStatSAInterface) == 0x34, "Invalid size for CPedStatSAI
 class CPedSAInterface : public CPhysicalSAInterface
 {
 public:
+    bool IsPlayer() const noexcept { return bPedType < 2; }
+
+    void SetCurrentWeapon(eWeaponSlot slot) { ((void(__thiscall*)(CPedSAInterface*, eWeaponSlot))FUNC_SetCurrentWeapon)(this, slot); }
+
+    void RemoveWeaponModel(std::uint32_t model) { ((void(__thiscall*)(CEntitySAInterface*, std::uint32_t))FUNC_RemoveWeaponModel)(this, model); }
+
+    void RemoveWeaponWhenEnteringVehicle(bool jetpack);
+
+public:
     CPedSoundEntitySAInterface       pedAudio;           // CAEPedAudioEntity
     CPedSoundSAInterface             pedSound;           // CAEPedSpeechAudioEntity
     CPedWeaponAudioEntitySAInterface weaponAudioEntity;  // CAEPedWeaponAudioEntity
@@ -260,9 +271,9 @@ public:
     CPedIKSAInterface pedIK;
     int               unk_52C;
 
-    int pedState;
-    int moveState;
-    int swimmingMoveState;
+    int                pedState;
+    PedMoveState::Enum moveState;
+    int                swimmingMoveState;
 
     int   unk_53C;
     float fHealth;
@@ -276,17 +287,17 @@ public:
     float         fRotationSpeed;
     float         fMoveAnim;
 
-    CEntitySAInterface* pContactEntity;
+    CEntitySAInterface* pContactEntity;  // m_standingOnEntity
     CVector             unk_56C;
     CVector             unk_578;
-    CEntitySAInterface* pLastContactEntity;
+    CEntitySAInterface* pLastContactEntity;  // m_contactEntity
 
     CVehicleSAInterface* pLastVehicle;
     CVehicleSAInterface* pVehicle;
     CVehicleSAInterface* vehicleDeadInFrontOf;
 
     int                  unk_594;
-    int                  bPedType;  // ped type? 0 = player, >1 = ped?
+    int                  bPedType;  // 0 = player, 1 = player2, > 1 = ped
     CPedStatSAInterface* pPedStats;
     CWeaponSAInterface   Weapons[WEAPONSLOT_MAX];
     eWeaponType          savedWeapon;
@@ -357,6 +368,7 @@ public:
     void Init();
 
     void SetModelIndex(std::uint32_t modelIndex) override;
+    void SetVisible(bool visible) override;
 
     bool InternalAttachEntityToEntity(DWORD entityInterface, const CVector* position, const CVector* rotation) override;
     void DetachPedFromEntity() override;
@@ -402,6 +414,7 @@ public:
 
     CVector* GetBonePosition(eBone bone, CVector* position) override;
     CVector* GetTransformedBonePosition(eBone bone, CVector* position) override;
+    void     UpdateRpHAnim() override;
 
     bool IsDucking() const override { return GetPedInterface()->pedFlags.bIsDucking; }
     void SetDucking(bool duck) override { GetPedInterface()->pedFlags.bIsDucking = duck; }
@@ -421,8 +434,9 @@ public:
     void           SetFightingStyle(eFightingStyle style, std::uint8_t styleExtra = 6) override;
 
     CEntity* GetContactEntity() const override;
+    bool     IsStandingOnEntity() const override { return GetPedInterface()->pContactEntity != nullptr; };
 
-    int GetRunState() const override { return GetPedInterface()->moveState; }
+    PedMoveState::Enum GetMoveState() const override { return GetPedInterface()->moveState; }
 
     bool GetCanBeShotInVehicle() const override { return GetPedInterface()->pedFlags.bCanBeShotInVehicle; }
     bool GetTestForShotInVehicle() const override { return GetPedInterface()->pedFlags.bTestForShotInVehicle; }
@@ -470,11 +484,15 @@ public:
     std::unique_ptr<CPedIK> GetPedIK() override { return std::make_unique<CPedIKSA>(GetPedIKInterface()); }
 
     CEntitySAInterface* GetTargetedObject() const override { return GetPedInterface()->pTargetedObject; }
-    PedState            GetPedState() const override { return static_cast<PedState>(GetPedInterface()->pedState); }
+    PedState::Enum      GetPedState() const override { return static_cast<PedState::Enum>(GetPedInterface()->pedState); }
+    void                SetPedState(PedState::Enum state) override { GetPedInterface()->pedState = static_cast<int>(state); }
 
     void GetAttachedSatchels(std::vector<SSatchelsData>& satchelsList) const override;
 
-    static void StaticSetHooks();
+    void SetInWaterFlags(bool inWater) override;
+
+    static void __fastcall RemoveWeaponWhenEnteringVehicle(CPedSAInterface* pedInterface, void*, int jetpack);
+    static void            StaticSetHooks();
 
 private:
     void ApplySwimAndSlopeRotations();

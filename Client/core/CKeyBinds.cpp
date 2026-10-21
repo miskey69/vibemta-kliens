@@ -347,6 +347,11 @@ bool RemoveBindTypeBinds(Container& binds, bool isContainerMutable, KeyBindType 
 
 bool CKeyBinds::ProcessMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    // A fatal fault dialog is pumping messages; dont drive key or web input
+    // into the half-destroyed GUI state behind it.
+    if (CLocalGUI::IsFaultDialogOpen())
+        return false;
+
     if (g_pCore->IsWebCoreLoaded() && !m_pCore->IsMenuVisible() && !m_pCore->GetConsole()->IsVisible() && !m_pCore->IsChatInputEnabled())
         g_pCore->GetWebCore()->ProcessInputMessage(uMsg, wParam, lParam);
 
@@ -383,6 +388,11 @@ bool CKeyBinds::ProcessCharacter(WPARAM wChar)
 
 bool CKeyBinds::ProcessKeyStroke(const SBindableKey* pKey, bool bState)
 {
+    // Same reason as ProcessMessage: OnLoseFocus also lands here when the
+    // fault dialog takes focus, and the menu reads below touch destroyed windows.
+    if (CLocalGUI::IsFaultDialogOpen())
+        return false;
+
     m_bProcessingKeyStroke = true;
     // If the console, chat input or menu is up, ignore any messages and unset
     // any already pressed */
@@ -569,7 +579,20 @@ void CKeyBinds::RemoveDeletedBinds()
 void CKeyBinds::ClearCommandsAndControls()
 {
     const auto predicate = [](const KeyBindPtr& bind)
-    { return !bind->isBeingDeleted && bind->type != KeyBindType::FUNCTION && bind->type != KeyBindType::CONTROL_FUNCTION; };
+    {
+        if (bind->isBeingDeleted)
+            return false;
+
+        if (bind->type == KeyBindType::COMMAND)
+        {
+            auto commandBind = static_cast<const CCommandBind*>(bind.get());
+            // Only remove resource bindings, preserve user bindings
+            return commandBind->context == BindingContext::RESOURCE;
+        }
+
+        // Remove all control bindings (GTA_CONTROL)
+        return bind->type == KeyBindType::GTA_CONTROL;
+    };
     RemoveBinds(m_binds, !m_bProcessingKeyStroke, predicate);
 }
 
@@ -630,9 +653,11 @@ bool CKeyBinds::AddCommand(const char* szKey, const char* szCommand, const char*
         CCommandBind* pUserAddedBind = FindCommandMatch(NULL, szCommand, szArguments, szResource, szKey, true, bState, true, false);
         if (pUserAddedBind)
         {
-            // Upgrade
+            // Upgrade user binding to resource binding
             pUserAddedBind->wasCreatedByScript = true;
             pUserAddedBind->isReplacingScriptKey = true;
+            pUserAddedBind->context = BindingContext::RESOURCE;
+            pUserAddedBind->sourceResource = szResource;
             assert(pUserAddedBind->originalScriptKey == szKey);
             return true;
         }
@@ -649,12 +674,19 @@ bool CKeyBinds::AddCommand(const char* szKey, const char* szCommand, const char*
     if (szResource)
     {
         bind->resource = szResource;
+        bind->sourceResource = szResource;
         bind->wasCreatedByScript = bScriptCreated;
+        bind->context = BindingContext::RESOURCE;
 
         if (bScriptCreated)
             bind->originalScriptKey = szKey;
         else if (szOriginalScriptKey)
             bind->originalScriptKey = szOriginalScriptKey;  // Will wait for script to addcommand before doing replace
+    }
+    else
+    {
+        // User-created binding (via /bind command)
+        bind->context = BindingContext::USER;
     }
 
     m_binds.emplace_back(bind.release());
@@ -1781,6 +1813,11 @@ void CKeyBinds::DoPreFramePulse()
     m_pCore->GetGame()->GetPad()->GetCurrentControllerState(&cs);
     m_pCore->GetGame()->GetPad()->SetLastControllerState(&cs);
 
+    // A fatal fault dialog is pumping messages; bind handlers reach CEGUI, so
+    // leave queued binds alone until the dialog ends the process.
+    if (CLocalGUI::IsFaultDialogOpen())
+        return;
+
     // HACK: chatbox binds
     if (m_pChatBoxBind)
     {
@@ -1899,7 +1936,12 @@ bool CKeyBinds::ControlLeftAndRight(CControllerState& cs)
 
 void CKeyBinds::DoPostFramePulse()
 {
-    SystemState systemState = CCore::GetSingleton().GetGame()->GetSystemState();
+    // Same reason as DoPreFramePulse: control binds can invoke Lua handlers that
+    // reach CEGUI while a fatal fault dialog is pumping messages.
+    if (CLocalGUI::IsFaultDialogOpen())
+        return;
+
+    SystemState::Enum systemState = CCore::GetSingleton().GetGame()->GetSystemState();
 
     if (m_bWaitingToLoadDefaults &&
         (systemState == SystemState::GS_FRONTEND || systemState == SystemState::GS_PLAYING_GAME))  // Are GTA controls actually initialized?
@@ -1962,8 +2004,14 @@ void CKeyBinds::DoPostFramePulse()
             }
             else
             {
-                cs.RightShoulder2 = g_bcControls[1].bState ? 255 : 0;  // Next Weapon
-                cs.LeftShoulder2 = g_bcControls[2].bState ? 255 : 0;   // Previous Weapon
+                bool bNextWeapon = g_bcControls[1].bState;
+                bool bPreviousWeapon = g_bcControls[2].bState;
+
+                if (bNextWeapon && bPreviousWeapon)
+                    bNextWeapon = bPreviousWeapon = false;
+
+                cs.RightShoulder2 = bNextWeapon ? 255 : 0;     // Next Weapon
+                cs.LeftShoulder2 = bPreviousWeapon ? 255 : 0;  // Previous Weapon
             }
 
             if (!ControlForwardsBackWards(cs))
@@ -1978,12 +2026,12 @@ void CKeyBinds::DoPostFramePulse()
 
             // * Enter Exit
             // * Change View
-            cs.ButtonSquare = (!bEnteringVehicle && g_bcControls[11].bState) ? 255 : 0;  // Jump
-            cs.ButtonCross = (g_bcControls[12].bState) ? 255 : 0;                        // Sprint
-            cs.ShockButtonR = (g_bcControls[13].bState) ? 255 : 0;                       // Look Behind
-            cs.ShockButtonL = (g_bcControls[14].bState) ? 255 : 0;                       // Crouch
-            cs.LeftShoulder1 = (g_bcControls[15].bState) ? 255 : 0;                      // Action
-            cs.m_bPedWalk = (g_bcControls[16].bState) ? 255 : 0;                         // Walk
+            cs.ButtonSquare = (!bEnteringVehicle && !bAimingWeapon && g_bcControls[11].bState) ? 255 : 0;  // Jump
+            cs.ButtonCross = (g_bcControls[12].bState) ? 255 : 0;                                          // Sprint
+            cs.ShockButtonR = (g_bcControls[13].bState) ? 255 : 0;                                         // Look Behind
+            cs.ShockButtonL = (g_bcControls[14].bState) ? 255 : 0;                                         // Crouch
+            cs.LeftShoulder1 = (g_bcControls[15].bState) ? 255 : 0;                                        // Action
+            cs.m_bPedWalk = (g_bcControls[16].bState) ? 255 : 0;                                           // Walk
             // * Vehicle Keys
             cs.RightShoulder1 = (g_bcControls[39].bState) ? 255 : 0;  // Aim Weapon
             cs.DPadRight = (g_bcControls[40].bState) ? 255 : 0;       // Conversation Yes
@@ -2184,7 +2232,7 @@ bool CKeyBinds::LoadFromXML(CXMLNode* pMainNode)
     else
         bLoadDefaults = true;
 
-    SystemState systemState = CCore::GetSingleton().GetGame()->GetSystemState();
+    SystemState::Enum systemState = CCore::GetSingleton().GetGame()->GetSystemState();
     if (bLoadDefaults)
     {
         if (systemState == SystemState::GS_FRONTEND || systemState == SystemState::GS_PLAYING_GAME)  // Are GTA controls actually initialized?
@@ -2666,4 +2714,151 @@ bool CKeyBinds::TriggerKeyStrokeHandler(const SString& strKey, bool bState, bool
         return m_KeyStrokeHandler(strKey, bState, bIsConsoleInputKey);
     }
     return true;
+}
+
+bool CKeyBinds::CommandExistsInContext(const char* key, const char* command, BindingContext context, bool checkState, bool state, const char* arguments,
+                                       const char* resource)
+{
+    if (!key || !command)
+        return false;
+
+    for (const KeyBindPtr& bind : m_binds)
+    {
+        if (bind->isBeingDeleted || bind->type != KeyBindType::COMMAND)
+            continue;
+
+        auto commandBind = static_cast<const CCommandBind*>(bind.get());
+
+        if (commandBind->context != context)
+            continue;
+
+        if (stricmp(commandBind->boundKey->szKey, key) != 0)
+            continue;
+
+        if (stricmp(commandBind->command.c_str(), command) != 0)
+            continue;
+
+        if (checkState && commandBind->triggerState != state)
+            continue;
+
+        if (arguments && commandBind->arguments != arguments)
+            continue;
+
+        if (resource && commandBind->resource != resource)
+            continue;
+
+        return true;
+    }
+
+    return false;
+}
+
+bool CKeyBinds::RemoveCommandFromContext(const char* key, const char* command, BindingContext context, bool checkState, bool state, const char* arguments,
+                                         const char* resource)
+{
+    if (!key || !command)
+        return false;
+
+    const auto predicate = [&](const KeyBindPtr& bind)
+    {
+        if (bind->isBeingDeleted || bind->type != KeyBindType::COMMAND)
+            return false;
+
+        auto commandBind = static_cast<const CCommandBind*>(bind.get());
+
+        if (commandBind->context != context)
+            return false;
+
+        if (stricmp(commandBind->boundKey->szKey, key) != 0)
+            return false;
+
+        if (stricmp(commandBind->command.c_str(), command) != 0)
+            return false;
+
+        if (checkState && commandBind->triggerState != state)
+            return false;
+
+        if (arguments && commandBind->arguments != arguments)
+            return false;
+
+        if (resource && commandBind->resource != resource)
+            return false;
+
+        return true;
+    };
+
+    return RemoveBinds(m_binds, !m_bProcessingKeyStroke, predicate);
+}
+
+bool CKeyBinds::HasAnyBindingForKey(const char* key, bool checkState, bool state)
+{
+    if (!key)
+        return false;
+
+    for (const KeyBindPtr& bind : m_binds)
+    {
+        if (bind->isBeingDeleted)
+            continue;
+
+        if (bind->type == KeyBindType::COMMAND)
+        {
+            auto commandBind = static_cast<const CCommandBind*>(bind.get());
+            if (stricmp(commandBind->boundKey->szKey, key) == 0)
+            {
+                if (!checkState || commandBind->triggerState == state)
+                    return true;
+            }
+        }
+        else if (bind->type == KeyBindType::FUNCTION)
+        {
+            auto functionBind = static_cast<const CKeyFunctionBind*>(bind.get());
+            if (stricmp(functionBind->boundKey->szKey, key) == 0)
+            {
+                if (!checkState || functionBind->triggerState == state)
+                    return true;
+            }
+        }
+        else if (bind->type == KeyBindType::CONTROL_FUNCTION)
+        {
+            auto controlBind = static_cast<const CControlFunctionBind*>(bind.get());
+            if (stricmp(controlBind->boundKey->szKey, key) == 0)
+            {
+                if (!checkState || controlBind->triggerState == state)
+                    return true;
+            }
+        }
+        else if (bind->type == KeyBindType::GTA_CONTROL)
+        {
+            auto gtaBind = static_cast<const CGTAControlBind*>(bind.get());
+            if (stricmp(gtaBind->boundKey->szKey, key) == 0)
+                return true;
+        }
+    }
+
+    return false;
+}
+
+bool CKeyBinds::HasBindingInContext(const char* key, BindingContext context, bool checkState, bool state)
+{
+    if (!key)
+        return false;
+
+    for (const KeyBindPtr& bind : m_binds)
+    {
+        if (bind->isBeingDeleted || bind->type != KeyBindType::COMMAND)
+            continue;
+
+        auto commandBind = static_cast<const CCommandBind*>(bind.get());
+
+        if (commandBind->context != context)
+            continue;
+
+        if (stricmp(commandBind->boundKey->szKey, key) != 0)
+            continue;
+
+        if (!checkState || commandBind->triggerState == state)
+            return true;
+    }
+
+    return false;
 }

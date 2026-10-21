@@ -10,13 +10,13 @@
  *****************************************************************************/
 #pragma once
 
+#include <string>
 #include <vector>
-#include "SString.h"
 
 class CAjaxResourceHandlerInterface
 {
 public:
-    virtual std::vector<SString>& GetGetData() = 0;
-    virtual std::vector<SString>& GetPostData() = 0;
-    virtual void                  SetResponse(SString data) = 0;
+    virtual std::vector<std::string>& GetGetData() = 0;
+    virtual std::vector<std::string>& GetPostData() = 0;
+    virtual void                      SetResponse(std::string data) = 0;
 };

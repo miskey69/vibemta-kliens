@@ -232,7 +232,14 @@ void CClientVariables::ValidateValues()
 
     ClampValue("console_pos", CVector2D(0, 0), CVector2D(uiViewportWidth - 32, uiViewportHeight - 32));
     ClampValue("console_size", CVector2D(50, 50), CVector2D(uiViewportWidth - 32, uiViewportHeight - 32));
-    ClampValue("fps_limit", 0, std::numeric_limits<short>::max());
+
+    // CVars need a better API for this (Issue #4427)
+    int temp;
+    CVARS_GET("fps_limit", temp);
+    std::uint16_t fps = static_cast<std::uint16_t>(temp);
+    FPSLimits::IsValidAndSetValid(fps, fps);
+    CVARS_SET("fps_limit", fps);
+
     ClampValue("chat_font", 0, 3);
     ClampValue("chat_lines", 3, 62);
     ClampValue("chat_color", CColor(0, 0, 0, 0), CColor(255, 255, 255, 255));
@@ -251,6 +258,8 @@ void CClientVariables::ValidateValues()
     ClampValue("chat_text_alignment", Chat::Text::Align::LEFT, Chat::Text::Align::RIGHT);
     ClampValue("text_scale", 0.8f, 3.0f);
     ClampValue("mastervolume", 0.0f, 1.0f);
+    ClampValue("radiovolume", 0.0f, 1.0f);
+    ClampValue("sfxvolume", 0.0f, 1.0f);
     ClampValue("mtavolume", 0.0f, 1.0f);
     ClampValue("voicevolume", 0.0f, 1.0f);
     ClampValue("mapalpha", 0, 255);
@@ -288,6 +297,7 @@ void CClientVariables::LoadDefaults()
     DEFAULT("console_size", CVector2D(200, 200));              // console size
     DEFAULT("serverbrowser_size", CVector2D(720.0f, 495.0f));  // serverbrowser size
     DEFAULT("fps_limit", 100);                                 // frame limiter
+    DEFAULT("vsync", true);                                    // vsync
     DEFAULT("chat_font", 2);                                   // chatbox font type
     DEFAULT("chat_lines", 10);                                 // chatbox lines
     DEFAULT("chat_color", CColor(0, 0, 0, 0));                 // chatbox background color
@@ -317,6 +327,8 @@ void CClientVariables::LoadDefaults()
     DEFAULT("fly_with_mouse", false);                                       // flying with mouse controls
     DEFAULT("steer_with_mouse", false);                                     // steering with mouse controls
     DEFAULT("classic_controls", false);                                     // classic/standard controls
+    DEFAULT("controller_device", _S("auto"));                               // auto / xinput:N / dinput:guid
+    DEFAULT("controller_vibration", true);                                  // XInput rumble from GTA pad shake
     DEFAULT("mastervolume", 1.0f);                                          // master volume
     DEFAULT("mtavolume", 1.0f);                                             // custom sound's volume
     DEFAULT("voicevolume", 1.0f);                                           // voice chat output volume
@@ -384,9 +396,12 @@ void CClientVariables::LoadDefaults()
     DEFAULT("discord_rpc_share_data", false);            // Consistent Rich Presence data sharing
     DEFAULT("discord_rpc_share_data_firsttime", false);  // Display the user data sharing consent dialog box - for the first time
     DEFAULT("browser_enable_gpu", true);                 // Enable GPU in CEF? (allows stuff like WebGL to function)
+    DEFAULT("browser_enable_video_acceleration", true);  // Enable hardware video decoding in CEF?
     DEFAULT("process_cpu_affinity", true);               // Set CPU 0 affinity to improve game performance and fix the known issue in single-threaded games
     DEFAULT("ask_before_disconnect", true);              // Ask before disconnecting from a server
     DEFAULT("allow_steam_client", false);                // Allow connecting with the local Steam client (to set GTA:SA ingame status)
+    DEFAULT("use_mouse_sensitivity_for_aiming",
+            false);  // It uses the horizontal mouse sensitivity for aiming, making the Y-axis sensitivity the same as the X-axis
 
     if (!Exists("locale"))
     {
@@ -406,4 +421,7 @@ void CClientVariables::LoadDefaults()
 #if 0
     DEFAULT ( "streaming_memory",           50 );                           // Streaming memory
 #endif
+
+#undef DEFAULT
+#undef _S
 }

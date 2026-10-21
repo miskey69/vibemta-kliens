@@ -55,8 +55,10 @@ static void HandleWaterCannonHit(CVehicleSAInterface* pGameVehicle, CColPointSAI
     TriggerVehicleWeaponHitEvent(EVehicleWeaponType::WATER_CANNON, pGameVehicle, pHitGameEntity, pColPoint->Position, iModel, pColPoint->ucSurfaceTypeB);
 }
 
-static void _declspec(naked) HOOK_CWaterCannon__Render()
+static void __declspec(naked) HOOK_CWaterCannon__Render()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {

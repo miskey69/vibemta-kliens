@@ -85,7 +85,7 @@ typedef void(BulletImpactHandler)(class CPed* pInitiator, class CEntity* pVictim
 typedef void(BulletFireHandler)(class CPed* pInitiator, const CVector* pvecStartPosition, const CVector* pvecEndPosition);
 typedef bool(DamageHandler)(class CPed* pDamagePed, class CEventDamage* pEvent);
 typedef void(DeathHandler)(class CPed* pKilledPed, unsigned char ucDeathReason, unsigned char ucBodyPart);
-typedef void(FireHandler)(class CFire* pFire);
+typedef bool(FireHandler)(class CEntitySAInterface* target, class CEntitySAInterface* creator);
 typedef bool(ProjectileStopHandler)(class CEntity* owner, enum eWeaponType weaponType, class CVector* origin, float fForce, class CVector* target,
                                     class CEntity* targetEntity);
 typedef void(ProjectileHandler)(class CEntity* owner, class CProjectile* projectile, class CProjectileInfo* projectileInfo, enum eWeaponType weaponType,
@@ -97,6 +97,7 @@ typedef void(Render3DStuffHandler)();
 typedef void(PreRenderSkyHandler)();
 typedef void(RenderHeliLightHandler)();
 typedef bool(ChokingHandler)(unsigned char ucWeaponType);
+typedef void(PreWeatherUpdateHandler)();
 typedef void(PreWorldProcessHandler)();
 typedef void(PostWorldProcessHandler)();
 typedef void(PostWorldProcessPedsAfterPreRenderHandler)();
@@ -228,6 +229,7 @@ public:
     virtual void  SetChokingHandler(ChokingHandler* pChokingHandler) = 0;
     virtual void  SetProjectileHandler(ProjectileHandler* pProjectileHandler) = 0;
     virtual void  SetProjectileStopHandler(ProjectileStopHandler* pProjectileHandler) = 0;
+    virtual void  SetPreWeatherUpdateHandler(PreWeatherUpdateHandler* pHandler) = 0;
     virtual void  SetPreWorldProcessHandler(PreWorldProcessHandler* pHandler) = 0;
     virtual void  SetPostWorldProcessHandler(PostWorldProcessHandler* pHandler) = 0;
     virtual void  SetPostWorldProcessPedsAfterPreRenderHandler(PostWorldProcessPedsAfterPreRenderHandler* pHandler) = 0;

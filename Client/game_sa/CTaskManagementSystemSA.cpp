@@ -22,14 +22,13 @@
 #include "TaskPhysicalResponseSA.h"
 #include "TaskSA.h"
 #include "TaskSecondarySA.h"
+#include "TaskSimpleSwimSA.h"
 
 extern CGameSA* pGame;
 
 using namespace std;
 
 void HOOK_CTask_Operator_Delete();
-
-CTaskSAInterface* pTempTaskInterface = 0;
 
 CTaskManagementSystemSA::CTaskManagementSystemSA()
 {
@@ -198,6 +197,9 @@ CTaskSA* CTaskManagementSystemSA::CreateAppropriateTask(CTaskSAInterface* pTaskI
         case TASK_COMPLEX_SUNBATHE:
             pTaskSA = new CTaskComplexSunbatheSA;
             break;
+        case TASK_SIMPLE_SWIM:
+            pTaskSA = new CTaskSimpleSwimSA;
+            break;
 
         // Car accessories
         case TASK_SIMPLE_CAR_SET_PED_IN_AS_PASSENGER:
@@ -272,29 +274,22 @@ CTaskSA* CTaskManagementSystemSA::CreateAppropriateTask(CTaskSAInterface* pTaskI
 }
 
 // HOOKS
-__declspec(noinline) void OnMY_Task_Operator_Delete(CTaskSAInterface* pTaskInterface)
+static void OnMY_Task_Operator_Delete(CTaskSAInterface* pTaskInterface)
 {
-    pGame->GetTaskManagementSystem()->RemoveTask(pTempTaskInterface);
+    pGame->GetTaskManagementSystem()->RemoveTask(pTaskInterface);
 }
 
-void _declspec(naked) HOOK_CTask_Operator_Delete()
+static void __declspec(naked) HOOK_CTask_Operator_Delete()
 {
-    // clang-format off
-    __asm
-        {
-        mov     eax, [esp+4]
-        mov     pTempTaskInterface, eax
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
 
-        pushad
-        }
-    // clang-format on
-
-    OnMY_Task_Operator_Delete(pTempTaskInterface);
-
-    // Continue on our merry way....
     // clang-format off
     __asm
     {
+        pushad
+        push    [esp + 32 + 4]
+        call    OnMY_Task_Operator_Delete
+        add     esp, 4
         popad
 
         mov     eax, 0xB744A8

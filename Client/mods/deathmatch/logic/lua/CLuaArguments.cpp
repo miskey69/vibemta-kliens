@@ -144,16 +144,18 @@ void CLuaArguments::PushArguments(lua_State* luaVM) const
     }
 }
 
-void CLuaArguments::PushAsTable(lua_State* luaVM, CFastHashMap<CLuaArguments*, int>* pKnownTables) const
+void CLuaArguments::PushAsTable(lua_State* luaVM, CFastHashMap<CLuaArguments*, int>* pKnownTables, bool isArray) const
 {
     // Ensure there is enough space on the Lua stack
     LUA_CHECKSTACK(luaVM, 4);
 
-    bool bKnownTablesCreated = false;
+    bool                              usedLocalKnownTables = false;
+    CFastHashMap<CLuaArguments*, int> localKnownTables;
+
     if (!pKnownTables)
     {
-        pKnownTables = new CFastHashMap<CLuaArguments*, int>();
-        bKnownTablesCreated = true;
+        pKnownTables = &localKnownTables;
+        usedLocalKnownTables = true;
 
         lua_newtable(luaVM);
         // using registry to make it fail safe, else we'd have to carry
@@ -172,21 +174,33 @@ void CLuaArguments::PushAsTable(lua_State* luaVM, CFastHashMap<CLuaArguments*, i
     lua_pop(luaVM, 1);
     pKnownTables->insert(std::make_pair((CLuaArguments*)this, size));
 
-    vector<CLuaArgument*>::const_iterator iter = m_Arguments.begin();
-    for (; iter != m_Arguments.end() && (iter + 1) != m_Arguments.end(); iter++)
+    // map
+    if (!isArray)
     {
-        (*iter)->Push(luaVM, pKnownTables);  // index
-        iter++;
-        (*iter)->Push(luaVM, pKnownTables);  // value
-        lua_settable(luaVM, -3);
+        vector<CLuaArgument*>::const_iterator iter = m_Arguments.begin();
+        for (; iter != m_Arguments.end() && (iter + 1) != m_Arguments.end(); iter++)
+        {
+            (*iter)->Push(luaVM, pKnownTables);  // index
+            iter++;
+            (*iter)->Push(luaVM, pKnownTables);  // value
+            lua_settable(luaVM, -3);
+        }
+    }
+    else  // array
+    {
+        int index = 1;
+        for (auto iter = m_Arguments.begin(); iter != m_Arguments.end(); ++iter)
+        {
+            (*iter)->Push(luaVM, pKnownTables);
+            lua_rawseti(luaVM, -2, index++);
+        }
     }
 
-    if (bKnownTablesCreated)
+    if (usedLocalKnownTables)
     {
         // clear the cache
         lua_pushnil(luaVM);
         lua_setfield(luaVM, LUA_REGISTRYINDEX, "cache");
-        delete pKnownTables;
     }
 }
 
@@ -201,14 +215,26 @@ void CLuaArguments::PushArguments(const CLuaArguments& Arguments)
 bool CLuaArguments::Call(CLuaMain* pLuaMain, const CLuaFunctionRef& iLuaFunction, CLuaArguments* returnValues) const
 {
     assert(pLuaMain);
-    TIMEUS startTime = GetTimeUs();
+    const bool   timingActive = CClientPerfStatLuaTiming::GetSingleton()->IsActive();
+    const TIMEUS startTime = timingActive ? GetTimeUs() : 0;
 
-    // Add the function name to the stack and get the event from the table
     lua_State* luaVM = pLuaMain->GetVirtualMachine();
     assert(luaVM);
-    LUA_CHECKSTACK(luaVM, 2);
+    LUA_CHECKSTACK(luaVM, 1);
     int luaStackPointer = lua_gettop(luaVM);
+
+    // Get the function from the registry
     lua_getref(luaVM, iLuaFunction.ToInt());
+
+    // If that function doesn't exist, return false
+    if (lua_isnil(luaVM, -1))
+    {
+        // cleanup the stack
+        while (lua_gettop(luaVM) - luaStackPointer > 0)
+            lua_pop(luaVM, 1);
+
+        return false;
+    }
 
     // Push our arguments onto the stack
     PushArguments(luaVM);
@@ -245,7 +271,10 @@ bool CLuaArguments::Call(CLuaMain* pLuaMain, const CLuaFunctionRef& iLuaFunction
             lua_pop(luaVM, 1);
     }
 
-    CClientPerfStatLuaTiming::GetSingleton()->UpdateLuaTiming(pLuaMain, pLuaMain->GetFunctionTag(iLuaFunction.ToInt()), GetTimeUs() - startTime);
+    if (timingActive)
+    {
+        CClientPerfStatLuaTiming::GetSingleton()->UpdateLuaTiming(pLuaMain, pLuaMain->GetFunctionTag(iLuaFunction.ToInt()), GetTimeUs() - startTime);
+    }
     return true;
 }
 
@@ -253,7 +282,8 @@ bool CLuaArguments::CallGlobal(CLuaMain* pLuaMain, const char* szFunction, CLuaA
 {
     assert(pLuaMain);
     assert(szFunction);
-    TIMEUS startTime = GetTimeUs();
+    const bool   timingActive = CClientPerfStatLuaTiming::GetSingleton()->IsActive();
+    const TIMEUS startTime = timingActive ? GetTimeUs() : 0;
 
     // Add the function name to the stack and get the event from the table
     lua_State* luaVM = pLuaMain->GetVirtualMachine();
@@ -309,7 +339,10 @@ bool CLuaArguments::CallGlobal(CLuaMain* pLuaMain, const char* szFunction, CLuaA
             lua_pop(luaVM, 1);
     }
 
-    CClientPerfStatLuaTiming::GetSingleton()->UpdateLuaTiming(pLuaMain, szFunction, GetTimeUs() - startTime);
+    if (timingActive)
+    {
+        CClientPerfStatLuaTiming::GetSingleton()->UpdateLuaTiming(pLuaMain, szFunction, GetTimeUs() - startTime);
+    }
     return true;
 }
 
@@ -345,6 +378,14 @@ CLuaArgument* CLuaArguments::PushString(const std::string& string)
 }
 
 CLuaArgument* CLuaArguments::PushString(const std::string_view& string)
+{
+    CLuaArgument* arg = new CLuaArgument();
+    arg->ReadString(string);
+    m_Arguments.push_back(arg);
+    return arg;
+}
+
+CLuaArgument* CLuaArguments::PushString(const CStringName& string)
 {
     CLuaArgument* arg = new CLuaArgument();
     arg->ReadString(string);
@@ -480,7 +521,7 @@ bool CLuaArguments::ReadFromBitStream(NetBitStreamInterface& bitStream, std::vec
         for (unsigned int ui = 0; ui < uiNumArgs; ++ui)
         {
             CLuaArgument* pArgument = new CLuaArgument();
-            if (!pArgument->ReadFromBitStream(bitStream, pKnownTables))
+            if (!pArgument->ReadFromBitStream(bitStream, pKnownTables, uiDepth + 1))
             {
                 delete pArgument;
                 if (bKnownTablesCreated)
@@ -567,49 +608,53 @@ json_object* CLuaArguments::WriteTableToJSONObject(bool bSerialize, CFastHashMap
         bKnownTablesCreated = true;
     }
 
-    pKnownTables->insert(std::make_pair(this, pKnownTables->size()));
+    pKnownTables->insert({this, pKnownTables->size()});
 
-    bool                                  bIsArray = true;
-    unsigned int                          iArrayPos = 1;  // lua arrays are 1 based
-    vector<CLuaArgument*>::const_iterator iter = m_Arguments.begin();
+    bool                                                 bIsArray = true;
+    std::vector<std::pair<std::uint32_t, CLuaArgument*>> vecSortedArguments;  // lua arrays are not necessarily sorted
+    std::vector<CLuaArgument*>::const_iterator           iter = m_Arguments.begin();
     for (; iter != m_Arguments.end(); iter += 2)
     {
         CLuaArgument* pArgument = *iter;
         if (pArgument->GetType() == LUA_TNUMBER)
         {
-            double       num = pArgument->GetNumber();
-            unsigned int iNum = static_cast<unsigned int>(num);
-            if (num == iNum)
-            {
-                if (iArrayPos != iNum)  // check if the value matches its index in the table
-                {
-                    bIsArray = false;
-                    break;
-                }
-            }
-            else
-            {
-                bIsArray = false;
-                break;
-            }
+            double const num = pArgument->GetNumber();
+            auto const   iNum = static_cast<std::uint32_t>(num);
+
+            vecSortedArguments.push_back({iNum, *(iter + 1)});
         }
         else
         {
             bIsArray = false;
             break;
         }
-        iArrayPos++;
     }
 
-    if (bIsArray)
+    if (bIsArray && !vecSortedArguments.empty())  // the table could possibly be an array
     {
-        json_object*                          my_array = json_object_new_array();
-        vector<CLuaArgument*>::const_iterator iter = m_Arguments.begin();
-        for (; iter != m_Arguments.end(); iter++)
+        // sort the table based on the keys (already handled correctly by std::pair)
+        std::sort(vecSortedArguments.begin(), vecSortedArguments.end());
+
+        // only the first and last element are checked, everything else is correct by default because the vector was sorted
+        // the last key should match the size of vecSortedArguments to ensure there are no gaps in this array-like table
+        auto const iFirstKey = vecSortedArguments.front().first;
+        auto const iLastKey = vecSortedArguments.back().first;
+
+        auto const iFirstArrayPos = 1U;  // lua arrays are 1 based
+        auto const iLastArrayPos = static_cast<std::uint32_t>(vecSortedArguments.size());
+
+        if (iFirstKey != iFirstArrayPos || iLastKey != iLastArrayPos)
         {
-            iter++;  // skip the key values
-            CLuaArgument* pArgument = *iter;
-            json_object*  object = pArgument->WriteToJSONObject(bSerialize, pKnownTables);
+            bIsArray = false;
+        }
+    }
+
+    if (bIsArray)  // the table is definitely an array
+    {
+        json_object* my_array = json_object_new_array();
+        for (auto const& [iKey, pArgument] : vecSortedArguments)
+        {
+            json_object* object = pArgument->WriteToJSONObject(bSerialize, pKnownTables);
             if (object)
             {
                 json_object_array_add(my_array, object);

@@ -429,7 +429,6 @@ public:
     void ResetInterpolation();
 
     void Interpolate();
-    void UpdateKeysync();
 
     void GetInitialDoorStates(SFixedArray<unsigned char, MAX_DOORS>& ucOutDoorStates);
 
@@ -547,8 +546,8 @@ public:
     void ApplyAudioSettings();
     void ResetAudioSettings();
 
-    bool GetDummyPosition(VehicleDummies dummy, CVector& position) const;
-    bool SetDummyPosition(VehicleDummies dummy, const CVector& position);
+    bool GetDummyPosition(VehicleDummies::Enum dummy, CVector& position) const;
+    bool SetDummyPosition(VehicleDummies::Enum dummy, const CVector& position);
     bool ResetDummyPositions();
 
     bool SpawnFlyingComponent(const eCarNodes& nodeID, const eCarComponentCollisionTypes& collisionType, std::int32_t removalTime);
@@ -700,7 +699,7 @@ protected:
             float         fLastAlpha;
             unsigned long ulStartTime;
             unsigned long ulFinishTime;
-        } pos;
+        } pos{};
 
         struct
         {
@@ -712,8 +711,8 @@ protected:
             float         fLastAlpha;
             unsigned long ulStartTime;
             unsigned long ulFinishTime;
-        } rot;
-    } m_interp;
+        } rot{};
+    } m_interp{};
 
     unsigned long m_ulIllegalTowBreakTime;
 

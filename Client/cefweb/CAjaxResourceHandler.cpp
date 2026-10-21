@@ -13,7 +13,7 @@
 #include "CAjaxResourceHandler.h"
 #undef min
 
-CAjaxResourceHandler::CAjaxResourceHandler(std::vector<SString> vecGet, std::vector<SString> vecPost, const CefString& strMime)
+CAjaxResourceHandler::CAjaxResourceHandler(std::vector<std::string> vecGet, std::vector<std::string> vecPost, const CefString& strMime)
     : m_vecGetData(std::move(vecGet)), m_vecPostData(std::move(vecPost)), m_strMime(strMime)
 {
 }
@@ -27,7 +27,7 @@ CAjaxResourceHandler::~CAjaxResourceHandler()
     m_callback = nullptr;
 }
 
-void CAjaxResourceHandler::SetResponse(SString data)
+void CAjaxResourceHandler::SetResponse(std::string data)
 {
     // Prevent response corruption: ignore subsequent calls after data is set
     if (m_bHasData) [[unlikely]]

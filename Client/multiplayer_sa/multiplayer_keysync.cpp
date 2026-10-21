@@ -12,6 +12,7 @@
 #include "StdInc.h"
 
 #include <game/CWeaponStatManager.h>
+#include <cstdint>
 
 extern CMultiplayerSA* pMultiplayer;
 
@@ -73,9 +74,38 @@ namespace
     }
 }
 
+// Fight strafing needs mouse look, but CTaskSimpleFight::ProcessPed then uses
+// the observer's camera front vector to turn remote fighters. Skip only that
+// heading write remotely; local and native target-entity turning stay intact.
+#define HOOKPOS_CTaskSimpleFight_ProcessPed_CameraHeading   0x62A054
+#define HOOKSIZE_CTaskSimpleFight_ProcessPed_CameraHeading  5
+#define HOOKCHECK_CTaskSimpleFight_ProcessPed_CameraHeading 0xA1
+constexpr std::uintptr_t RETURN_CTaskSimpleFight_ProcessPed_CameraHeading = 0x62A059;
+constexpr std::uintptr_t SKIP_CTaskSimpleFight_ProcessPed_CameraHeading = 0x62A083;
+
+static void __declspec(naked) HOOK_CTaskSimpleFight_ProcessPed_CameraHeading()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // The replaced instruction only loads EAX. Neither continuation consumes
+    // integer flags before the epilogue overwrites them, so no save is needed.
+    // clang-format off
+    __asm
+    {
+        cmp     byte ptr [bNotInLocalContext], 0
+        jne     remote
+        mov     eax, dword ptr ds:[0xB6F32C]  // Original load of Cams[0].Front.x
+        jmp     dword ptr [RETURN_CTaskSimpleFight_ProcessPed_CameraHeading]
+    remote:
+        jmp     dword ptr [SKIP_CTaskSimpleFight_ProcessPed_CameraHeading]
+    }
+    // clang-format on
+}
+
 VOID InitKeysyncHooks()
 {
     // OutputDebugString("InitKeysyncHooks");
+    EZHookInstallChecked(CTaskSimpleFight_ProcessPed_CameraHeading);
     HookInstallMethod(VTBL_CPlayerPed__ProcessControl, (DWORD)HOOK_CPlayerPed__ProcessControl);
     HookInstallMethod(VTBL_CAutomobile__ProcessControl, (DWORD)HOOK_CAutomobile__ProcessControl);
     HookInstallMethod(VTBL_CMonsterTruck__ProcessControl, (DWORD)HOOK_CMonsterTruck__ProcessControl);
@@ -337,8 +367,7 @@ void SwitchContext(CPed* thePed)
                     pGameInterface->SetGravity(data->m_fGravity);
 
                     // Disable mouselook for remote players (so the mouse doesn't affect them)
-                    // Only disable mouselook if they're not holding a 1st-person weapon
-                    // And if they're not under-water
+                    // Disable mouselook if they're not holding a 1st-person weapon
                     bool bDisableMouseLook = true;
                     if (pWeapon)
                     {
@@ -348,6 +377,16 @@ void SwitchContext(CPed* thePed)
                             bDisableMouseLook = false;
                         }
                     }
+
+                    // Fight strafing needs mouse-look movement for every melee weapon,
+                    // including weapons outside the unarmed slot (GitHub Issue #395).
+                    if (pWeaponStat && pWeaponStat->GetFireType() == FIRETYPE_MELEE && data->m_pad.NewState.RightShoulder1 != 0 &&
+                        thePed->GetPedIntelligence()->GetFightTask())
+                        bDisableMouseLook = false;
+
+                    // Disable mouse look if they're not underwater (Ped vertical rotation when diving)
+                    // TODO - After merge PR #4401
+
                     bMouseLookEnabled = *(bool*)0xB6EC2E;
                     if (bDisableMouseLook)
                         *(bool*)0xB6EC2E = false;
@@ -537,8 +576,32 @@ struct CSavedRegs
 };
 static CSavedRegs PlayerPed__ProcessControl_Saved;
 
-VOID _declspec(naked) HOOK_CPlayerPed__ProcessControl()
+static void ConsumeRemoteMeleeSpecialPress()
 {
+    if (!bNotInLocalContext || !pContextSwitchedPed)
+        return;
+
+    auto* pPad = static_cast<CPadSA*>(pGameInterface->GetPad())->GetInterface();
+    if ((!pPad->NewState.RightShoulder1 && !pPad->OldState.RightShoulder1) || (!pPad->NewState.ButtonTriangle && !pPad->OldState.ButtonTriangle))
+        return;
+
+    CWeapon*     pWeapon = pContextSwitchedPed->GetWeapon(pContextSwitchedPed->GetCurrentWeaponSlot());
+    CWeaponStat* pWeaponInfo = pWeapon ? pGameInterface->GetWeaponStatManager()->GetWeaponStats(pWeapon->GetType()) : nullptr;
+    if (!pWeaponInfo || pWeaponInfo->GetFireType() != FIRETYPE_MELEE)
+        return;
+
+    // GTA's MeleeAttackJustDown treats F as an edge, but remote OldState is
+    // otherwise advanced only by incoming packets. Consume this combat edge
+    // after one simulation step so a held packet cannot requeue command 12 on
+    // every frame. Preserve the held state and other controls (including normal
+    // vehicle entry); ReturnContextToLocalPlayer stores this history in the pad.
+    pPad->OldState.ButtonTriangle = pPad->NewState.ButtonTriangle;
+}
+
+static void __declspec(naked) HOOK_CPlayerPed__ProcessControl()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // Assumes no reentrancy
     // clang-format off
     __asm
@@ -570,6 +633,7 @@ VOID _declspec(naked) HOOK_CPlayerPed__ProcessControl()
     }
     // clang-format on
 
+    ConsumeRemoteMeleeSpecialPress();
     ReturnContextToLocalPlayer();
 
     // clang-format off
@@ -581,8 +645,10 @@ VOID _declspec(naked) HOOK_CPlayerPed__ProcessControl()
     // clang-format on
 }
 
-void _declspec(naked) CPlayerPed__ProcessControl_Abort()
+static void __declspec(naked) CPlayerPed__ProcessControl_Abort()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -612,8 +678,10 @@ void _declspec(naked) CPlayerPed__ProcessControl_Abort()
 
 //--------------------------------------------------------------------------------------------
 
-VOID _declspec(naked) HOOK_CAutomobile__ProcessControl()
+static void __declspec(naked) HOOK_CAutomobile__ProcessControl()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -647,8 +715,10 @@ VOID _declspec(naked) HOOK_CAutomobile__ProcessControl()
 
 //--------------------------------------------------------------------------------------------
 
-VOID _declspec(naked) HOOK_CMonsterTruck__ProcessControl()
+static void __declspec(naked) HOOK_CMonsterTruck__ProcessControl()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -682,8 +752,10 @@ VOID _declspec(naked) HOOK_CMonsterTruck__ProcessControl()
 
 //--------------------------------------------------------------------------------------------
 
-VOID _declspec(naked) HOOK_CTrailer__ProcessControl()
+static void __declspec(naked) HOOK_CTrailer__ProcessControl()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -717,8 +789,10 @@ VOID _declspec(naked) HOOK_CTrailer__ProcessControl()
 
 //--------------------------------------------------------------------------------------------
 
-VOID _declspec(naked) HOOK_CQuadBike__ProcessControl()
+static void __declspec(naked) HOOK_CQuadBike__ProcessControl()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -752,8 +826,10 @@ VOID _declspec(naked) HOOK_CQuadBike__ProcessControl()
 
 //--------------------------------------------------------------------------------------------
 
-VOID _declspec(naked) HOOK_CPlane__ProcessControl()
+static void __declspec(naked) HOOK_CPlane__ProcessControl()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -787,8 +863,10 @@ VOID _declspec(naked) HOOK_CPlane__ProcessControl()
 
 //--------------------------------------------------------------------------------------------
 
-VOID _declspec(naked) HOOK_CBmx__ProcessControl()
+static void __declspec(naked) HOOK_CBmx__ProcessControl()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -822,8 +900,10 @@ VOID _declspec(naked) HOOK_CBmx__ProcessControl()
 
 //--------------------------------------------------------------------------------------------
 
-VOID _declspec(naked) HOOK_CTrain__ProcessControl()
+static void __declspec(naked) HOOK_CTrain__ProcessControl()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -857,8 +937,10 @@ VOID _declspec(naked) HOOK_CTrain__ProcessControl()
 
 //--------------------------------------------------------------------------------------------
 
-VOID _declspec(naked) HOOK_CBoat__ProcessControl()
+static void __declspec(naked) HOOK_CBoat__ProcessControl()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -892,8 +974,10 @@ VOID _declspec(naked) HOOK_CBoat__ProcessControl()
 
 //--------------------------------------------------------------------------------------------
 
-VOID _declspec(naked) HOOK_CBike__ProcessControl()
+static void __declspec(naked) HOOK_CBike__ProcessControl()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -927,8 +1011,10 @@ VOID _declspec(naked) HOOK_CBike__ProcessControl()
 
 //--------------------------------------------------------------------------------------------
 
-VOID _declspec(naked) HOOK_CHeli__ProcessControl()
+static void __declspec(naked) HOOK_CHeli__ProcessControl()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {

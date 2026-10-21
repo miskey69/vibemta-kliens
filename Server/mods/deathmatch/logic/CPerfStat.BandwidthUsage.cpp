@@ -15,6 +15,7 @@
 #include "CGame.h"
 #include "CMainConfig.h"
 #include "CRegistry.h"
+#include "CHTTPD.h"
 #include <net/ns_common.h>
 
 namespace
@@ -430,7 +431,7 @@ void CPerfStatBandwidthUsageImpl::RecordStats()
     long long llDeltaUDPByteResentCount = std::max<long long>(0LL, liveStats.llOutgoingUDPByteResentCount - m_PrevLiveStats.llOutgoingUDPByteResentCount);
     m_PrevLiveStats = liveStats;
 
-    long long llHttpTotalBytesSent = EHS::StaticGetTotalBytesSent();
+    long long llHttpTotalBytesSent = g_pGame->GetHTTPD()->GetTotalBytesSent();
     long long llDeltaHttpBytesSent = std::max(0LL, llHttpTotalBytesSent - m_llPrevHttpTotalBytesSent);
     m_llPrevHttpTotalBytesSent = llHttpTotalBytesSent;
 
@@ -632,7 +633,7 @@ void CPerfStatBandwidthUsageImpl::GetStats(CPerfStatResult* pResult, const std::
                     row[c++] = CPerfStatManager::GetScaledByteString(item.llGameRecv);
                     row[c++] = CPerfStatManager::GetScaledByteString(item.llGameSent);
                     if (bShowSentLoss[t])
-                        row[c++] = item.llGameResent ? CPerfStatManager::GetPercentString(item.llGameResent, item.llGameSent) : "";
+                        row[c++] = item.llGameResent ? CPerfStatManager::GetPercentString(item.llGameResent, item.llGameSent) : SStringX("");
                     row[c++] = CPerfStatManager::GetScaledByteString(item.llHttpSent);
                     if (bShowBlocked[t])
                         row[c++] = CPerfStatManager::GetScaledByteString(item.llGameRecvBlocked);

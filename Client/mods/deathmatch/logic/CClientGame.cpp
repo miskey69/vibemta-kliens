@@ -29,6 +29,7 @@
 #include <game/CTaskManager.h>
 #include <game/CWanted.h>
 #include <game/CWeapon.h>
+#include <game/CWeaponInfo.h>
 #include <game/CWeaponStatManager.h>
 #include <game/CWeather.h>
 #include <game/Task.h>
@@ -38,6 +39,7 @@
 #include <game/CVehicleAudioSettingsManager.h>
 #include <windowsx.h>
 #include "CServerInfo.h"
+#include "CClientPed.h"
 
 SString StringZeroPadout(const SString& strInput, uint uiPadoutSize)
 {
@@ -73,12 +75,16 @@ CVector             g_vecBulletFireEndPosition;
 #define DOUBLECLICK_TIMEOUT          330
 #define DOUBLECLICK_MOVE_THRESHOLD   10.0f
 
+#define MIN_CLIENT_REQ_ON_MOUSE_BUTTON_DOWN "1.7.0-7.26369"
+
 static constexpr long long TIME_DISCORD_UPDATE_RATE = 15000;
 
 CClientGame::CClientGame(bool bLocalPlay) : m_ServerInfo(new CServerInfo())
 {
     // Init the global var with ourself
     g_pClientGame = this;
+
+    CStaticFunctionDefinitions::PreInitialize(g_pCore, g_pGame, this, &m_Events);
 
     // Packet handler
     m_pPacketHandler = new CPacketHandler();
@@ -102,10 +108,11 @@ CClientGame::CClientGame(bool bLocalPlay) : m_ServerInfo(new CServerInfo())
     m_TargetedPlayerID = INVALID_ELEMENT_ID;
     m_pDamageEntity = NULL;
     m_DamagerID = INVALID_ELEMENT_ID;
-    m_ucDamageBodyPiece = 0xFF;
-    m_ucDamageWeapon = 0xFF;
+    m_ucDamageBodyPiece = BODYPART_INVALID;
+    m_ucDamageWeapon = WEAPONTYPE_INVALID;
     m_ulDamageTime = 0;
     m_bDamageSent = true;
+    m_serverProcessedDeath = false;
     m_bShowNetstat = false;
     m_bShowFPS = false;
     m_bHudAreaNameDisabled = false;
@@ -113,13 +120,14 @@ CClientGame::CClientGame(bool bLocalPlay) : m_ServerInfo(new CServerInfo())
     m_lMoney = 0;
     m_dwWanted = 0;
     m_timeLastDiscordStateUpdate = 0;
-    m_lastWeaponSlot = WEAPONSLOT_MAX;            // last stored weapon slot, for weapon slot syncing to server (sets to invalid value)
+    m_lastWeaponSlot = WEAPONSLOT_MAX;  // last stored weapon slot, for weapon slot syncing to server (sets to invalid value)
     ResetAmmoInClip();
 
     m_bFocused = g_pCore->IsFocused();
 
     m_bCursorEventsEnabled = false;
     m_bInitiallyFadedOut = true;
+    m_allowMultiCommandHandlers = MultiCommandHandlerPolicy::WARN;
 
     m_bIsPlayingBack = false;
     m_bFirstPlaybackFrame = false;
@@ -277,6 +285,7 @@ CClientGame::CClientGame(bool bLocalPlay) : m_ServerInfo(new CServerInfo())
     g_pMultiplayer->SetRenderHeliLightHandler(CClientGame::StaticRenderHeliLightHandler);
     g_pMultiplayer->SetRenderEverythingBarRoadsHandler(CClientGame::StaticRenderEverythingBarRoadsHandler);
     g_pMultiplayer->SetChokingHandler(CClientGame::StaticChokingHandler);
+    g_pMultiplayer->SetPreWeatherUpdateHandler(CClientGame::StaticPreWeatherUpdateHandler);
     g_pMultiplayer->SetPreWorldProcessHandler(CClientGame::StaticPreWorldProcessHandler);
     g_pMultiplayer->SetPostWorldProcessHandler(CClientGame::StaticPostWorldProcessHandler);
     g_pMultiplayer->SetPostWorldProcessPedsAfterPreRenderHandler(CClientGame::StaticPostWorldProcessPedsAfterPreRenderHandler);
@@ -317,6 +326,12 @@ CClientGame::CClientGame(bool bLocalPlay) : m_ServerInfo(new CServerInfo())
     g_pCore->GetKeyBinds()->SetKeyStrokeHandler(CClientGame::StaticKeyStrokeHandler);
     g_pCore->GetKeyBinds()->SetCharacterKeyHandler(CClientGame::StaticCharacterKeyHandler);
     g_pNet->RegisterPacketHandler(CClientGame::StaticProcessPacket);
+
+    // Set json-c double serialization to 16 significant digits instead of the
+    // default %.17g. At 17 digits, IEEE 754 rounding artifacts from the least
+    // significant bit become visible (e.g. 5.1 becomes "5.1000000000000001").
+    // This API survives json-c upgrades so the source files don't need patching.
+    json_c_set_serialization_double_format("%.16g", JSON_C_OPTION_GLOBAL);
 
     m_pLuaManager = new CLuaManager(this);
     m_pScriptDebugging = new CScriptDebugging(m_pLuaManager);
@@ -376,10 +391,11 @@ CClientGame::CClientGame(bool bLocalPlay) : m_ServerInfo(new CServerInfo())
 
     // Setup default states for Rich Presence
     g_vehicleTypePrefixes = {
-        _("Flying a UFO around"),      _("Cruising around"),            _("Riding the waves of"),
-        _("Riding the train in"),      _("Flying around"),              _("Flying around"),
-        _("Riding around"),            _("Monster truckin' around"),    _("Quaddin' around"),
-        _("Bunny hopping around"),     _("Doing weird stuff in")
+
+        _("Flying a UFO around"), _("Cruising around"),      _("Riding the waves of"), _("Riding the train in"),
+        _("Flying around"),       _("Flying around"),        _("Riding around"),       _("Monster truckin' around"),
+        _("Quaddin' around"),     _("Bunny hopping around"), _("Doing weird stuff in")
+
     };
 
     g_playerTaskStates = {
@@ -409,7 +425,7 @@ CClientGame::~CClientGame()
     m_bBeingDeleted = true;
     // Remove active projectile references to local player
     if (auto pLocalPlayer = g_pClientGame->GetLocalPlayer())
-        g_pGame->GetProjectileInfo()->RemoveEntityReferences(pLocalPlayer->GetGameEntity());    
+        g_pGame->GetProjectileInfo()->RemoveEntityReferences(pLocalPlayer->GetGameEntity());
 
     // Stop all explosions. Unfortunately this doesn't fix the crash
     // if a vehicle is destroyed while it explodes.
@@ -485,6 +501,7 @@ CClientGame::~CClientGame()
     g_pMultiplayer->SetRenderHeliLightHandler(nullptr);
     g_pMultiplayer->SetRenderEverythingBarRoadsHandler(nullptr);
     g_pMultiplayer->SetChokingHandler(NULL);
+    g_pMultiplayer->SetPreWeatherUpdateHandler(NULL);
     g_pMultiplayer->SetPreWorldProcessHandler(NULL);
     g_pMultiplayer->SetPostWorldProcessHandler(NULL);
     g_pMultiplayer->SetPostWorldProcessPedsAfterPreRenderHandler(nullptr);
@@ -545,7 +562,7 @@ CClientGame::~CClientGame()
     }
 
     // Destroy our stuff
-    SAFE_DELETE(m_pManager);            // Will trigger onClientResourceStop
+    SAFE_DELETE(m_pManager);  // Will trigger onClientResourceStop
     SAFE_DELETE(m_pNametags);
     SAFE_DELETE(m_pSyncDebug);
     SAFE_DELETE(m_pNetworkStats);
@@ -670,7 +687,7 @@ bool CClientGame::StartGame(const char* szNick, const char* szPassword, eServerT
         NetBitStreamInterface* pBitStream = g_pNet->AllocateNetBitStream();
         if (pBitStream)
         {
-            // Hash the password if neccessary
+            // Hash the password if necessary
             MD5 Password;
             memset(Password.data, 0, sizeof(MD5));
             if (szPassword)
@@ -703,15 +720,9 @@ bool CClientGame::StartGame(const char* szNick, const char* szPassword, eServerT
             pBitStream->Write(strTemp.c_str(), MAX_PLAYER_NICK_LENGTH);
             pBitStream->Write(reinterpret_cast<const char*>(Password.data), sizeof(MD5));
 
-            // Append community information (Removed)
-            std::string strUser;
-            pBitStream->Write(strUser.c_str(), MAX_SERIAL_LENGTH);
-
-            // Send an empty string if server still has old Discord implementation (#2499)
-            if (g_pNet->CanServerBitStream(eBitStreamVersion::Discord_InitialImplementation) && !g_pNet->CanServerBitStream(eBitStreamVersion::Discord_Cleanup))
-            {
-                pBitStream->WriteString<uchar>("");
-            }
+            // Append community information (removed, but we keep this to retain protocol compat)
+            const std::array<char, MAX_SERIAL_LENGTH> communityData{};
+            pBitStream->Write(communityData.data(), communityData.size());
 
             // Send the packet as joindata
             g_pNet->SendPacket(PACKET_ID_PLAYER_JOINDATA, pBitStream, PACKET_PRIORITY_HIGH, PACKET_RELIABILITY_RELIABLE_ORDERED);
@@ -937,8 +948,8 @@ void CClientGame::DoPulsePostFrame()
         // Draw network trouble message if required
         if (m_pNetAPI->IsNetworkTrouble())
         {
-            int iPosX = uiWidth / 2;                    // Half way across
-            int iPosY = uiHeight * 45 / 100;            // 45/100 down
+            int iPosX = uiWidth / 2;          // Half way across
+            int iPosY = uiHeight * 45 / 100;  // 45/100 down
             g_pCore->GetGraphics()->DrawString(iPosX, iPosY, iPosX, iPosY, COLOR_ARGB(255, 255, 0, 0), "*** NETWORK TROUBLE ***", 2.0f, 2.0f,
                                                DT_NOCLIP | DT_CENTER);
         }
@@ -1030,12 +1041,12 @@ void CClientGame::DoPulsePostFrame()
                     }
 
                     auto taskManager = pLocalPlayer->GetTaskManager();
-                    auto task = taskManager->GetActiveTask();                    
+                    auto task = taskManager->GetActiveTask();
                     auto pVehicle = pLocalPlayer->GetOccupiedVehicle();
                     bool useZoneName = true;
 
                     const eClientVehicleType vehicleType = (pVehicle) ? CClientVehicleManager::GetVehicleType(pVehicle->GetModel()) : CLIENTVEHICLE_NONE;
-                    std::string discordState = (pVehicle) ? g_vehicleTypePrefixes.at(vehicleType).c_str() : _("Walking around ");
+                    std::string              discordState = (pVehicle) ? g_vehicleTypePrefixes.at(vehicleType) : _("Walking around ");
 
                     if (task && task->IsValid())
                     {
@@ -1051,7 +1062,7 @@ void CClientGame::DoPulsePostFrame()
                         }
 
                         // Check for non-matching sub/secondary tasks and remove them
-                        for (auto it = taskStates.begin(); it != taskStates.end(); )
+                        for (auto it = taskStates.begin(); it != taskStates.end();)
                         {
                             const STaskState& taskState = (*it);
 
@@ -1078,13 +1089,13 @@ void CClientGame::DoPulsePostFrame()
                         const int stateCount = taskStates.size();
                         if (stateCount > 0)
                         {
-                            std::srand(GetTickCount64_());
-                            const int  index = (std::rand() % stateCount);
+                            std::srand(static_cast<unsigned int>(GetTickCount64_()));
+                            const int   index = (std::rand() % stateCount);
                             const auto& taskState = taskStates[index];
 
                             discordState = taskState.strState;
                             useZoneName = taskState.bUseZone;
-                        }                                       
+                        }
 
                         if (useZoneName)
                         {
@@ -1122,8 +1133,7 @@ void CClientGame::DoPulses()
 {
     TIMING_CHECKPOINT("-CClientGame::DoPulsePostFrame");
 
-    g_pCore->ApplyFrameRateLimit();
-
+    // TODO: (pxd) Useless, cleanup checkpoints on #4428
     TIMING_CHECKPOINT("+CClientGame::DoPulses");
 
     m_BuiltCollisionMapThisFrame = false;
@@ -1389,7 +1399,7 @@ void CClientGame::DoPulses()
                 {
                     case RID_RSA_PUBLIC_KEY_MISMATCH:
                         strError = _("Disconnected: unknown protocol error");
-                        strErrorCode = _E("CD10");            // encryption key mismatch
+                        strErrorCode = _E("CD10");  // encryption key mismatch
                         break;
                     case RID_REMOTE_DISCONNECTION_NOTIFICATION:
                         strError = _("Disconnected: disconnected remotely");
@@ -1455,16 +1465,25 @@ void CClientGame::DoPulses()
         m_pLocalPlayer->UpdateVehicleInOut();
         UpdatePlayerTarget();
         UpdatePlayerWeapons();
-        UpdateTrailers();            // Test: Does it always work without this check?
+        UpdateTrailers();  // Test: Does it always work without this check?
         UpdateStunts();
         // Clear last damager if more than 2 seconds old
         if (CClientTime::GetTime() - m_ulDamageTime > 2000)
         {
             m_DamagerID = INVALID_ELEMENT_ID;
-            m_ucDamageWeapon = 0xFF;
-            m_ucDamageBodyPiece = 0xFF;
+            m_ucDamageWeapon = WEAPONTYPE_INVALID;
+            m_ucDamageBodyPiece = BODYPART_INVALID;
         }
-        DoWastedCheck(m_DamagerID, m_ucDamageWeapon, m_ucDamageBodyPiece);
+        // Check if we need to trigger death event
+        if (!m_pLocalPlayer->IsDeadOnNetwork() && m_pLocalPlayer->GetHealth() == 0.0f)
+        {
+            // Only call DoWastedCheck if server hasn't already processed this death
+            // This prevents duplicate events when server processes death via unified context system
+            if (!m_serverProcessedDeath)
+            {
+                DoWastedCheck(m_DamagerID, m_ucDamageWeapon, m_ucDamageBodyPiece);
+            }
+        }
     }
 
     // Game hacks, restore certain variables
@@ -1614,6 +1633,10 @@ bool CClientGame::IsNickValid(const char* szNick)
         {
             return false;
         }
+        if (ucTemp == '`')  // Match server-side CheckNickProvided backtick rejection
+        {
+            return false;
+        }
     }
 
     // Nickname is valid, return true
@@ -1669,7 +1692,7 @@ void CClientGame::SetMimic(unsigned int uiMimicCount)
     if (uiMimicCount > MAX_MIMICS)
         return;
 
-    // Create neccessary players
+    // Create necessary players
     while (m_Mimics.size() < uiMimicCount)
     {
         CClientPlayer* pPlayer = new CClientPlayer(m_pManager, static_cast<ElementID>(MAX_NET_PLAYERS_REAL + (int)m_Mimics.size()));
@@ -1677,7 +1700,7 @@ void CClientGame::SetMimic(unsigned int uiMimicCount)
         m_Mimics.push_back(pPlayer);
     }
 
-    // Destroy neccessary players
+    // Destroy necessary players
     while (m_Mimics.size() > uiMimicCount)
     {
         CClientPlayer*  pPlayer = m_Mimics.back();
@@ -1829,12 +1852,10 @@ void CClientGame::UpdatePlayerWeapons()
             SWeaponSlotSync        slot;
 
             // Always send bit in case server is not in sync
-            if ((BitStream.Version() >= 0x44 && m_lastWeaponSlot == WEAPONSLOT_TYPE_THROWN) || BitStream.Version() >= 0x4D)
             {
                 CWeapon* pLastWeapon = m_pLocalPlayer->GetWeapon(m_lastWeaponSlot);
                 if (pLastWeapon && pLastWeapon->GetAmmoTotal() == 0 &&
-                    (m_lastWeaponSlot == WEAPONSLOT_TYPE_THROWN ||
-                     (BitStream.Version() >= 0x5A && (m_lastWeaponSlot == WEAPONSLOT_TYPE_HEAVY || m_lastWeaponSlot == WEAPONSLOT_TYPE_SPECIAL))))
+                    (m_lastWeaponSlot == WEAPONSLOT_TYPE_THROWN || m_lastWeaponSlot == WEAPONSLOT_TYPE_HEAVY || m_lastWeaponSlot == WEAPONSLOT_TYPE_SPECIAL))
                     BitStream.WriteBit(true);
                 else
                     BitStream.WriteBit(false);
@@ -2009,7 +2030,7 @@ void CClientGame::UpdateFireKey()
                                 {
                                     if (pTargetPed->IsLocalEntity())
                                     {
-                                        CStaticFunctionDefinitions::KillPed(*pTargetPed, m_pLocalPlayer, 4 /*WEAPONTYPE_KNIFE*/, 9 /*BODYPART_HEAD*/, true);
+                                        CStaticFunctionDefinitions::KillPed(*pTargetPed, m_pLocalPlayer, WEAPONTYPE_KNIFE, BODYPART_HEAD, true);
                                         return;
                                     }
 
@@ -2175,6 +2196,7 @@ void CClientGame::SetAllDimensions(unsigned short usDimension)
     m_pManager->GetSoundManager()->SetDimension(usDimension);
     m_pManager->GetPointLightsManager()->SetDimension(usDimension);
     m_pManager->GetWaterManager()->SetDimension(usDimension);
+    m_pManager->GetBuildingManager()->SetDimension(usDimension);
     m_pNametags->SetDimension(usDimension);
     m_pCamera->SetDimension(usDimension);
 }
@@ -2204,16 +2226,16 @@ bool CClientGame::KeyStrokeHandler(const SString& strKey, bool bState, bool bIsC
             if (g_pCore->IsMenuVisible() || (g_pCore->GetConsole()->IsInputActive() && bIsConsoleInputKey) ||
                 (pFocusedBrowser && !pFocusedBrowser->IsLocal() && !isMouseKey))
 
-                bIgnore = true;            // Ignore this keydown and the matching keyup
+                bIgnore = true;  // Ignore this keydown and the matching keyup
             else
-                MapInsert(m_AllowKeyUpMap, strKey);            // Use this keydown and the matching keyup
+                MapInsert(m_AllowKeyUpMap, strKey);  // Use this keydown and the matching keyup
         }
         else
         {
             if (!MapContains(m_AllowKeyUpMap, strKey))
-                bIgnore = true;            // Ignore this keyup
+                bIgnore = true;  // Ignore this keyup
             else
-                MapRemove(m_AllowKeyUpMap, strKey);            // Use this keyup
+                MapRemove(m_AllowKeyUpMap, strKey);  // Use this keyup
         }
 
         if (!bIgnore)
@@ -2638,6 +2660,10 @@ void CClientGame::AddBuiltInEvents()
     m_Events.AddEvent("onClientElementModelChange", "oldModel, newModel", nullptr, false);
     m_Events.AddEvent("onClientElementDimensionChange", "oldDimension, newDimension", nullptr, false);
     m_Events.AddEvent("onClientElementInteriorChange", "oldInterior, newInterior", nullptr, false);
+    m_Events.AddEvent("onClientElementAttach", "attachSource, attachOffsetX, attachOffsetY, attachOffsetZ, attachOffsetRX, attachOffsetRY, attachOffsetRZ",
+                      nullptr, false);
+    m_Events.AddEvent("onClientElementDetach", "detachSource, detachWorldX, detachWorldY, detachWorldZ, detachWorldRX, detachWorldRY, detachWorldRZ", nullptr,
+                      false);
 
     // Player events
     m_Events.AddEvent("onClientPlayerJoin", "", NULL, false);
@@ -2654,6 +2680,7 @@ void CClientGame::AddBuiltInEvents()
     m_Events.AddEvent("onClientPlayerRadioSwitch", "", NULL, false);
     m_Events.AddEvent("onClientPlayerDamage", "attacker, weapon, bodypart", NULL, false);
     m_Events.AddEvent("onClientPlayerWeaponFire", "weapon, ammo, ammoInClip, hitX, hitY, hitZ, hitElement", NULL, false);
+    m_Events.AddEvent("onClientPlayerWeaponReload", "weapon, clip, ammo", nullptr, false);
     m_Events.AddEvent("onClientPlayerWasted", "ammo, killer, weapon, bodypart, isStealth, animGroup, animID", nullptr, false);
     m_Events.AddEvent("onClientPlayerChoke", "", NULL, false);
     m_Events.AddEvent("onClientPlayerVoiceStart", "", NULL, false);
@@ -2672,6 +2699,7 @@ void CClientGame::AddBuiltInEvents()
     m_Events.AddEvent("onClientPedVehicleEnter", "vehicle, seat", NULL, false);
     m_Events.AddEvent("onClientPedVehicleExit", "vehicle, seat", NULL, false);
     m_Events.AddEvent("onClientPedWeaponFire", "weapon, ammo, ammoInClip, hitX, hitY, hitZ, hitElement", NULL, false);
+    m_Events.AddEvent("onClientPedWeaponReload", "weapon, clip, ammo", nullptr, false);
     m_Events.AddEvent("onClientPedWasted", "", NULL, false);
     m_Events.AddEvent("onClientPedChoke", "", NULL, false);
     m_Events.AddEvent("onClientPedHeliKilled", "heli", NULL, false);
@@ -2743,10 +2771,13 @@ void CClientGame::AddBuiltInEvents()
     m_Events.AddEvent("onClientCursorMove", "relativeX, relativeX, absoluteX, absoluteY, worldX, worldY, worldZ", NULL, false);
 
     // Marker events
-    m_Events.AddEvent("onClientMarkerHit", "entity, matchingDimension", NULL, false);
-    m_Events.AddEvent("onClientMarkerLeave", "entity, matchingDimension", NULL, false);
+    m_Events.AddEvent("onClientMarkerHit", "entity, matchingDimension", nullptr, false);
+    m_Events.AddEvent("onClientMarkerLeave", "entity, matchingDimension", nullptr, false);
 
-    // Marker events
+    m_Events.AddEvent("onClientPlayerMarkerHit", "marker, matchingDimension", nullptr, false);
+    m_Events.AddEvent("onClientPlayerMarkerLeave", "marker, matchingDimension", nullptr, false);
+
+    // Pickup events
     m_Events.AddEvent("onClientPickupHit", "entity, matchingDimension", NULL, false);
     m_Events.AddEvent("onClientPickupLeave", "entity, matchingDimension", NULL, false);
 
@@ -3067,7 +3098,7 @@ void CClientGame::UpdateMimics()
         }
 
         // Simulate lag (or not)
-        if (!m_bMimicLag || CClientTime::GetTime() >= m_ulLastMimicLag + 200)            // TICK_RATE )
+        if (!m_bMimicLag || CClientTime::GetTime() >= m_ulLastMimicLag + 200)  // TICK_RATE )
         {
             m_ulLastMimicLag = CClientTime::GetTime();
 
@@ -3217,19 +3248,19 @@ void CClientGame::UpdateMimics()
                 CClientVehicle* pMimicVehicle = pMimic->GetOccupiedVehicle();
                 if (pVehicle)
                 {
-                    unsigned int uiModel;
-                    CVector      vecPosition, vecRotationDegrees;
-                    CVector      vecMoveSpeed, vecMoveSpeedMeters, vecTurnSpeed, vecVelocity;
-                    float        fHealth;
+                    unsigned short modelId;
+                    CVector        vecPosition, vecRotationDegrees;
+                    CVector        vecMoveSpeed, vecMoveSpeedMeters, vecTurnSpeed, vecVelocity;
+                    float          fHealth;
 
-                    uiModel = pVehicle->GetModel();
+                    modelId = pVehicle->GetModel();
                     pVehicle->GetPosition(vecPosition);
                     pVehicle->GetRotationDegrees(vecRotationDegrees);
                     pVehicle->GetMoveSpeed(vecMoveSpeed);
                     pVehicle->GetTurnSpeed(vecTurnSpeed);
                     fHealth = pVehicle->GetHealth();
 
-                    if (pMimicVehicle && pMimicVehicle->GetModel() != uiModel)
+                    if (pMimicVehicle && pMimicVehicle->GetModel() != modelId)
                     {
                         delete pMimicVehicle;
                         pMimicVehicle = NULL;
@@ -3239,7 +3270,7 @@ void CClientGame::UpdateMimics()
 
                     if (pMimicVehicle == NULL)
                     {
-                        pMimicVehicle = new CDeathmatchVehicle(m_pManager, m_pUnoccupiedVehicleSync, INVALID_ELEMENT_ID, uiModel, 0, 0);
+                        pMimicVehicle = new CDeathmatchVehicle(m_pManager, m_pUnoccupiedVehicleSync, INVALID_ELEMENT_ID, modelId, 0, 0);
                         pMimicVehicle->SetPosition(vecPosition);
 
                         const SSlotStates& usUpgrades = pVehicle->GetUpgrades()->GetSlotStates();
@@ -3277,7 +3308,7 @@ void CClientGame::UpdateMimics()
                     CClientVehicle* pMimicTrailer = NULL;
                     while (pTrailer)
                     {
-                        uiModel = pTrailer->GetModel();
+                        modelId = pTrailer->GetModel();
                         pTrailer->GetPosition(vecPosition);
                         pTrailer->GetRotationDegrees(vecRotationDegrees);
                         pTrailer->GetMoveSpeed(vecMoveSpeed);
@@ -3286,7 +3317,7 @@ void CClientGame::UpdateMimics()
 
                         pMimicTrailer = DynamicCast<CClientVehicle>(CElementIDs::GetElement(static_cast<ElementID>(450 + uiMimicIndex + uiTrailerLoop)));
 
-                        if (pMimicTrailer && pMimicTrailer->GetModel() != uiModel)
+                        if (pMimicTrailer && pMimicTrailer->GetModel() != modelId)
                         {
                             delete pMimicTrailer;
                             pMimicTrailer = NULL;
@@ -3295,7 +3326,7 @@ void CClientGame::UpdateMimics()
                         if (!pMimicTrailer)
                         {
                             pMimicTrailer = new CDeathmatchVehicle(m_pManager, m_pUnoccupiedVehicleSync,
-                                                                   static_cast<ElementID>(450 + uiMimicIndex + uiTrailerLoop), uiModel, 0, 0);
+                                                                   static_cast<ElementID>(450 + uiMimicIndex + uiTrailerLoop), modelId, 0, 0);
                             pMimicVehicle->SetTowedVehicle(pMimicTrailer);
                         }
 
@@ -3465,9 +3496,9 @@ void CClientGame::Event_OnIngame()
 
     // Reset anything from last game
     ResetMapInfo();
-    g_pGame->GetWaterManager()->Reset();            // Deletes all custom water elements, ResetMapInfo only reverts changes to water level
+    g_pGame->GetWaterManager()->Reset();  // Deletes all custom water elements, ResetMapInfo only reverts changes to water level
     g_pGame->GetWaterManager()->SetWaterDrawnLast(true);
-    m_pCamera->SetCameraClip(true, true);
+    m_pCamera->ResetCameraClip();
 
     // Deallocate all custom models
     m_pManager->GetModelManager()->RemoveAll();
@@ -3554,9 +3585,9 @@ void CClientGame::StaticDeathHandler(CPed* pKilledPed, unsigned char ucDeathReas
     g_pClientGame->DeathHandler(pKilledPed, ucDeathReason, ucBodyPart);
 }
 
-void CClientGame::StaticFireHandler(CFire* pFire)
+bool CClientGame::StaticFireHandler(CEntitySAInterface* target, CEntitySAInterface* creator)
 {
-    g_pClientGame->FireHandler(pFire);
+    return g_pClientGame->FireHandler(target, creator);
 }
 
 void CClientGame::StaticRender3DStuffHandler()
@@ -3576,7 +3607,6 @@ void CClientGame::StaticRenderHeliLightHandler()
 
 void CClientGame::StaticRenderEverythingBarRoadsHandler()
 {
-    g_pClientGame->GetModelRenderer()->Render();
 }
 
 bool CClientGame::StaticChokingHandler(unsigned char ucWeaponType)
@@ -3610,6 +3640,11 @@ bool CClientGame::StaticBlendAnimationHierarchyHandler(CAnimBlendAssociationSAIn
                                                        int* pFlags, RpClump* pClump)
 {
     return g_pClientGame->BlendAnimationHierarchyHandler(pAnimAssoc, pOutAnimHierarchy, pFlags, pClump);
+}
+
+void CClientGame::StaticPreWeatherUpdateHandler()
+{
+    g_pClientGame->PreWeatherUpdateHandler();
 }
 
 void CClientGame::StaticPreWorldProcessHandler()
@@ -3819,10 +3854,22 @@ bool CClientGame::BreakTowLinkHandler(CVehicle* pTowedVehicle)
     return true;
 }
 
-void CClientGame::FireHandler(CFire* pFire)
+bool CClientGame::FireHandler(CEntitySAInterface* target, CEntitySAInterface* creator)
 {
-    // Disable spreading fires
-    pFire->SetNumGenerationsAllowed(0);
+    CClientEntity* creatorClientEntity = g_pGame->GetPools()->GetClientEntity((DWORD*)creator);
+    CClientEntity* targetClientEntity = g_pGame->GetPools()->GetClientEntity((DWORD*)target);
+
+    if (creatorClientEntity && targetClientEntity && IS_PLAYER(targetClientEntity) && IS_PLAYER(creatorClientEntity))
+    {
+        CClientPlayer* targetPlayer = static_cast<CClientPlayer*>(targetClientEntity);
+        CClientPlayer* creatorPlayer = static_cast<CClientPlayer*>(creatorClientEntity);
+
+        CClientTeam* targetPlayerTeam = targetPlayer->GetTeam();
+        if (targetPlayerTeam && targetPlayer->IsOnMyTeam(creatorPlayer) && !targetPlayerTeam->GetFriendlyFire() && creatorPlayer != targetPlayer)
+            return false;
+    }
+
+    return true;
 }
 
 void CClientGame::ProjectileInitiateHandler(CClientProjectile* pProjectile)
@@ -3861,6 +3908,12 @@ void CClientGame::ProjectileInitiateHandler(CClientProjectile* pProjectile)
 
 void CClientGame::Render3DStuffHandler()
 {
+    // Render models enqueued by scripts during the previous frame's
+    // onClientRender. This hook fires after GTA's Render3DStuff pass
+    // (sun/moon flare, coronas), so those don't bleed through our models.
+    CModelRenderer* pModelRenderer = GetModelRenderer();
+    pModelRenderer->Render();
+    pModelRenderer->NotifyFrameEnd();
 }
 
 void CClientGame::PreRenderSkyHandler()
@@ -3868,12 +3921,31 @@ void CClientGame::PreRenderSkyHandler()
     g_pCore->GetGraphics()->GetRenderItemManager()->PreDrawWorld();
 }
 
+void CClientGame::PreWeatherUpdateHandler()
+{
+    // Fix #4803: Set MTA's weather types and zero InterpolationValue BEFORE
+    // CWeather::Update runs. Zeroing InterpolationValue prevents the wrap branch
+    // from ever firing (engine_interp >= 0 is always true), so the engine computes
+    // all weather globals (Foggyness, Rain, etc.) from MTA's weather pair.
+    if (m_pManager->IsGameLoaded() && m_pBlendedWeather)
+        m_pBlendedWeather->DoPulse();
+}
+
 void CClientGame::PreWorldProcessHandler()
 {
+    // Re-apply MTA's weather types before CTimeCycle::CalcColoursForPoint() (0x53C0DA).
+    // Only set OldWeatherType/NewWeatherType — do NOT touch InterpolationValue here,
+    // so CalcColoursForPoint uses the same engine-computed value that CWeather::Update
+    // used for weather globals (Foggyness, etc.), keeping everything consistent.
+    if (m_pManager->IsGameLoaded() && m_pBlendedWeather)
+        m_pBlendedWeather->ReapplyWeatherTypes();
 }
 
 void CClientGame::PostWorldProcessHandler()
 {
+    // CWorld::Process has just overwritten ped headings, restore script-set ones before onClientPreRender, sync and rendering read them
+    m_pManager->GetPedManager()->ReapplyScriptRotations();
+
     m_pManager->GetMarkerManager()->DoPulse();
     m_pManager->GetPointLightsManager()->DoPulse();
     m_pManager->GetObjectManager()->DoPulse();
@@ -3892,8 +3964,6 @@ void CClientGame::PostWorldProcessPedsAfterPreRenderHandler()
 {
     CLuaArguments Arguments;
     m_pRootEntity->CallEvent("onClientPedsProcessed", Arguments, false);
-
-    g_pClientGame->GetModelRenderer()->Update();
 }
 
 void CClientGame::IdleHandler()
@@ -3989,7 +4059,7 @@ bool CClientGame::AssocGroupCopyAnimationHandler(CAnimBlendAssociationSAInterfac
     }
 
     auto pOriginalAnimStaticAssoc = pAnimationManager->GetAnimStaticAssociation(iGroupID, animID);
-    auto pOriginalAnimHierarchyInterface = pOriginalAnimStaticAssoc->GetAnimHierachyInterface();
+    auto pOriginalAnimHierarchyInterface = pOriginalAnimStaticAssoc->GetAnimHierarchyInterface();
     auto pAnimAssociation = pAnimationManager->GetAnimBlendAssociation(pAnimAssocInterface);
 
     CClientPed* pClientPed = GetClientPedByClump(*pClump);
@@ -4006,7 +4076,7 @@ bool CClientGame::AssocGroupCopyAnimationHandler(CAnimBlendAssociationSAInterfac
                     (iGroupID >= eAnimGroup::ANIM_GROUP_PLAYER && iGroupID <= eAnimGroup::ANIM_GROUP_PLAYERJETPACK) || iGroupID >= eAnimGroup::ANIM_GROUP_MAN)
                 {
                     auto pDuckAnimStaticAssoc = pAnimationManager->GetAnimStaticAssociation(eAnimGroup::ANIM_GROUP_DEFAULT, eAnimID::ANIM_ID_WEAPON_CROUCH);
-                    pAnimHierarchy = pAnimationManager->GetCustomAnimBlendHierarchy(pDuckAnimStaticAssoc->GetAnimHierachyInterface());
+                    pAnimHierarchy = pAnimationManager->GetCustomAnimBlendHierarchy(pDuckAnimStaticAssoc->GetAnimHierarchyInterface());
                     isCustomAnimationToPlay = true;
                 }
             }
@@ -4031,6 +4101,13 @@ bool CClientGame::AssocGroupCopyAnimationHandler(CAnimBlendAssociationSAInterfac
             pAnimAssociation->SetFlags(pOriginalAnimStaticAssoc->GetFlags());
             pAnimAssociation->SetAnimID(pOriginalAnimStaticAssoc->GetAnimID());
             pAnimAssociation->SetAnimGroup(pOriginalAnimStaticAssoc->GetAnimGroup());
+
+            // A partial anim (e.g. weapon fire) only animates part of the skeleton and leaves the rest to
+            // whatever movement anim is playing. Loading an IFP pads its animations out to all 32 bones,
+            // so without this the replacement would also drive the root, pelvis and legs with a fixed pose
+            // and the ped would go rigid.
+            if (pAnimAssociation->IsPartial())
+                pAnimAssociation->RestrictToBonesOf(pOriginalAnimStaticAssoc->GetInterface());
         }
     }
 
@@ -4284,7 +4361,7 @@ bool CClientGame::DamageHandler(CPed* pDamagePed, CEventDamage* pEvent)
             CClientPlayer* pInflictingPlayer = DynamicCast<CClientPlayer>(pInflictingEntity);
             if (pInflictingPlayer && !pInflictingPlayer->IsLocalPlayer())
             {
-                bool bBulletSyncShot = (g_iDamageEventLimit != -1);            // Called from discharge weapon
+                bool bBulletSyncShot = (g_iDamageEventLimit != -1);  // Called from discharge weapon
                 bool bBulletSyncWeapon = GetWeaponTypeUsesBulletSync(weaponUsed);
 
                 if (bBulletSyncShot)
@@ -4493,7 +4570,10 @@ bool CClientGame::ApplyPedDamageFromGame(eWeaponType weaponUsed, float fDamage, 
                     GetDeathAnim(pDamagedPed, pEvent, animGroup, animID);
 
                     // Check if we're dead
-                    DoWastedCheck(damagerID, weaponUsed, hitZone, animGroup, animID);
+                    if (!m_serverProcessedDeath)
+                    {
+                        DoWastedCheck(damagerID, weaponUsed, hitZone, animGroup, animID);
+                    }
                 }
 
                 // Allow GTA to kill us if we've fell to our death
@@ -4561,6 +4641,14 @@ void CClientGame::DeathHandler(CPed* pKilledPedSA, unsigned char ucDeathReason, 
     if (!pKilledPed)
         return;
 
+    // For local player in vehicle explosions, set damage data for consistent client events
+    if (IS_PLAYER(pKilledPed) && pKilledPed->IsLocalPlayer() && ucDeathReason == WEAPONTYPE_EXPLOSION)
+    {
+        // Set explosion damage data so DoWastedCheck uses correct parameters
+        SetExplosionDamageData();
+        return;  // Local player death is handled by DoWastedCheck
+    }
+
     // Not required for remote players. Local player is handled in DoPulses->DoWastedCheck
     if (IS_PLAYER(pKilledPed))
         return;
@@ -4581,7 +4669,8 @@ void CClientGame::DeathHandler(CPed* pKilledPedSA, unsigned char ucDeathReason, 
 }
 
 bool CClientGame::VehicleCollisionHandler(CVehicleSAInterface*& pCollidingVehicle, CEntitySAInterface* pCollidedWith, int iModelIndex, float fDamageImpulseMag,
-                                          float fCollidingDamageImpulseMag, uint16 usPieceType, CVector vecCollisionPos, CVector vecCollisionVelocity, bool isProjectile)
+                                          float fCollidingDamageImpulseMag, uint16 usPieceType, CVector vecCollisionPos, CVector vecCollisionVelocity,
+                                          bool isProjectile)
 {
     if (pCollidingVehicle && pCollidedWith)
     {
@@ -4596,7 +4685,8 @@ bool CClientGame::VehicleCollisionHandler(CVehicleSAInterface*& pCollidingVehicl
             }
 
             CClientVehicle* pClientVehicle = static_cast<CClientVehicle*>(pVehicleClientEntity);
-            CClientEntity*  pCollidedWithClientEntity = !isProjectile ? pPools->GetClientEntity((DWORD*)pCollidedWith) : m_pManager->GetProjectileManager()->Get(pCollidedWith);
+            CClientEntity*  pCollidedWithClientEntity =
+                !isProjectile ? pPools->GetClientEntity((DWORD*)pCollidedWith) : m_pManager->GetProjectileManager()->Get(pCollidedWith);
 
             CLuaArguments Arguments;
             if (pCollidedWithClientEntity)
@@ -4620,7 +4710,13 @@ bool CClientGame::VehicleCollisionHandler(CVehicleSAInterface*& pCollidingVehicl
 
             pVehicleClientEntity->CallEvent("onClientVehicleCollision", Arguments, true);
 
-            // Update the colliding vehicle, because it might have been invalidated in onClientVehicleCollision (e.g. fixVehicle)
+            // Update the colliding vehicle, because it might have been invalidated in onClientVehicleCollision (e.g. fixVehicle, destroyElement)
+            if (pVehicleClientEntity->IsBeingDeleted() || !pVehicleClientEntity->GetGameEntity())
+            {
+                pCollidingVehicle = nullptr;
+                return true;
+            }
+
             pCollidingVehicle = reinterpret_cast<CVehicleSAInterface*>(pVehicleClientEntity->GetGameEntity()->GetInterface());
 
             // Allocate a BitStream
@@ -4628,34 +4724,31 @@ bool CClientGame::VehicleCollisionHandler(CVehicleSAInterface*& pCollidingVehicl
             // Make sure it created
             if (pBitStream)
             {
-                if (pBitStream->Version() >= 0x028)
+                // Sync Stuff
+                // if it's not a local vehicle + it collided with the local player
+                if (pVehicleClientEntity->IsLocalEntity() == false && pCollidedWithClientEntity == g_pClientGame->GetLocalPlayer())
                 {
-                    // Sync Stuff
-                    // if it's not a local vehicle + it collided with the local player
-                    if (pVehicleClientEntity->IsLocalEntity() == false && pCollidedWithClientEntity == g_pClientGame->GetLocalPlayer())
+                    // is it below the anti spam threshold?
+                    if (pClientVehicle->GetTimeSinceLastPush() >= MIN_PUSH_ANTISPAM_RATE)
                     {
-                        // is it below the anti spam threshold?
-                        if (pClientVehicle->GetTimeSinceLastPush() >= MIN_PUSH_ANTISPAM_RATE)
+                        // if there is no controlling player
+                        if (!pClientVehicle->GetControllingPlayer())
                         {
-                            // if there is no controlling player
-                            if (!pClientVehicle->GetControllingPlayer())
+                            CDeathmatchVehicle* Vehicle = static_cast<CDeathmatchVehicle*>(pVehicleClientEntity);
+                            // if We aren't already syncing the vehicle
+                            if (GetUnoccupiedVehicleSync()->Exists(Vehicle) == false)
                             {
-                                CDeathmatchVehicle* Vehicle = static_cast<CDeathmatchVehicle*>(pVehicleClientEntity);
-                                // if We aren't already syncing the vehicle
-                                if (GetUnoccupiedVehicleSync()->Exists(Vehicle) == false)
-                                {
-                                    // Write the vehicle ID
-                                    pBitStream->Write(pVehicleClientEntity->GetID());
-                                    // Send!
-                                    g_pNet->SendPacket(PACKET_ID_VEHICLE_PUSH_SYNC, pBitStream, PACKET_PRIORITY_MEDIUM,
-                                                       PACKET_RELIABILITY_UNRELIABLE_SEQUENCED);
-                                    // Reset our push time
-                                    pClientVehicle->ResetLastPushTime();
-                                }
+                                // Write the vehicle ID
+                                pBitStream->Write(pVehicleClientEntity->GetID());
+                                // Send!
+                                g_pNet->SendPacket(PACKET_ID_VEHICLE_PUSH_SYNC, pBitStream, PACKET_PRIORITY_MEDIUM, PACKET_RELIABILITY_UNRELIABLE_SEQUENCED);
+                                // Reset our push time
+                                pClientVehicle->ResetLastPushTime();
                             }
                         }
                     }
                 }
+
                 g_pNet->DeallocateNetBitStream(pBitStream);
             }
             return true;
@@ -4756,7 +4849,35 @@ bool CClientGame::VehicleDamageHandler(CEntitySAInterface* pVehicleInterface, fl
             return bAllowDamage;
         }
 
+        // Tyre damage can be processed through different paths in GTA's damage handling.
+        // For weapons with skills, GTA processes tyre damage in the weapon-skill path
+        // before the general entity damage handling. When tyre damage is cancelled,
+        // this can cause the same hit to reach this handler again in the same frame.
+        // Filter out the repeated callback so onClientVehicleDamage is not fired twice.
+        if (ucTyre != UCHAR_INVALID_INDEX && weaponType >= WEAPONTYPE_PISTOL && weaponType <= WEAPONTYPE_TEC9)
+        {
+            const bool bIsRetryOfSameHit = pVehicleInterface == m_pLastTyreDamageVehicleInterface && ucTyre == m_ucLastTyreDamageIndex &&
+                                           fLoss == m_fLastTyreDamageLoss && m_uiFrameCount == m_uiLastTyreDamageFrame;
+
+            if (bIsRetryOfSameHit)
+            {
+                // Repeated callback for the same tyre hit in the same frame.
+                // Keep the decision from the original callback and don't fire the event again.
+                return m_bLastTyreDamageAllowed;
+            }
+
+            m_pLastTyreDamageVehicleInterface = pVehicleInterface;
+            m_ucLastTyreDamageIndex = ucTyre;
+            m_fLastTyreDamageLoss = fLoss;
+            m_uiLastTyreDamageFrame = m_uiFrameCount;
+        }
+
         CClientEntity* pClientAttacker = pPools->GetClientEntity((DWORD*)pAttackerInterface);
+
+        // GTA passes a zeroed position for explosion and fire damage, so report the vehicle position instead
+        CVector vecEventDamagePos = vecDamagePos;
+        if (vecEventDamagePos == CVector())
+            pClientVehicle->GetPosition(vecEventDamagePos);
 
         // Compose arguments
         // attacker, weapon, loss, damagepos, tyreIdx
@@ -4770,9 +4891,9 @@ bool CClientGame::VehicleDamageHandler(CEntitySAInterface* pVehicleInterface, fl
         else
             Arguments.PushNil();
         Arguments.PushNumber(fLoss);
-        Arguments.PushNumber(vecDamagePos.fX);
-        Arguments.PushNumber(vecDamagePos.fY);
-        Arguments.PushNumber(vecDamagePos.fZ);
+        Arguments.PushNumber(vecEventDamagePos.fX);
+        Arguments.PushNumber(vecEventDamagePos.fY);
+        Arguments.PushNumber(vecEventDamagePos.fZ);
         if (ucTyre != UCHAR_INVALID_INDEX)
             Arguments.PushNumber(ucTyre);
         else
@@ -4782,6 +4903,9 @@ bool CClientGame::VehicleDamageHandler(CEntitySAInterface* pVehicleInterface, fl
         {
             bAllowDamage = false;
         }
+
+        if (ucTyre != UCHAR_INVALID_INDEX)
+            m_bLastTyreDamageAllowed = bAllowDamage;
     }
 
     return bAllowDamage;
@@ -4914,20 +5038,36 @@ bool CClientGame::VehicleFellThroughMapHandler(CVehicleSAInterface* pVehicleInte
     return false;
 }
 
-// Validate known objects
+// Called when GTA:SA destroys an entity (e.g., during map streaming).
+// Clear stale pool entries to prevent dangling pointer crashes in GetClientEntity/GetEntity.
+// Note: This may leak the CObjectSA/CVehicleSA/CPedSA wrapper if MTA created it, but we cannot
+// safely delete it here since the game entity is mid-destruction. The leak is acceptable
+// as this is an abnormal code path (GTA destroying MTA-managed entities).
 void CClientGame::GameObjectDestructHandler(CEntitySAInterface* pObject)
 {
-    // m_pGameEntityXRefManager->OnGameEntityDestruct(pObject);
+    if (auto* pSlot = g_pGame->GetPools()->GetObject(reinterpret_cast<DWORD*>(pObject)))
+    {
+        pSlot->pEntity = nullptr;
+        pSlot->pClientEntity = nullptr;
+    }
 }
 
 void CClientGame::GameVehicleDestructHandler(CEntitySAInterface* pVehicle)
 {
-    // m_pGameEntityXRefManager->OnGameEntityDestruct(pVehicle);
+    if (auto* pSlot = g_pGame->GetPools()->GetVehicle(reinterpret_cast<DWORD*>(pVehicle)))
+    {
+        pSlot->pEntity = nullptr;
+        pSlot->pClientEntity = nullptr;
+    }
 }
 
 void CClientGame::GamePlayerDestructHandler(CEntitySAInterface* pPlayer)
 {
-    // m_pGameEntityXRefManager->OnGameEntityDestruct(pPlayer);
+    if (auto* pSlot = g_pGame->GetPools()->GetPed(reinterpret_cast<DWORD*>(pPlayer)))
+    {
+        pSlot->pEntity = nullptr;
+        pSlot->pClientEntity = nullptr;
+    }
 }
 
 void CClientGame::GameProjectileDestructHandler(CEntitySAInterface* pProjectile)
@@ -5033,7 +5173,7 @@ bool CClientGame::PreWeaponFire(CPlayerPed* pPlayerPed, bool bStopIfUsingBulletS
         if (pPlayer && !pPlayer->IsLocalPlayer())
         {
             if (bStopIfUsingBulletSync && pPlayer->IsCurrentWeaponUsingBulletSync())
-                return false;            // Don't apply shot compensation & tell caller to not do bullet trace
+                return false;  // Don't apply shot compensation & tell caller to not do bullet trace
 
             if (bShotCompensation)
             {
@@ -5164,6 +5304,8 @@ void CClientGame::PostWeaponFire()
                 else
                     Arguments.PushNil();
 
+                // Lets SetDoingGangDriveby(false) defer the task abort instead of running it re-entrantly.
+                pPed->SetProcessingWeaponFireEvent(true);
                 if (IS_PLAYER(pPed))
                 {
                     CVector vecOrigin;
@@ -5175,6 +5317,9 @@ void CClientGame::PostWeaponFire()
                 }
                 else
                     pPed->CallEvent("onClientPedWeaponFire", Arguments, true);
+
+                // Make sure to reset the weapon fire event state
+                pPed->SetProcessingWeaponFireEvent(false);
             }
             pPed->PostWeaponFire();
 #ifdef MTA_DEBUG
@@ -5284,18 +5429,15 @@ void CClientGame::SendExplosionSync(const CVector& vecPosition, eExplosionType T
 
             // Because we use this packet to notify the server of blown vehicles,
             // we include a bit, whether the vehicle was blown without an explosion
-            if (pBitStream->Can(eBitStreamVersion::VehicleBlowStateSupport))
+            if (pOrigin->GetType() == CCLIENTVEHICLE)
             {
-                if (pOrigin->GetType() == CCLIENTVEHICLE)
-                {
-                    auto vehicle = reinterpret_cast<CClientVehicle*>(pOrigin);
-                    pBitStream->WriteBit(1);
-                    pBitStream->WriteBit(vehicleBlowState.value_or(vehicle->GetBlowState()) == VehicleBlowState::BLOWN);
-                }
-                else
-                {
-                    pBitStream->WriteBit(0);
-                }
+                auto vehicle = reinterpret_cast<CClientVehicle*>(pOrigin);
+                pBitStream->WriteBit(1);
+                pBitStream->WriteBit(vehicleBlowState.value_or(vehicle->GetBlowState()) == VehicleBlowState::BLOWN);
+            }
+            else
+            {
+                pBitStream->WriteBit(0);
             }
 
             // Convert position
@@ -5368,9 +5510,7 @@ void CClientGame::SendProjectileSync(CClientProjectile* pProjectile)
         pBitStream->Write(&weaponTypeSync);
 
         // Write the projectile's model
-        if (pBitStream->Version() >= 0x4F)
-            if (pBitStream->Version() >= 0x52 || pOriginSource)            // Fix possible error for 0x51 server
-                pBitStream->Write(pProjectile->GetModel());
+        pBitStream->Write(pProjectile->GetModel());
 
         switch (weaponType)
         {
@@ -5594,11 +5734,11 @@ void CClientGame::DoWastedCheck(ElementID damagerID, unsigned char ucWeapon, uns
                 Arguments.PushElement(pKiller);
             else
                 Arguments.PushBoolean(false);
-            if (ucWeapon != 0xFF)
+            if (ucWeapon != WEAPONTYPE_INVALID)
                 Arguments.PushNumber(ucWeapon);
             else
                 Arguments.PushBoolean(false);
-            if (ucBodyPiece != 0xFF)
+            if (ucBodyPiece != BODYPART_INVALID)
                 Arguments.PushNumber(ucBodyPiece);
             else
                 Arguments.PushBoolean(false);
@@ -5642,8 +5782,9 @@ void CClientGame::DoWastedCheck(ElementID damagerID, unsigned char ucWeapon, uns
             if (discord && discord->IsDiscordRPCEnabled() && discord->IsDiscordCustomDetailsDisallowed())
             {
                 static const std::vector<std::string> states{
-                    _("In a ditch"), _("En-route to hospital"), _("Meeting their maker"),
-                    _("Regretting their decisions"), _("Wasted")
+
+                    _("In a ditch"), _("En-route to hospital"), _("Meeting their maker"), _("Regretting their decisions"), _("Wasted")
+
                 };
 
                 const std::string& state = states[rand() % states.size()];
@@ -5658,26 +5799,22 @@ bool CClientGame::OnKeyDown(CGUIKeyEventArgs Args)
     return true;
 }
 
-bool CClientGame::OnMouseClick(CGUIMouseEventArgs Args)
+void CClientGame::TriggerGUIClickEvent(CGUIMouseEventArgs Args, const char* szState, const char* minClientVersion)
 {
     if (!Args.pWindow)
-        return false;
+        return;
 
     const char* szButton = NULL;
-    const char* szState = NULL;
     switch (Args.button)
     {
         case CGUIMouse::LeftButton:
             szButton = "left";
-            szState = "up";
             break;
         case CGUIMouse::MiddleButton:
             szButton = "middle";
-            szState = "up";
             break;
         case CGUIMouse::RightButton:
             szButton = "right";
-            szState = "up";
             break;
     }
 
@@ -5692,10 +5829,14 @@ bool CClientGame::OnMouseClick(CGUIMouseEventArgs Args)
         CClientGUIElement* pGUIElement = CGUI_GET_CCLIENTGUIELEMENT(Args.pWindow);
         if (GetGUIManager()->Exists(pGUIElement))
         {
-            pGUIElement->CallEvent("onClientGUIClick", Arguments, true);
+            pGUIElement->CallEvent("onClientGUIClick", Arguments, true, minClientVersion);
         }
     }
+}
 
+bool CClientGame::OnMouseClick(CGUIMouseEventArgs Args)
+{
+    TriggerGUIClickEvent(Args, "up", nullptr);
     return true;
 }
 
@@ -5761,17 +5902,20 @@ bool CClientGame::OnMouseButtonDown(CGUIMouseEventArgs Args)
 
     if (szButton)
     {
-        CLuaArguments Arguments;
-        Arguments.PushString(szButton);
-        Arguments.PushNumber(Args.position.fX);
-        Arguments.PushNumber(Args.position.fY);
-
         CClientGUIElement* pGUIElement = CGUI_GET_CCLIENTGUIELEMENT(Args.pWindow);
         if (GetGUIManager()->Exists(pGUIElement))
         {
+            // Fire onClientGUIMouseDown for backward compatibility
+            CLuaArguments Arguments;
+            Arguments.PushString(szButton);
+            Arguments.PushNumber(Args.position.fX);
+            Arguments.PushNumber(Args.position.fY);
             pGUIElement->CallEvent("onClientGUIMouseDown", Arguments, true);
         }
     }
+
+    // Fire onClientGUIClick with state="down"
+    TriggerGUIClickEvent(Args, "down", MIN_CLIENT_REQ_ON_MOUSE_BUTTON_DOWN);
 
     return true;
 }
@@ -6260,10 +6404,7 @@ void CClientGame::TakePlayerScreenShot(uint uiSizeX, uint uiSizeY, const SString
         else
             pBitStream->Write((uchar)EPlayerScreenShotResult::MINIMIZED);
         pBitStream->Write(uiServerSentTime);
-        if (pBitStream->Version() >= 0x053)
-            pBitStream->Write(pResource->GetNetID());
-        else
-            pBitStream->WriteString(pResource->GetName());
+        pBitStream->Write(pResource->GetNetID());
         pBitStream->WriteString(strTag);
         g_pNet->SendPacket(PACKET_ID_PLAYER_SCREENSHOT, pBitStream, PACKET_PRIORITY_LOW, PACKET_RELIABILITY_RELIABLE_ORDERED, PACKET_ORDERING_DATA_TRANSFER);
         g_pNet->DeallocateNetBitStream(pBitStream);
@@ -6328,13 +6469,9 @@ void CClientGame::GottenPlayerScreenShot(const CBuffer* pBuffer, uint uiTimeSpen
         NetBitStreamInterface* pBitStream = g_pNet->AllocateNetBitStream();
         pBitStream->Write((uchar)EPlayerScreenShotResult::ERROR_);
         pBitStream->Write(uiServerGrabTime);
-        if (pBitStream->Version() >= 0x053)
-            pBitStream->Write(pResource->GetNetID());
-        else
-            pBitStream->WriteString(pResource->GetName());
+        pBitStream->Write(pResource->GetNetID());
         pBitStream->WriteString(strTag);
-        if (pBitStream->Version() >= 0x053)
-            pBitStream->WriteString(strError);
+        pBitStream->WriteString(strError);
         g_pNet->SendPacket(PACKET_ID_PLAYER_SCREENSHOT, pBitStream, PACKET_PRIORITY_LOW, PACKET_RELIABILITY_RELIABLE_ORDERED, PACKET_ORDERING_DATA_TRANSFER);
         g_pNet->DeallocateNetBitStream(pBitStream);
         return;
@@ -6358,8 +6495,8 @@ void CClientGame::GottenPlayerScreenShot(const CBuffer* pBuffer, uint uiTimeSpen
     {
         NetBitStreamInterface* pBitStream = g_pNet->AllocateNetBitStream();
 
-        ushort usPartNumber = i;
-        ushort usBytesThisPart = std::min(uiBytesRemaining, uiBytesPerPart);
+        auto usPartNumber = static_cast<ushort>(i);
+        auto usBytesThisPart = static_cast<ushort>(std::min(uiBytesRemaining, uiBytesPerPart));
         assert(usBytesThisPart != 0);
 
         pBitStream->Write((uchar)EPlayerScreenShotResult::SUCCESS);
@@ -6374,10 +6511,7 @@ void CClientGame::GottenPlayerScreenShot(const CBuffer* pBuffer, uint uiTimeSpen
             pBitStream->Write(uiServerGrabTime);
             pBitStream->Write(uiTotalByteSize);
             pBitStream->Write((ushort)uiNumParts);
-            if (pBitStream->Version() >= 0x053)
-                pBitStream->Write(pResource->GetNetID());
-            else
-                pBitStream->WriteString(pResource->GetName());
+            pBitStream->Write(pResource->GetNetID());
             pBitStream->WriteString(strTag);
         }
 
@@ -6485,20 +6619,26 @@ bool CClientGame::WorldSoundHandler(const SWorldSoundEvent& event)
     // Audio events without a game entity could default to the root element, but the
     // best approach is to avoid spamming the event with the barely notable sounds (without a source).
     // Warning: Canceling sounds emitted by an audio entity (like vehicles do) will cause massive spam
+    CClientEntity* pEntity = nullptr;
+
     if (event.pGameEntity)
     {
-        CPools*        pPools = g_pGame->GetPools();
-        CClientEntity* pEntity = pPools->GetClientEntity((DWORD*)event.pGameEntity);
-        if (pEntity)
-        {
-            CLuaArguments Arguments;
-            Arguments.PushNumber(event.uiGroup);
-            Arguments.PushNumber(event.uiIndex);
-            Arguments.PushNumber(event.vecPosition.fX);
-            Arguments.PushNumber(event.vecPosition.fY);
-            Arguments.PushNumber(event.vecPosition.fZ);
-            return pEntity->CallEvent("onClientWorldSound", Arguments, true);
-        }
+        CPools* pPools = g_pGame->GetPools();
+        pEntity = pPools->GetClientEntity((DWORD*)event.pGameEntity);
+    }
+
+    if (!pEntity)
+        pEntity = GetRootEntity();
+
+    if (pEntity)
+    {
+        CLuaArguments Arguments;
+        Arguments.PushNumber(event.uiGroup);
+        Arguments.PushNumber(event.uiIndex);
+        Arguments.PushNumber(event.vecPosition.fX);
+        Arguments.PushNumber(event.vecPosition.fY);
+        Arguments.PushNumber(event.vecPosition.fZ);
+        return pEntity->CallEvent("onClientWorldSound", Arguments, true);
     }
 
     return true;
@@ -6552,9 +6692,22 @@ void CClientGame::OutputServerInfo()
 
     {
         SString     strEnabledGlitches;
-        const char* szGlitchNames[] = {"Quick reload",         "Fast fire",  "Fast move", "Crouch bug", "Close damage", "Hit anim", "Fast sprint",
-                                       "Bad driveby hitboxes", "Quick stand", "Kickout of vehicle on model replace"};
-        for (uint i = 0; i < NUM_GLITCHES; i++)
+        const char* szGlitchNames[] = {
+
+            "Quick reload",
+            "Fast fire",
+            "Fast move",
+            "Crouch bug",
+            "Close damage",
+            "Hit anim",
+            "Fast sprint",
+            "Bad driveby hitboxes",
+            "Quick stand",
+            "Kickout of vehicle on model replace"
+
+        };
+
+        for (unsigned char i = 0; i < NUM_GLITCHES; i++)
         {
             if (IsGlitchEnabled(i))
             {
@@ -6759,57 +6912,69 @@ bool CClientGame::TriggerBrowserRequestResultEvent(const std::unordered_set<SStr
     return GetRootEntity()->CallEvent("onClientBrowserWhitelistChange", Arguments, false);
 }
 
-void CClientGame::RestreamModel(unsigned short usModel)
+bool CClientGame::RestreamModel(std::uint16_t model)
 {
     // Is this a vehicle ID?
-    if (CClientVehicleManager::IsValidModel(usModel))
+    if (CClientVehicleManager::IsValidModel(model))
     {
         // Stream the vehicles of that model out so we have no
         // loaded when we do the restore. The streamer will
         // eventually stream them back in with async loading.
-        m_pManager->GetVehicleManager()->RestreamVehicles(usModel);
-    }
+        m_pManager->GetVehicleManager()->RestreamVehicles(model);
 
+        return true;
+    }
     // Is this an object ID?
-    else if (CClientObjectManager::IsValidModel(usModel))
+    else if (CClientObjectManager::IsValidModel(model))
     {
-        if (CClientPedManager::IsValidWeaponModel(usModel))
+        if (CClientPedManager::IsValidWeaponModel(model))
         {
             // Stream the weapon of that model out so we have no
             // loaded when we do the restore. The streamer will
             // eventually stream them back in with async loading.
-            m_pManager->GetPedManager()->RestreamWeapon(usModel);
-            m_pManager->GetPickupManager()->RestreamPickups(usModel);
+            m_pManager->GetPedManager()->RestreamWeapon(model);
+            m_pManager->GetPickupManager()->RestreamPickups(model);
         }
         // Stream the objects of that model out so we have no
         // loaded when we do the restore. The streamer will
         // eventually stream them back in with async loading.
-        m_pManager->GetObjectManager()->RestreamObjects(usModel);
-        g_pGame->GetModelInfo(usModel)->RestreamIPL();
+        m_pManager->GetObjectManager()->RestreamObjects(model);
+        g_pGame->GetModelInfo(model)->RestreamIPL();
+
+        return true;
     }
     // Is this an ped ID?
-    else if (CClientPlayerManager::IsValidModel(usModel))
+    else if (CClientPlayerManager::IsValidModel(model))
     {
         // Stream the ped of that model out so we have no
         // loaded when we do the restore. The streamer will
         // eventually stream them back in with async loading.
-        m_pManager->GetPedManager()->RestreamPeds(usModel);
-    }
-    else
+        m_pManager->GetPedManager()->RestreamPeds(model);
 
-        // 'Restream' upgrades after model replacement to propagate visual changes with immediate effect
-        if (CClientObjectManager::IsValidModel(usModel) && CVehicleUpgrades::IsUpgrade(usModel))
-            m_pManager->GetVehicleManager()->RestreamVehicleUpgrades(usModel);
+        return true;
+    }
+    // 'Restream' upgrades after model replacement to propagate visual changes with immediate effect
+    else if (CClientObjectManager::IsValidModel(model) && CVehicleUpgrades::IsUpgrade(model))
+    {
+        m_pManager->GetVehicleManager()->RestreamVehicleUpgrades(model);
+        return true;
+    }
+    return false;
 }
 
 void CClientGame::RestreamWorld()
 {
+    // If game is shutting down, do nothing for avoid crashes
+    if (g_bClientShuttingDown)
+        return;
+
     unsigned int numberOfFileIDs = g_pGame->GetCountOfAllFileIDs();
 
     for (unsigned int uiModelID = 0; uiModelID < numberOfFileIDs; uiModelID++)
     {
-        g_pClientGame->GetModelCacheManager()->OnRestreamModel(uiModelID);
+        g_pClientGame->GetModelCacheManager()->OnRestreamModel(static_cast<ushort>(uiModelID));
     }
+
     m_pManager->GetObjectManager()->RestreamAllObjects();
     m_pManager->GetVehicleManager()->RestreamAllVehicles();
     m_pManager->GetPedManager()->RestreamAllPeds();
@@ -6817,6 +6982,55 @@ void CClientGame::RestreamWorld()
 
     g_pGame->GetStreaming()->RemoveBigBuildings();
     g_pGame->GetStreaming()->ReinitStreaming();
+}
+
+void CClientGame::Restream(std::optional<RestreamOption> option)
+{
+    if (!option.has_value())
+        option = RestreamOption::ALL;
+
+    if (option == RestreamOption::ALL || option == RestreamOption::VEHICLES)
+    {
+        for (const auto& model : m_pManager->GetModelManager()->GetModelsByType(eClientModelType::VEHICLE))
+        {
+            g_pClientGame->GetModelCacheManager()->OnRestreamModel(model->GetModelID());
+        }
+
+        m_pManager->GetVehicleManager()->RestreamAllVehicles();
+    }
+
+    if (option == RestreamOption::ALL || option == RestreamOption::PEDS)
+    {
+        for (const auto& model : m_pManager->GetModelManager()->GetModelsByType(eClientModelType::PED))
+        {
+            g_pClientGame->GetModelCacheManager()->OnRestreamModel(model->GetModelID());
+        }
+
+        m_pManager->GetPedManager()->RestreamAllPeds();
+    }
+
+    if (option == RestreamOption::ALL || option == RestreamOption::OBJECTS)
+    {
+        static constexpr eClientModelType restreamTypes[] = {eClientModelType::OBJECT, eClientModelType::OBJECT_DAMAGEABLE, eClientModelType::TIMED_OBJECT,
+                                                             eClientModelType::CLUMP};
+
+        for (eClientModelType type : restreamTypes)
+        {
+            for (const auto& model : m_pManager->GetModelManager()->GetModelsByType(type))
+            {
+                g_pClientGame->GetModelCacheManager()->OnRestreamModel(model->GetModelID());
+            }
+        }
+
+        m_pManager->GetObjectManager()->RestreamAllObjects();
+        m_pManager->GetPickupManager()->RestreamAllPickups();
+    }
+
+    if (option == RestreamOption::ALL)
+    {
+        g_pGame->GetStreaming()->RemoveBigBuildings();
+        g_pGame->GetStreaming()->ReinitStreaming();
+    }
 }
 
 void CClientGame::ReinitMarkers()
@@ -7150,4 +7364,21 @@ void CClientGame::AudioZoneRadioSwitchHandler(DWORD dwStationID)
     {
         g_pGame->GetAudioEngine()->StartRadio(dwStationID);
     }
+}
+
+//////////////////////////////////////////////////////////////////
+//
+// CClientGame::TryGetCurrentWeapon
+//
+// Helper method to get current weapon type with error handling
+// Returns actual weapon type or WEAPONTYPE_UNARMED as fallback
+//
+//////////////////////////////////////////////////////////////////
+std::uint8_t CClientGame::TryGetCurrentWeapon(CClientPlayer* player)
+{
+    if (!player)
+        return WEAPONTYPE_UNARMED;
+
+    eWeaponType weaponType = player->GetCurrentWeaponType();
+    return (weaponType != WEAPONTYPE_INVALID) ? static_cast<std::uint8_t>(weaponType) : WEAPONTYPE_UNARMED;
 }

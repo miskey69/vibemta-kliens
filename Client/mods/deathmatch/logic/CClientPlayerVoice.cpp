@@ -57,6 +57,7 @@ CClientPlayerVoice::CClientPlayerVoice(CClientPlayer* pPlayer, CVoiceRecorder* p
     m_fPlaybackSpeed = 1.0f;
     Init();
 }
+
 CClientPlayerVoice::~CClientPlayerVoice()
 {
     DeInit();
@@ -73,9 +74,8 @@ void CALLBACK BASS_VoiceStateChange(HSYNC handle, DWORD channel, DWORD data, voi
 
 void CClientPlayerVoice::Init()
 {
-    // Grab our sample rate and quality
+    // Grab our sample rate
     m_SampleRate = m_pVoiceRecorder->GetSampleRate();
-    unsigned char ucQuality = m_pVoiceRecorder->GetSampleQuality();
 
     // Setup our BASS playback device
     m_pBassPlaybackStream = BASS_StreamCreate(m_SampleRate / VOICE_SAMPLE_SIZE, 2, BASS_STREAM_AUTOFREE, STREAMPROC_PUSH, NULL);
@@ -103,7 +103,7 @@ void CClientPlayerVoice::Init()
     {
         // Initialize our speex decoder
         speex_decoder_ctl(m_pSpeexDecoderState, SPEEX_GET_FRAME_SIZE, &m_iSpeexIncomingFrameSampleCount);
-        int iQuality = ucQuality;
+        int iQuality = static_cast<int>(m_pVoiceRecorder->GetSampleQuality());
         speex_decoder_ctl(m_pSpeexDecoderState, SPEEX_SET_QUALITY, &iQuality);
     }
 }
@@ -219,8 +219,7 @@ void CClientPlayerVoice::DecodeAndBuffer(const unsigned char* voiceBuffer, unsig
         m_ulTimeOfLastPacket = CClientTime::GetTime();
 
         // Skip uniform-byte noise before costly Speex decode
-        if (voiceBufferLength >= 4 && voiceBuffer[0] == voiceBuffer[1] &&
-            voiceBuffer[0] == voiceBuffer[2] && voiceBuffer[0] == voiceBuffer[3])
+        if (voiceBufferLength >= 4 && voiceBuffer[0] == voiceBuffer[1] && voiceBuffer[0] == voiceBuffer[2] && voiceBuffer[0] == voiceBuffer[3])
             return;
 
         if (!m_pSpeexDecoderState)
@@ -432,16 +431,19 @@ void CClientPlayerVoice::ApplyFXModifications(float fSampleRate, float fTempo, f
     m_fSampleRate = fSampleRate;
     m_fTempo = fTempo;
     m_fPitch = fPitch;
+
     if (m_pBassPlaybackStream)
     {
         if (fTempo != m_fTempo)
         {
             m_fTempo = fTempo;
         }
+
         if (fPitch != m_fPitch)
         {
             m_fPitch = fPitch;
         }
+
         if (fSampleRate != m_fSampleRate)
         {
             m_fSampleRate = fSampleRate;
@@ -547,7 +549,12 @@ bool CClientPlayerVoice::SetFxEffect(uint uiFxEffect, bool bEnable)
 
     // Apply if active
     if (m_pBassPlaybackStream)
+    {
         ApplyFxEffects();
+        // ApplyFxEffects clears m_EnabledEffects[i] when BASS rejects the effect
+        // (e.g. I3DL2REVERB on Windows 11 24H2, #4259), so report the truth.
+        return (m_EnabledEffects[uiFxEffect] != 0) == bEnable;
+    }
 
     return true;
 }
@@ -564,7 +571,12 @@ void CClientPlayerVoice::ApplyFxEffects()
             // Switch on
             m_FxEffects[i] = BASS_ChannelSetFX(m_pBassPlaybackStream, i, 0);
             if (!m_FxEffects[i])
+            {
+                // Effect could not be wired up by BASS (e.g. Windows 11 24H2
+                // removed BASS_FX_DX8_I3DL2REVERB at the OS level, #4259).
+                g_pCore->GetConsole()->Printf("BASS ERROR %d in BASS_ChannelSetFX (effect %u)", BASS_ErrorGetCode(), i);
                 m_FxEffects[i] = INVALID_FX_HANDLE;
+            }
         }
         else
         {
@@ -576,6 +588,11 @@ void CClientPlayerVoice::ApplyFxEffects()
                 m_FxEffects[i] = 0;
             }
         }
+
+        // Mirror failure into m_EnabledEffects so IsFxEffectEnabled() reports
+        // the truth and re-enable requests don't silently leave a dangling handle.
+        if (m_FxEffects[i] == INVALID_FX_HANDLE)
+            m_EnabledEffects[i] = 0;
     }
 }
 
@@ -591,6 +608,7 @@ bool CClientPlayerVoice::SetFxEffectParameters(std::uint32_t uiFxEffect, void* p
 {
     if (IsFxEffectEnabled(uiFxEffect))
         return BASS_FXSetParameters(m_FxEffects[uiFxEffect], params);
+
     return false;
 }
 
@@ -598,6 +616,7 @@ bool CClientPlayerVoice::GetFxEffectParameters(std::uint32_t uiFxEffect, void* p
 {
     if (IsFxEffectEnabled(uiFxEffect))
         return BASS_FXGetParameters(m_FxEffects[uiFxEffect], params);
+
     return false;
 }
 

@@ -240,24 +240,30 @@ static void AbortFireTask(CEntitySAInterface* entityOnFire, DWORD returnAddress)
 
 #define HOOKPOS_CFire_Extinguish  0x539429
 #define HOOKSIZE_CFire_Extinguish 6
-static constexpr std::uintptr_t CONTINUE_CFire_Extinguish = 0x53942F;
-static void _declspec(naked)    HOOK_CFire_Extinguish()
+static constexpr intptr_t     CONTINUE_CFire_Extinguish = 0x53942F;
+static void __declspec(naked) HOOK_CFire_Extinguish()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
-        mov [eax+730h], edi
+        mov     [eax+730h], edi
 
-        push ebx
-        mov ebx, [esp+0Ch]
+        push    ebx
+        mov     ebx, [esp+12]
+        push    edi
+        push    esi
 
-        push ebx
-        push eax
-        call AbortFireTask
-        add esp, 8
+        push    ebx     // returnAddress
+        push    eax     // entityOnFire
+        call    AbortFireTask
+        add     esp, 8
 
-        pop ebx
-        jmp CONTINUE_CFire_Extinguish
+        pop     esi
+        pop     edi
+        pop     ebx
+        jmp     CONTINUE_CFire_Extinguish
     }
     // clang-format on
 }

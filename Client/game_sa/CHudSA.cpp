@@ -82,7 +82,7 @@ CHudSA::CHudSA()
     MemPut<DWORD>(0x53E488 + 2, (DWORD)&m_fSniperCrosshairScale);
     MemPut<DWORD>(0x53E4BF + 2, (DWORD)&m_fSniperCrosshairScale);
 
-    // Initalize default data
+    // Initialize default data
     componentProperties.hpBar = MapGet(defaultComponentProperties, HUD_HEALTH);
     componentProperties.breathBar = MapGet(defaultComponentProperties, HUD_BREATH);
     componentProperties.armorBar = MapGet(defaultComponentProperties, HUD_ARMOUR);
@@ -130,6 +130,9 @@ void CHudSA::InitComponentList()
         {1, HUD_VEHICLE_NAME, 1, FUNC_DrawVehicleName, 1, 0xCC, 0xC3},
         {1, HUD_AREA_NAME, 1, FUNC_DrawAreaName, 1, 0xCC, 0xC3},
         {1, HUD_RADAR, 1, FUNC_DrawRadar, 1, 0xCC, 0xC3},
+        {1, HUD_RADAR_MAP, 1, FUNC_CRadar_DrawRadarMap, 1, 0xCC, 0xC3},
+        {1, HUD_RADAR_BLIPS, 1, FUNC_CRadar_DrawBlips, 1, 0xCC, 0xC3},
+        {1, HUD_RADAR_ALTIMETER, 1, CODE_ShowRadarAltimeter, 2, 0xCC, 0xEB30},
         {1, HUD_CLOCK, 0, VAR_DisableClock, 1, 1, 0},
         {1, HUD_RADIO, 1, FUNC_DrawRadioName, 1, 0xCC, 0xC3},
         {1, HUD_WANTED, 1, FUNC_DrawWantedLevel, 1, 0xCC, 0xC3},
@@ -166,7 +169,7 @@ void CHudSA::SetComponentVisible(eHudComponent component, bool bVisible)
     SHudComponent* pComponent = MapFind(m_HudComponentMap, component);
     if (pComponent)
     {
-        // Save original bytes if requred
+        // Save original bytes if required
         if (pComponent->bSaveOriginalBytes)
         {
             pComponent->origData = *(DWORD*)pComponent->uiDataAddr;
@@ -191,6 +194,10 @@ void CHudSA::SetComponentVisible(eHudComponent component, bool bVisible)
 //
 bool CHudSA::IsComponentVisible(eHudComponent component)
 {
+    // showhud hides the entire HUD, so no component can be visible
+    if (IsDisabled())
+        return false;
+
     SHudComponent* pComponent = MapFind(m_HudComponentMap, component);
     if (pComponent)
     {
@@ -528,6 +535,8 @@ SHudComponentData& CHudSA::GetHudComponentRef(const eHudComponent& component) co
             return componentProperties.weaponIcon;
         case HUD_WANTED:
             return componentProperties.wanted;
+        default:
+            break;
     }
 
     return componentProperties.hpBar;
@@ -924,25 +933,27 @@ void CHudSA::RenderWanted(bool empty, float x, float y, const char* strLevel)
 }
 
 static constexpr std::uintptr_t CONTINUE_RenderWanted = 0x58DFD8;
-static void _declspec(naked)    HOOK_RenderWanted()
+static void __declspec(naked)   HOOK_RenderWanted()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
-        cmp ebp, edi
-        jle empty
+        cmp     ebp, edi
+        jle     empty
 
-        push 0
-        jmp render
+        push    0
+        jmp     render
 
         empty:
-        push 1
+        push    1
 
         render:
-        call CHudSA::RenderWanted
-        add esp,4
+        call    CHudSA::RenderWanted
+        add     esp, 4
 
-        jmp CONTINUE_RenderWanted
+        jmp     CONTINUE_RenderWanted
     }
     // clang-format on
 }

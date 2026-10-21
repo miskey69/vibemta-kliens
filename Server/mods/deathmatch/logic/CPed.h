@@ -115,7 +115,7 @@ struct SPlayerAnimData
     int         blendTime{250};
     bool        taskToBeRestoredOnAnimEnd{false};
 
-    std::int64_t startedTick{0};
+    std::int64_t startTime{0};
 
     float progress{0.0f};
     float speed{1.0f};
@@ -192,7 +192,7 @@ public:
 
     float GetMaxHealth();
     float GetHealth() { return m_fHealth; }
-    void  SetHealth(float fHealth) { m_fHealth = fHealth; }
+    void  SetHealth(float fHealth) noexcept { m_fHealth = std::clamp(fHealth, 0.0f, GetMaxHealth()); }
     float GetArmor() const noexcept { return m_armor; }
     void  SetArmor(float armor) noexcept { m_armor = std::clamp(armor, 0.0f, 100.0f); }
 
@@ -208,7 +208,7 @@ public:
     static const char* GetBodyPartName(unsigned char ucID);
 
     bool HasJetPack() { return m_bHasJetPack; }
-    void SetHasJetPack(bool bHasJetPack);
+    void SetHasJetPack(bool bHasJetPack) { m_bHasJetPack = bHasJetPack; }
 
     bool IsInWater() { return m_bInWater; }
     void SetInWater(bool bInWater) { m_bInWater = bInWater; }
@@ -309,6 +309,9 @@ public:
     void                   SetAnimationProgress(float progress) { m_animData.progress = progress; };
     void                   SetAnimationSpeed(float speed) { m_animData.speed = speed; };
 
+    void SetHanging(bool hanging) noexcept { m_hanging = hanging; }
+    bool IsHanging() const noexcept { return m_hanging; }
+
 protected:
     bool ReadSpecialData(const int iLine) override;
 
@@ -350,6 +353,7 @@ protected:
     CVehicle*                            m_pJackingVehicle;
     SPlayerAnimData                      m_animData{};
     float                                m_cameraRotation{};
+    bool                                 m_hanging{false};  // Is the player hanging during a climb task?
 
     CVehicle*    m_pVehicle;
     unsigned int m_uiVehicleSeat;

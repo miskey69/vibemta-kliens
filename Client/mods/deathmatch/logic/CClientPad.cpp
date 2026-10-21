@@ -323,10 +323,10 @@ bool CClientPad::GetControlState(const char* szName, CControllerState& State, bo
                     return State.LeftStickX == 128;
                     break;  // right
                 case 7:
-                    return State.RightShoulder2 == 255;
+                    return State.LeftShoulder2 == 255;
                     break;  // zoom in
                 case 8:
-                    return State.LeftShoulder2 == 255;
+                    return State.RightShoulder2 == 255;
                     break;  // zoom out
                 case 9:
                     return State.ButtonTriangle == 255;  // enter_exit
@@ -746,7 +746,7 @@ void CClientPad::ProcessControl(short& usControlValue, unsigned int uiIndex)
     //
     // usControlValue                       is the updated input value we get from the player
     // m_sScriptedStates                    contains our script value
-    // m_bScriptedStatesNextFrameOverride   if the player input should be forcefully overriden for the next frame
+    // m_bScriptedStatesNextFrameOverride   if the player input should be forcefully overridden for the next frame
     //
     //
     // old behavior or (override == false)

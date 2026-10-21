@@ -51,14 +51,17 @@ public:
     ZERO_ON_NEW
 
     CMultiplayerSA();
+    ~CMultiplayerSA();
     void                InitHooks();
     void                InitHooks_CrashFixHacks();
     void                Init_13();
     void                InitHooks_13();
     void                InitMemoryCopies_13();
+    void                InitHooks_CustomAnimations();
     void                InitHooks_ClothesSpeedUp();
     void                InitHooks_FixBadAnimId();
     void                InitHooks_HookDestructors();
+    void                CleanupHooks_HookDestructors();
     void                InitHooks_RwResources();
     void                InitHooks_ClothesCache();
     void                InitHooks_Files();
@@ -68,6 +71,7 @@ public:
     void                InitHooks_VehicleCollision();
     void                InitHooks_VehicleDummies();
     void                InitHooks_Vehicles();
+    void                InitHooks_VehicleSirens();
     void                InitHooks_Rendering();
     void                InitHooks_LicensePlate();
     void                InitHooks_VehicleLights();
@@ -115,6 +119,7 @@ public:
     void SetBreakTowLinkHandler(BreakTowLinkHandler* pBreakTowLinkHandler);
     void SetProcessCamHandler(ProcessCamHandler* pProcessCamHandler);
     void SetChokingHandler(ChokingHandler* pChokingHandler);
+    void SetPreWeatherUpdateHandler(PreWeatherUpdateHandler* pHandler);
     void SetPreWorldProcessHandler(PreWorldProcessHandler* pHandler);
     void SetPostWorldProcessHandler(PostWorldProcessHandler* pHandler);
     void SetPostWorldProcessPedsAfterPreRenderHandler(PostWorldProcessPedsAfterPreRenderHandler* pHandler);

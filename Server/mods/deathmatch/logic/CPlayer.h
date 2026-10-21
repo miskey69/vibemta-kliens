@@ -23,6 +23,7 @@ class CPlayer;
 #include "CObject.h"
 #include "packets/CPacket.h"
 #include "packets/CPlayerStatsPacket.h"
+#include "CStringName.h"
 class CKeyBinds;
 class CPlayerCamera;
 enum class eVehicleAimDirection : unsigned char;
@@ -106,10 +107,10 @@ public:
     bool IsJoined() { return m_bIsJoined; }
     void SetJoined() { m_bIsJoined = true; }
 
-    bool SubscribeElementData(CElement* pElement, const std::string& strName);
-    bool UnsubscribeElementData(CElement* pElement, const std::string& strName);
+    bool SubscribeElementData(CElement* pElement, CStringName name);
+    bool UnsubscribeElementData(CElement* pElement, CStringName name);
     bool UnsubscribeElementData(CElement* pElement);
-    bool IsSubscribed(CElement* pElement, const std::string& strName) const;
+    bool IsSubscribed(CElement* pElement, CStringName name) const;
 
     float GetCameraRotation() { return m_fCameraRotation; };
     void  SetCameraRotation(float fRotation) { m_fCameraRotation = fRotation; };
@@ -215,12 +216,6 @@ public:
 
     const std::string& GetSerial(uint uiIndex = 0) { return m_strSerials[uiIndex % NUMELMS(m_strSerials)]; }
     void               SetSerial(const std::string& strSerial, uint uiIndex) { m_strSerials[uiIndex % NUMELMS(m_strSerials)] = strSerial; }
-
-    const std::string& GetSerialUser() { return m_strSerialUser; };
-    void               SetSerialUser(const std::string& strUser) { m_strSerialUser = strUser; };
-
-    const std::string& GetCommunityID() { return m_strCommunityID; };
-    void               SetCommunityID(const std::string& strID) { m_strCommunityID = strID; };
 
     unsigned char GetBlurLevel() { return m_ucBlurLevel; }
     void          SetBlurLevel(unsigned char ucBlurLevel) { m_ucBlurLevel = ucBlurLevel; }
@@ -360,14 +355,20 @@ public:
     SString                m_strD3d9Md5;
     SString                m_strD3d9Sha256;
 
-    CElapsedTime m_ResourceStartPacketTimer;
-    unsigned int m_ResourceStartTokens{50};
+    // Per-player token bucket throttling for onPlayerResourceStart acks. Genuine duplicates
+    // consume a token; race-condition acks (resource stopped/restarted before the ack arrived)
+    // do not. A sustained flood that exhausts the bucket is counted in m_ResourceStartDrops
+    // and the player is disconnected once the drop count crosses the threshold in CGame.
+    CElapsedTime       m_ResourceStartPacketTimer;
+    unsigned int       m_ResourceStartTokens{50};
     unsigned long long m_ResourceStartRefillRemainderMs{};
-    unsigned int m_ResourceStartDrops{};
-
-    unsigned int m_uiActiveSatchelCount{};
-    CElapsedTime m_DetonateSatchelTimer;
-    CElapsedTime m_DestroySatchelTimer;
+    unsigned int       m_ResourceStartDrops{};
+    unsigned int       m_uiActiveSatchelCount{};
+    CElapsedTime       m_DetonateSatchelTimer;
+    CElapsedTime       m_DestroySatchelTimer;
+    CElapsedTime       m_BulletSyncRateTimer;
+    // Rate gate for custom weapon fire (PACKET_ID_WEAPON_BULLETSYNC)
+    CElapsedTime m_WeaponBulletSyncRateTimer;
 
 private:
     SLightweightSyncData m_lightweightSyncData;
@@ -443,8 +444,6 @@ private:
     bool          m_bNametagShowing;
 
     std::string m_strSerials[2];
-    std::string m_strSerialUser;
-    std::string m_strCommunityID;
 
     unsigned char m_ucBlurLevel;
 
@@ -463,7 +462,7 @@ private:
 
     std::map<std::string, std::string> m_AnnounceValues;
 
-    std::set<std::pair<CElement*, std::string>> m_DataSubscriptions;
+    std::set<std::pair<CElement*, CStringName>> m_DataSubscriptions;
 
     uint m_uiWeaponIncorrectCount;
 

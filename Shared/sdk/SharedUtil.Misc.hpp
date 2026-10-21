@@ -29,7 +29,7 @@
     #define SHAREDUTIL_PLATFORM_WINDOWS 1
 #endif
 
-#if defined(__linux__) || defined(LINUX_x86) || defined(LINUX_x64) || defined(LINUX_arm) || defined(LINUX_arm64)
+#if defined(__linux__) || defined(LINUX_x64) || defined(LINUX_arm) || defined(LINUX_arm64)
     #include <fstream>
     #include <string>
     #include <sstream>
@@ -46,18 +46,16 @@
 #include "UTF8Detect.hpp"
 #include "CDuplicateLineFilter.h"
 #include "version.h"
-namespace SharedUtil
-{
-    namespace Details
-    {
-        constexpr size_t kMaxClipboardBytes = 100u * 1024u * 1024u;
-        constexpr size_t kMaxClipboardChars = kMaxClipboardBytes / sizeof(wchar_t);
 
-        inline std::mutex& ClipboardMutex() noexcept
-        {
-            static std::mutex mutex;
-            return mutex;
-        }
+namespace SharedUtil::Details
+{
+    constexpr size_t kMaxClipboardBytes = 100u * 1024u * 1024u;
+    constexpr size_t kMaxClipboardChars = kMaxClipboardBytes / sizeof(wchar_t);
+
+    inline std::mutex& ClipboardMutex() noexcept
+    {
+        static std::mutex mutex;
+        return mutex;
     }
 }
 
@@ -91,68 +89,64 @@ struct HKeyDeleter
 };
 using UniqueHKey = std::unique_ptr<std::remove_pointer_t<HKEY>, HKeyDeleter>;
 
-namespace SharedUtil
+namespace SharedUtil::Details
 {
-    namespace Details
+    class UniqueHGlobal
     {
-        class UniqueHGlobal
+    public:
+        UniqueHGlobal() noexcept = default;
+        explicit UniqueHGlobal(HGLOBAL value) noexcept : m_handle(value) {}
+        ~UniqueHGlobal() { reset(); }
+
+        UniqueHGlobal(const UniqueHGlobal&) = delete;
+        UniqueHGlobal& operator=(const UniqueHGlobal&) = delete;
+
+        UniqueHGlobal(UniqueHGlobal&& other) noexcept : m_handle(other.release()) {}
+
+        UniqueHGlobal& operator=(UniqueHGlobal&& other) noexcept
         {
-        public:
-            UniqueHGlobal() noexcept = default;
-            explicit UniqueHGlobal(HGLOBAL value) noexcept : m_handle(value) {}
-            ~UniqueHGlobal() { reset(); }
+            if (this != &other)
+                reset(other.release());
+            return *this;
+        }
 
-            UniqueHGlobal(const UniqueHGlobal&) = delete;
-            UniqueHGlobal& operator=(const UniqueHGlobal&) = delete;
+        void reset(HGLOBAL value = nullptr) noexcept
+        {
+            if (m_handle)
+                GlobalFree(m_handle);
+            m_handle = value;
+        }
 
-            UniqueHGlobal(UniqueHGlobal&& other) noexcept : m_handle(other.release()) {}
+        [[nodiscard]] HGLOBAL get() const noexcept { return m_handle; }
 
-            UniqueHGlobal& operator=(UniqueHGlobal&& other) noexcept
-            {
-                if (this != &other)
-                    reset(other.release());
-                return *this;
-            }
+        [[nodiscard]] HGLOBAL release() noexcept { return std::exchange(m_handle, nullptr); }
 
-            void reset(HGLOBAL value = nullptr) noexcept
-            {
-                if (m_handle)
-                    GlobalFree(m_handle);
-                m_handle = value;
-            }
+        [[nodiscard]] explicit operator bool() const noexcept { return m_handle != nullptr; }
 
-            [[nodiscard]] HGLOBAL get() const noexcept { return m_handle; }
-
-            [[nodiscard]] HGLOBAL release() noexcept { return std::exchange(m_handle, nullptr); }
-
-            [[nodiscard]] explicit operator bool() const noexcept { return m_handle != nullptr; }
-
-        private:
-            HGLOBAL m_handle = nullptr;
-        };
-    }  // namespace SharedUtil::Details
-}  // namespace SharedUtil
+    private:
+        HGLOBAL m_handle = nullptr;
+    };
+}  // namespace SharedUtil::Details
 
 static void InitializeProcessBaseDir(SString& strProcessBaseDir)
 {
     try
     {
-        const size_t         bufferSize = MAX_PATH * 2;
-        const size_t         MAX_UNICODE_PATH = 32767;
-        std::vector<wchar_t> coreFileName(bufferSize);
+        constexpr auto bufferSize = MAX_PATH * 2;
+        constexpr auto MAX_UNICODE_PATH = 32767;
+        auto           coreFileName = std::array<wchar_t, bufferSize>{};
 
         // Get core.dll module handle to determine base directory
         // Try debug build first (core_d.dll), then release build (core.dll)
-        const wchar_t* coreDllDebug = L"core_d.dll";
-        const wchar_t* coreDllRelease = L"core.dll";
+        constexpr auto coreDllDebug = std::wstring_view{L"core_d.dll"};
+        constexpr auto coreDllRelease = std::wstring_view{L"core.dll"};
 
-        HMODULE hCoreModule = nullptr;
-        bool    bCoreModuleFound = false;
+        auto hCoreModule = HMODULE{};
+        auto bCoreModuleFound = bool{false};
     #ifdef MTA_DEBUG
-        bCoreModuleFound = GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, coreDllDebug, &hCoreModule) != FALSE;
-        if (!bCoreModuleFound)
+        if (bCoreModuleFound = GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, coreDllDebug.data(), &hCoreModule); !bCoreModuleFound)
     #endif
-            bCoreModuleFound = GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, coreDllRelease, &hCoreModule) != FALSE;
+            bCoreModuleFound = GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, coreDllRelease.data(), &hCoreModule);
 
         // Fallback: Use current module if core.dll isn't loaded yet
         if (!hCoreModule)
@@ -163,19 +157,18 @@ static void InitializeProcessBaseDir(SString& strProcessBaseDir)
 
         if (hCoreModule)
         {
-            DWORD lengthCore = GetModuleFileNameW(hCoreModule, coreFileName.data(), static_cast<DWORD>(coreFileName.size()));
-            if (lengthCore > 0)
+            if (DWORD lengthCore = GetModuleFileNameW(hCoreModule, coreFileName.data(), static_cast<DWORD>(coreFileName.size())); lengthCore > 0)
             {
-                std::wstring corePathBuffer(coreFileName.data(), static_cast<size_t>(lengthCore));
+                // Use std::wstring for flexible buffer management
+                auto corePathBuffer = std::wstring{coreFileName.data(), static_cast<size_t>(lengthCore)};
 
                 // If buffer too small, resize for long path support
-                const bool bufferTooSmall = (static_cast<size_t>(lengthCore) == coreFileName.size());
-                if (bufferTooSmall)
+                if (const auto bufferTooSmall = (static_cast<size_t>(lengthCore) == coreFileName.size()); bufferTooSmall)
                 {
                     corePathBuffer.resize(MAX_UNICODE_PATH);
 
-                    lengthCore = GetModuleFileNameW(hCoreModule, &corePathBuffer[0], static_cast<DWORD>(corePathBuffer.size()));
-                    if (lengthCore > 0 && static_cast<size_t>(lengthCore) < corePathBuffer.size())
+                    if (lengthCore = GetModuleFileNameW(hCoreModule, corePathBuffer.data(), static_cast<DWORD>(corePathBuffer.size()));
+                        lengthCore > 0 && static_cast<size_t>(lengthCore) < corePathBuffer.size())
                     {
                         corePathBuffer.resize(lengthCore);
                     }
@@ -185,64 +178,57 @@ static void InitializeProcessBaseDir(SString& strProcessBaseDir)
                     }
                 }
 
-                std::vector<wchar_t> fullPath(bufferSize);
+                auto fullPath = std::array<wchar_t, bufferSize>{};
 
-                DWORD lengthFull = GetFullPathNameW(corePathBuffer.c_str(), static_cast<DWORD>(fullPath.size()), fullPath.data(), nullptr);
-                if (lengthFull > 0)
+                if (DWORD lengthFull = GetFullPathNameW(corePathBuffer.c_str(), static_cast<DWORD>(fullPath.size()), fullPath.data(), nullptr); lengthFull > 0)
                 {
                     // Process path and extract base directory
                     // The directory above /MTA/ is always the base directory
-                    const auto processPath = [&strProcessBaseDir](const std::wstring& fullPathStr)
+                    const auto processPath = [&strProcessBaseDir](const std::wstring_view fullPathStr)
                     {
-                        const size_t lastSeparator = fullPathStr.find_last_of(L"\\/");
-                        if (lastSeparator != std::wstring::npos)
+                        if (const auto lastSeparator = fullPathStr.find_last_of(L"\\/"); lastSeparator != std::wstring_view::npos)
                         {
-                            std::wstring currentPath = fullPathStr.substr(0, lastSeparator);
+                            const auto moduleDir = fullPathStr.substr(0, lastSeparator);
+                            auto       currentPath = std::filesystem::path(moduleDir);
 
                             // Walk up to find MTA/ folder
                             // Stop at first MTA folder found - it's guaranteed to be the correct one
                             // Check current directory and up to 2 parent levels
-                            for (int level = 0; level < 3; ++level)
+                            for (auto level = 0; level < 3; ++level)
                             {
-                                // Extract folder name from current path
-                                const size_t lastSep = currentPath.find_last_of(L"\\/");
-                                std::wstring folderName = (lastSep != std::wstring::npos) ? currentPath.substr(lastSep + 1) : currentPath;
+                                auto folderName = currentPath.filename().wstring();
 
                                 // Convert to lowercase for case-insensitive comparison
                                 std::transform(folderName.begin(), folderName.end(), folderName.begin(), ::towlower);
 
                                 if (folderName == L"mta")
                                 {
-                                    const SString strCurrentPath = ToUTF8(currentPath);
+                                    const SString strCurrentPath = ToUTF8(currentPath.wstring());
                                     const bool    bHasKnownModule =
                                         FileExists(PathJoin(strCurrentPath, "core.dll")) || FileExists(PathJoin(strCurrentPath, "core_d.dll")) ||
                                         FileExists(PathJoin(strCurrentPath, "loader.dll")) || FileExists(PathJoin(strCurrentPath, "loader_d.dll"));
 
                                     if (!bHasKnownModule)
                                     {
-                                        if (lastSep != std::wstring::npos)
-                                            currentPath = currentPath.substr(0, lastSep);
+                                        if (currentPath.has_parent_path())
+                                            currentPath = currentPath.parent_path();
                                         else
                                             break;
                                         continue;
                                     }
 
                                     // Found MTA folder - base directory is its parent
-                                    // Stop searching immediately to avoid finding outer "MTA" folders (e.g user with custom install dir)
-                                    if (lastSep != std::wstring::npos)
+                                    // Stop searching immediately to avoid finding outer "MTA" folders (e.g user with custom intall dir)
+                                    if (currentPath.has_parent_path())
                                     {
-                                        std::wstring parentPath = currentPath.substr(0, lastSep);
-                                        // Add trailing separator for drive roots to match filesystem::path::parent_path() behavior
-                                        if (parentPath.length() == 2 && parentPath[1] == L':')
-                                            parentPath += L'\\';
-                                        strProcessBaseDir = ToUTF8(parentPath);
+                                        strProcessBaseDir = ToUTF8(currentPath.parent_path().wstring());
                                     }
                                     return;  // Always stop at first MTA folder found
                                 }
 
                                 // Move up one level
-                                if (lastSep != std::wstring::npos)
-                                    currentPath = currentPath.substr(0, lastSep);
+                                if (currentPath.has_parent_path())
+                                    currentPath = currentPath.parent_path();
                                 else
                                     break;  // Reached root, can't go further
                             }
@@ -250,24 +236,21 @@ static void InitializeProcessBaseDir(SString& strProcessBaseDir)
                     };
 
                     // If buffer too small, resize for long path support
-                    if (static_cast<size_t>(lengthFull) > fullPath.size())
+                    if (auto fullPathBuffer = std::wstring{}; static_cast<size_t>(lengthFull) > fullPath.size())
                     {
                         if (static_cast<size_t>(lengthFull) > MAX_UNICODE_PATH)
                             return;  // Path too long, validation failed
 
-                        std::wstring fullPathBuffer;
                         fullPathBuffer.resize(static_cast<size_t>(lengthFull));
-                        lengthFull = GetFullPathNameW(corePathBuffer.c_str(), static_cast<DWORD>(fullPathBuffer.size()), &fullPathBuffer[0], nullptr);
-                        if (lengthFull > 0 && static_cast<size_t>(lengthFull) < fullPathBuffer.size())
+                        if (lengthFull = GetFullPathNameW(corePathBuffer.c_str(), static_cast<DWORD>(fullPathBuffer.size()), fullPathBuffer.data(), nullptr);
+                            lengthFull > 0 && static_cast<size_t>(lengthFull) < fullPathBuffer.size())
                         {
-                            fullPathBuffer.resize(static_cast<size_t>(lengthFull));
-                            processPath(fullPathBuffer);
+                            processPath(std::wstring_view(fullPathBuffer.data(), static_cast<size_t>(lengthFull)));
                         }
                     }
                     else
                     {
-                        std::wstring fullPathStr(fullPath.data(), static_cast<size_t>(lengthFull));
-                        processPath(fullPathStr);
+                        processPath(std::wstring_view(fullPath.data(), static_cast<size_t>(lengthFull)));
                     }
                 }
             }
@@ -280,8 +263,8 @@ static void InitializeProcessBaseDir(SString& strProcessBaseDir)
 
 [[nodiscard]] const SString& SharedUtil::GetMTAProcessBaseDir()
 {
-    static auto           strProcessBaseDir = SString{};
-    static std::once_flag initFlag;
+    static auto strProcessBaseDir = SString{};
+    static auto initFlag = std::once_flag{};
 
     std::call_once(initFlag, InitializeProcessBaseDir, std::ref(strProcessBaseDir));
 
@@ -299,6 +282,10 @@ static void InitializeProcessBaseDir(SString& strProcessBaseDir)
     #ifndef RUSAGE_THREAD
         #define RUSAGE_THREAD 1 /* only the calling thread */
     #endif
+#endif
+
+#if __cplusplus >= 201703L  // C++17
+    #include <filesystem>
 #endif
 
 #if defined(__APPLE__) && !defined(__aarch64__)
@@ -455,8 +442,7 @@ static SString ReadInstallRootRegistryValueView(REGSAM viewFlag)
     result = RegQueryValueExW(hkTemp, wstrValue, NULL, &dwType, reinterpret_cast<LPBYTE>(buffer.data()), &dwSize);
     RegCloseKey(hkTemp);
 
-    if (result != ERROR_SUCCESS || (dwType != REG_SZ && dwType != REG_EXPAND_SZ) || dwSize > kMaxRegistryValueBytes ||
-        (dwSize % sizeof(wchar_t)) != 0)
+    if (result != ERROR_SUCCESS || (dwType != REG_SZ && dwType != REG_EXPAND_SZ) || dwSize > kMaxRegistryValueBytes || (dwSize % sizeof(wchar_t)) != 0)
         return "";
 
     buffer[dwSize / sizeof(wchar_t)] = L'\0';
@@ -548,9 +534,10 @@ SString SharedUtil::GetMTASABaseDir()
                     strInstallRoot = strCandidate;
                     strInstallRootSource = (viewFlags[i] == 0) ? "registry" :
     #if defined(KEY_WOW64_64KEY)
-                                           (viewFlags[i] == KEY_WOW64_64KEY) ? "registry64" :
+                                           (viewFlags[i] == KEY_WOW64_64KEY) ? "registry64"
+                                                                             :
     #endif
-                                                                               "registry32";
+                                                                             "registry32";
                 }
             }
             if (strInstallRoot.empty())
@@ -649,7 +636,7 @@ bool SharedUtil::IsReadablePointer(const void* ptr, size_t size)
     }
 
     return true;
-    #elif defined(LINUX_x86) || defined(LINUX_x64) || defined(LINUX_arm) || defined(LINUX_arm64)
+    #elif defined(LINUX_x64) || defined(LINUX_arm) || defined(LINUX_arm64)
     static_assert(sizeof(uintptr_t) <= sizeof(unsigned long long), "Unexpected uintptr_t size");
 
     std::ifstream maps("/proc/self/maps");
@@ -1598,8 +1585,7 @@ SString SharedUtil::GetClipboardText()
     if (!IsClipboardFormatAvailable(CF_UNICODETEXT))
         return result;
 
-    const HANDLE clipboardData = GetClipboardData(CF_UNICODETEXT);
-    if (clipboardData)
+    if (const HANDLE clipboardData = GetClipboardData(CF_UNICODETEXT); clipboardData)
     {
         void* rawData = GlobalLock(clipboardData);
         if (!rawData)
@@ -2049,47 +2035,25 @@ bool SharedUtil::ShellExecuteNonBlocking(const SString& strAction, const SString
 #endif  // MTA_CLIENT
 
 #ifdef SHAREDUTIL_PLATFORM_WINDOWS
-    #define _WIN32_WINNT_WIN8 0x0602
-///////////////////////////////////////////////////////////////////////////
-//
-// SharedUtil::IsWindowsVersionOrGreater
-//
-// From Windows Kits\8.1 VersionHelpers.h
-// (Ignores compatibility mode)
-//
-///////////////////////////////////////////////////////////////////////////
-bool SharedUtil::IsWindowsVersionOrGreater(WORD wMajorVersion, WORD wMinorVersion, WORD wServicePackMajor)
+    #define _WIN32_WINNT_WIN8  0x0602
+    #define _WIN32_WINNT_WIN10 0x0A00
+
+bool SharedUtil::IsWindows10OrGreater()
 {
-    OSVERSIONINFOEXW osvi = {sizeof(osvi), 0, 0, 0, 0, {0}, 0, 0};
-    DWORDLONG const  dwlConditionMask =
-        VerSetConditionMask(VerSetConditionMask(VerSetConditionMask(0, VER_MAJORVERSION, VER_GREATER_EQUAL), VER_MINORVERSION, VER_GREATER_EQUAL),
-                            VER_SERVICEPACKMAJOR, VER_GREATER_EQUAL);
+    using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOEXW*);
+    if (HMODULE ntdll = GetModuleHandleW(L"ntdll.dll"))
+    {
+        RtlGetVersionFn pfnRtlGetVersion = reinterpret_cast<RtlGetVersionFn>(GetProcAddress(ntdll, "RtlGetVersion"));
+        if (pfnRtlGetVersion)
+        {
+            OSVERSIONINFOEXW info{};
+            info.dwOSVersionInfoSize = sizeof(info);
+            if (pfnRtlGetVersion(&info) == 0 /* STATUS_SUCCESS */)
+                return info.dwMajorVersion >= 10;
+        }
+    }
 
-    osvi.dwMajorVersion = wMajorVersion;
-    osvi.dwMinorVersion = wMinorVersion;
-    osvi.wServicePackMajor = wServicePackMajor;
-
-    return VerifyVersionInfoW(&osvi, VER_MAJORVERSION | VER_MINORVERSION | VER_SERVICEPACKMAJOR, dwlConditionMask) != FALSE;
-}
-
-bool SharedUtil::IsWindowsXPSP3OrGreater()
-{
-    return IsWindowsVersionOrGreater(HIBYTE(_WIN32_WINNT_WINXP), LOBYTE(_WIN32_WINNT_WINXP), 3);
-}
-
-bool SharedUtil::IsWindowsVistaOrGreater()
-{
-    return IsWindowsVersionOrGreater(HIBYTE(_WIN32_WINNT_VISTA), LOBYTE(_WIN32_WINNT_VISTA), 0);
-}
-
-bool SharedUtil::IsWindows7OrGreater()
-{
-    return IsWindowsVersionOrGreater(HIBYTE(_WIN32_WINNT_WIN7), LOBYTE(_WIN32_WINNT_WIN7), 0);
-}
-
-bool SharedUtil::IsWindows8OrGreater()
-{
-    return IsWindowsVersionOrGreater(HIBYTE(_WIN32_WINNT_WIN8), LOBYTE(_WIN32_WINNT_WIN8), 0);
+    return false;
 }
 #endif  // SHAREDUTIL_PLATFORM_WINDOWS
 
@@ -2498,6 +2462,18 @@ char* SharedUtil::Trim(char* szText)
     return static_cast<char*>(memmove(szOriginal, szText, uiLen + 1));
 }
 
+#if __cplusplus >= 201703L  // C++17
+std::string SharedUtil::UTF8FilePath(const std::filesystem::path& input)
+{
+    #ifdef __cpp_lib_char8_t
+    std::u8string raw = input.u8string();
+    return std::string{std::begin(raw), std::end(raw)};
+    #else
+    return input.u8string();
+    #endif
+}
+#endif
+
 // Convert a standard multibyte UTF-8 std::string into a UTF-16 std::wstring
 std::wstring SharedUtil::MbUTF8ToUTF16(const SString& input)
 {
@@ -2835,7 +2811,7 @@ namespace SharedUtil
         return 0;
     #else
         // clang-format off
-        __asm
+        _asm
         {
             mov eax, 1
             cpuid

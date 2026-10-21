@@ -106,9 +106,11 @@ void OnMY_CRenderer_SetupEntityVisibility_Post(int result, CEntitySAInterface* p
 // Hook info
 #define HOOKPOS_CRenderer_SetupEntityVisibility  0x554230
 #define HOOKSIZE_CRenderer_SetupEntityVisibility 8
-DWORD                 RETURN_CRenderer_SetupEntityVisibility = 0x554238;
-void _declspec(naked) HOOK_CRenderer_SetupEntityVisibility()
+DWORD                         RETURN_CRenderer_SetupEntityVisibility = 0x554238;
+static void __declspec(naked) HOOK_CRenderer_SetupEntityVisibility()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -172,10 +174,12 @@ void OnMY_CWorldScan_ScanWorld_Pre(CVector2D* pVec, int iValue, void(__cdecl* fu
 // Hook info
 #define HOOKPOS_CWorldScan_ScanWorld  0x55555E
 #define HOOKSIZE_CWorldScan_ScanWorld 5
-DWORD                 RETURN_CWorldScan_ScanWorlda = 0x555563;
-DWORD                 RETURN_CWorldScan_ScanWorldb = 0x72CAE0;
-void _declspec(naked) HOOK_CWorldScan_ScanWorld()
+DWORD                         RETURN_CWorldScan_ScanWorlda = 0x555563;
+DWORD                         RETURN_CWorldScan_ScanWorldb = 0x72CAE0;
+static void __declspec(naked) HOOK_CWorldScan_ScanWorld()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -271,6 +275,8 @@ DWORD                        RETURN_CRenderer_ScanSectorList_EntityCheck = 0x554
 DWORD                        LOOPBOTTOM_CRenderer_ScanSectorList_EntityCheck = 0x554AD5;
 static void _declspec(naked) HOOK_CRenderer_ScanSectorList_EntityCheck()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -324,9 +330,11 @@ int OnMY_CVisibilityPlugins_CalculateFadingAtomicAlpha_Pre(CBaseModelInfoSAInter
 // Hook info
 #define HOOKPOS_CVisibilityPlugins_CalculateFadingAtomicAlpha  0x732500
 #define HOOKSIZE_CVisibilityPlugins_CalculateFadingAtomicAlpha 5
-DWORD                 RETURN_CVisibilityPlugins_CalculateFadingAtomicAlpha = 0x732505;
-void _declspec(naked) HOOK_CVisibilityPlugins_CalculateFadingAtomicAlpha()
+DWORD                         RETURN_CVisibilityPlugins_CalculateFadingAtomicAlpha = 0x732505;
+static void __declspec(naked) HOOK_CVisibilityPlugins_CalculateFadingAtomicAlpha()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {

@@ -48,10 +48,13 @@ void CTxdPoolSA::RemoveTextureDictonarySlot(std::uint32_t uiTxdId)
 
 bool CTxdPoolSA::IsFreeTextureDictonarySlot(std::uint32_t uiTxdId)
 {
-    return (*m_ppTxdPoolInterface)->IsEmpty(uiTxdId);
+    CPoolSAInterface<CTextureDictonarySAInterface>* pTxdPool = *m_ppTxdPoolInterface;
+
+    // IsEmpty assumes the index is valid, while callers also use this method to validate script-provided IDs.
+    return !pTxdPool || !pTxdPool->IsContains(uiTxdId);
 }
 
-std::uint16_t CTxdPoolSA::GetFreeTextureDictonarySlot()
+std::uint32_t CTxdPoolSA::GetFreeTextureDictonarySlot()
 {
     return (*m_ppTxdPoolInterface)->GetFreeSlot();
 }

@@ -218,6 +218,7 @@ protected:
     CGUILabel*     m_pAdvancedSettingDescriptionLabel;
     CGUILabel*     m_pFullscreenStyleLabel;
     CGUIComboBox*  m_pFullscreenStyleCombo;
+    CGUICheckBox*  m_pCheckBoxVSync;
     CGUILabel*     m_pPriorityLabel;
     CGUIComboBox*  m_pPriorityCombo;
     CGUILabel*     m_pPlayerMapImageLabel;
@@ -236,9 +237,6 @@ protected:
     CGUIComboBox*  m_pProgressAnimationCombo;
     CGUILabel*     m_pDebugSettingLabel;
     CGUIComboBox*  m_pDebugSettingCombo;
-    CGUILabel*     m_pWin8Label;
-    CGUICheckBox*  m_pWin8ColorCheckBox;
-    CGUICheckBox*  m_pWin8MouseCheckBox;
     CGUICheckBox*  m_pPhotoSavingCheckbox;
     CGUICheckBox*  m_pCheckBoxAskBeforeDisconnect;
     CGUICheckBox*  m_pProcessAffinityCheckbox;
@@ -286,13 +284,17 @@ protected:
     CGUIButton*   m_pBindsDefButton;
     CGUIHandle    m_hBind, m_hPriKey, m_hSecKeys[SecKeyNum];
 
-    CGUILabel*               m_pJoypadName;
-    CGUILabel*               m_pJoypadUnderline;
+    CGUIComboBox*            m_pJoypadDeviceCombo;
     CGUIEdit*                m_pEditDeadzone;
     CGUIEdit*                m_pEditSaturation;
+    CGUIEdit*                m_pEditTriggerDeadzone;
+    CGUIEdit*                m_pEditTriggerSaturation;
+    CGUICheckBox*            m_pCheckBoxJoypadVibration;
     std::vector<CGUILabel*>  m_pJoypadLabels;
     std::vector<CGUIButton*> m_pJoypadButtons;
     int                      m_JoypadSettingsRevision;
+    int                      m_JoypadDeviceListRevision;
+    bool                     m_bUpdatingJoypadCombo;
 
     CGUILabel*     m_pControlsMouseLabel;
     CGUICheckBox*  m_pInvertMouse;
@@ -304,6 +306,7 @@ protected:
     CGUILabel*     m_pLabelVerticalAimSensitivity;
     CGUIScrollBar* m_pVerticalAimSensitivity;
     CGUILabel*     m_pLabelVerticalAimSensitivityValue;
+    CGUICheckBox*  m_pCheckboxVerticalAimSensitivity;
 
     CGUILabel*       m_pControlsJoypadLabel;
     CGUIScrollPane*  m_pControlsInputTypePane;
@@ -361,17 +364,22 @@ protected:
     CGUIButton*   m_pButtonBrowserBlacklistAdd;
     CGUIGridList* m_pGridBrowserBlacklist;
     CGUIButton*   m_pButtonBrowserBlacklistRemove;
+    CGUIButton*   m_pButtonBrowserBlacklistRemoveAll;
     CGUILabel*    m_pLabelBrowserCustomWhitelist;
     CGUIEdit*     m_pEditBrowserWhitelistAdd;
     CGUILabel*    m_pLabelBrowserWhitelistAdd;
     CGUIButton*   m_pButtonBrowserWhitelistAdd;
     CGUIGridList* m_pGridBrowserWhitelist;
     CGUIButton*   m_pButtonBrowserWhitelistRemove;
+    CGUIButton*   m_pButtonBrowserWhitelistRemoveAll;
     CGUICheckBox* m_pCheckBoxBrowserGPUEnabled;
+    CGUICheckBox* m_pCheckBoxBrowserVideoAccelEnabled;
     bool          m_bBrowserListsChanged;
     bool          m_bBrowserListsLoadEnabled;
 
     bool OnJoypadTextChanged(CGUIElement* pElement);
+    bool OnJoypadDeviceChanged(CGUIElement* pElement);
+    bool OnJoypadVibrationClick(CGUIElement* pElement);
     bool OnAxisSelectClick(CGUIElement* pElement);
     bool OnAudioDefaultClick(CGUIElement* pElement);
     bool OnControlsDefaultClick(CGUIElement* pElement);
@@ -417,10 +425,12 @@ protected:
     bool OnVerticalAimSensitivityChanged(CGUIElement* pElement);
     bool OnBrowserBlacklistAdd(CGUIElement* pElement);
     bool OnBrowserBlacklistRemove(CGUIElement* pElement);
+    bool OnBrowserBlacklistRemoveAll(CGUIElement* pElement);
     bool OnBrowserBlacklistDomainAddFocused(CGUIElement* pElement);
     bool OnBrowserBlacklistDomainAddDefocused(CGUIElement* pElement);
     bool OnBrowserWhitelistAdd(CGUIElement* pElement);
     bool OnBrowserWhitelistRemove(CGUIElement* pElement);
+    bool OnBrowserWhitelistRemoveAll(CGUIElement* pElement);
     bool OnBrowserWhitelistDomainAddFocused(CGUIElement* pElement);
     bool OnBrowserWhitelistDomainAddDefocused(CGUIElement* pElement);
 
@@ -440,10 +450,12 @@ protected:
     bool ShowUnsafeResolutionsClick(CGUIElement* pElement);
     bool OnWindowedClick(CGUIElement* pElement);
     bool OnDPIAwareClick(CGUIElement* pElement);
+    bool OnVSyncClick(CGUIElement* pElement);
     bool OnShowAdvancedSettingDescription(CGUIElement* pElement);
     bool OnHideAdvancedSettingDescription(CGUIElement* pElement);
     bool OnTabChanged(CGUIElement* pElement);
     bool OnAffinityClick(CGUIElement* pElement);
+    bool OnMouseAimingClick(CGUIElement* pElement);
     void ReloadBrowserLists();
 
 private:

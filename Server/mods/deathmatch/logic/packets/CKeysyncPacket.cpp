@@ -78,26 +78,29 @@ bool CKeysyncPacket::Read(NetBitStreamInterface& BitStream)
                 SWeaponSlotSync slot;
                 if (!BitStream.Read(&slot))
                     return false;
-                unsigned int uiSlot = slot.data.uiSlot;
+                auto ucSlot = static_cast<unsigned char>(slot.data.uiSlot);
 
                 if (bWeaponCorrect)
-                    if (uiSlot != static_cast<unsigned int>(pSourcePlayer->GetWeaponSlot()))
+                {
+                    const unsigned int uiCurrSlot = slot.data.uiSlot;
+                    if (uiCurrSlot != static_cast<unsigned int>(pSourcePlayer->GetWeaponSlot()))
                     {
-                        if (uiSlot > 0xFF)
+                        if (uiCurrSlot > 0xFF)
                             return false;
 
-                        pSourcePlayer->SetWeaponSlot(static_cast<unsigned char>(uiSlot));
+                        pSourcePlayer->SetWeaponSlot(static_cast<unsigned char>(uiCurrSlot));
                     }
+                }
 
                 // Did he have a weapon?
-                if (CWeaponNames::DoesSlotHaveAmmo(uiSlot))
+                if (CWeaponNames::DoesSlotHaveAmmo(ucSlot))
                 {
                     // And ammo in clip
                     SWeaponAmmoSync ammo(ucUseWeaponType, false, true);
                     if (!BitStream.Read(&ammo))
                         return false;
 
-                    float fWeaponRange = pSourcePlayer->GetWeaponRangeFromSlot(uiSlot);
+                    float fWeaponRange = pSourcePlayer->GetWeaponRangeFromSlot(ucSlot);
 
                     // Read the aim data
                     SWeaponAimSync aim(fWeaponRange);

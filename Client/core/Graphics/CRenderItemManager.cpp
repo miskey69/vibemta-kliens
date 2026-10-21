@@ -969,7 +969,7 @@ void CRenderItemManager::UpdateMemoryUsage()
             continue;
         int iMemoryKBUsed = pRenderItem->GetVideoMemoryKBUsed();
 
-        if (pRenderItem->IsA(CFileTextureItem::GetClassId()))
+        if (pRenderItem->IsA(CFileTextureItem::GetClassId()) || pRenderItem->IsA(CVectorGraphicItem::GetClassId()))
             m_iTextureMemoryKBUsed += iMemoryKBUsed;
         else if (pRenderItem->IsA(CRenderTargetItem::GetClassId()) || pRenderItem->IsA(CScreenSourceItem::GetClassId()))
             m_iRenderTargetMemoryKBUsed += iMemoryKBUsed;

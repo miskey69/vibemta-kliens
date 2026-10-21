@@ -8,6 +8,7 @@
  *
  *****************************************************************************/
 
+#include "Wine.h"
 #include "MainFunctions.h"
 #include "Main.h"
 #include "Utils.h"
@@ -24,7 +25,9 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <string>
 #include <locale.h>
+#include <windows.h>
 #include <DbgHelp.h>
 #pragma comment(lib, "dbghelp.lib")
 
@@ -341,12 +344,12 @@ static constexpr std::size_t kCrashArtifactCount = 3;
 //
 // CheckLibVersions
 //
-// Ensure DLLs are the correct version
+// Check lib versions are correct
 //
 //////////////////////////////////////////////////////////
 void CheckLibVersions()
 {
-#if MTASA_VERSION_TYPE == VERSION_TYPE_RELEASE
+#if MTASA_VERSION_TYPE >= VERSION_TYPE_UNTESTED
     const char* moduleList[] = {"MTA\\loader.dll",
                                 "MTA\\cgui.dll",
                                 "MTA\\core.dll",
@@ -357,14 +360,14 @@ void CheckLibVersions()
                                 "MTA\\game_sa.dll",
                                 "MTA\\" LOADER_PROXY_DLL_NAME,
                                 "mods\\deathmatch\\client.dll",
-                                "mods\\deathmatch\\pcre3.dll"};
+                                "mods\\deathmatch\\pcre2.dll"};
 
     SString strReqFileVersion;
     for (uint i = 0; i < NUMELMS(moduleList); i++)
     {
         SString strFilename = moduleList[i];
         // Skip _d suffix for LOADER_PROXY_DLL_NAME and netc.dll as they don't use _d
-        if (strFilename.find(LOADER_PROXY_DLL_NAME) == SString::npos && strFilename.find("netc.dll") == SString::npos)
+        if (strFilename.find(LOADER_PROXY_DLL_NAME) == std::string::npos && strFilename.find("netc.dll") == std::string::npos)
         {
     #ifdef MTA_DEBUG
             strFilename = ExtractBeforeExtension(strFilename) + "_d." + ExtractExtension(strFilename);
@@ -904,7 +907,7 @@ void ConfigureWerDumpPath()
 // Commands are often stored in the registry by the installer and client.
 //
 // "L0" is opened before the launch sequence and is closed if MTA shutsdown with no error
-// "L1" is opened before the launch sequence and is closed if GTA is succesfully started
+// "L1" is opened before the launch sequence and is closed if GTA is successfully started
 // "CR1" is a counter which is incremented if GTA was not started and MTA shutsdown with an error
 //
 // "L2" is opened before the launch sequence and is closed if the GTA loading screen is shown
@@ -1282,6 +1285,12 @@ void ValidateGTAPath()
 //////////////////////////////////////////////////////////
 void CheckAntiVirusStatus()
 {
+    if (Wine::IsRunningOnWine())
+    {
+        WriteDebugEvent("Skipping AV check under Wine");
+        return;
+    }
+
     std::vector<SString> enabledList, disabledList;
     GetWMIAntiVirusStatus(enabledList, disabledList);
 
@@ -1848,7 +1857,7 @@ int LaunchGame(SString strCmdLine)
 
     const SString strGTAPath = GetGTAPath();
     const SString strMTASAPath = GetMTASAPath();
-    const SString strGTAEXEPath = GetGameExecutablePath().u8string();
+    const SString strGTAEXEPath = UTF8FilePath(GetGameExecutablePath());
 
     if (!ValidatePath(strGTAPath) || !ValidatePath(strMTASAPath) || !ValidatePath(strGTAEXEPath))
     {
@@ -1858,11 +1867,13 @@ int LaunchGame(SString strCmdLine)
 
     SetDllDirectory(PathJoin(strMTASAPath, "mta"));
 
+#if MTASA_VERSION_TYPE != VERSION_TYPE_CUSTOM
     if (!CheckService(CHECK_SERVICE_PRE_CREATE) && !IsUserAdmin())
     {
         RelaunchAsAdmin(strCmdLine, _("Fix configuration issue"));
         ExitProcess(EXIT_OK);
     }
+#endif
 
     // Do some D3D things
     BeginD3DStuff();
@@ -1975,10 +1986,20 @@ int LaunchGame(SString strCmdLine)
         else
         {
             // Wait for game window
-            DWORD status = WAIT_TIMEOUT;
-            for (uint i = 0; i < 20 && status == WAIT_TIMEOUT; ++i)  // Max 20 iterations
+            constexpr DWORD startupTimeoutMs = 20000;
+            constexpr DWORD waitIntervalMs = 100;
+            constexpr uint  maxWaitCount = startupTimeoutMs / waitIntervalMs;
+            DWORD           status = WAIT_TIMEOUT;
+            bool            splashHidden = false;
+            for (uint i = 0; i < maxWaitCount && status == WAIT_TIMEOUT; ++i)
             {
-                status = WaitForSingleObject(piLoadee.hProcess, 1000);  // 1 second timeout
+                status = WaitForSingleObject(piLoadee.hProcess, waitIntervalMs);
+
+                if (!splashHidden && IsGameWindowOpen(piLoadee.dwProcessId))
+                {
+                    HideSplash();
+                    splashHidden = true;
+                }
 
                 if (!WatchDogIsSectionOpen("L3"))  // Gets closed when loading screen is shown
                 {
@@ -1990,11 +2011,21 @@ int LaunchGame(SString strCmdLine)
                 if (IsDeviceSelectionDialogOpen(piLoadee.dwProcessId) && i > 0)
                 {
                     --i;  // Don't count this iteration
-                    Sleep(100);
                 }
             }
 
-            HideSplash();
+            // Diagnostic: detect rapid process exit before loading screen appeared
+            if (status != WAIT_TIMEOUT && WatchDogIsSectionOpen("L3"))
+            {
+                DWORD dwEarlyExitCode = 0;
+                GetExitCodeProcess(piLoadee.hProcess, &dwEarlyExitCode);
+                WriteDebugEvent(SString("Loader - Process exited (code %lu) before loading screen appeared", dwEarlyExitCode));
+                AddReportLog(7103, SString("Loader - Premature exit (code %lu) - possible missing runtime dependencies or injection failure", dwEarlyExitCode));
+            }
+
+            // Ensure the splash is hidden if no game window was detected
+            if (!splashHidden)
+                HideSplash();
 
             // Handle process if stuck at startup
             if (status == WAIT_TIMEOUT)
@@ -2157,11 +2188,19 @@ int LaunchGame(SString strCmdLine)
                         rva = static_cast<DWORD>(strtoull(offsetStr.c_str(), nullptr, 16));
                     }
 
-                    const SString offsetText = offsetStr.empty() ? "unknown" : SString("0x%s", offsetStr.c_str());
+                    SString offsetText;
+                    if (offsetStr.empty())
+                        offsetText = "unknown";
+                    else
+                        offsetText = SString("0x%s", offsetStr.c_str());
 
                     constexpr DWORD IDA_DEFAULT_DLL_BASE = 0x10000000;
                     const DWORD     idaAddress = IDA_DEFAULT_DLL_BASE + rva;
-                    const SString   idaAddressText = (hasValidOffset && rva != 0) ? SString("0x%08X", idaAddress) : "unknown";
+                    SString         idaAddressText;
+                    if (hasValidOffset && rva != 0)
+                        idaAddressText = SString("0x%08X", idaAddress);
+                    else
+                        idaAddressText = "unknown";
 
                     // Give WER time to finish writing the dump file (it can take a moment after process exit)
                     Sleep(1000);

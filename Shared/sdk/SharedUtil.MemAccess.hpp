@@ -8,6 +8,13 @@
  *
  *****************************************************************************/
 
+#pragma once
+#include <windows.h>
+#include <cassert>
+#include "SharedUtil.MemAccess.h"
+#include "SharedUtil.Logging.h"
+#include "SString.h"
+
 namespace SharedUtil
 {
     // Returns true if matching memset would have no affect
@@ -42,6 +49,9 @@ namespace SharedUtil
         VirtualProtect((LPVOID)0x6AE000, 0x1000, PAGE_EXECUTE_READWRITE, &oldProt);
         VirtualProtect((LPVOID)0x729000, 0x1000, PAGE_EXECUTE_READWRITE, &oldProt);
         VirtualProtect((LPVOID)0x742000, 0x1000, PAGE_EXECUTE_READWRITE, &oldProt);
+
+        // Used by the CPathFind crash fix in multiplayer_sa/CMultiplayerSA_CrashFixHacks.cpp, installed via the Fast path.
+        VirtualProtect((LPVOID)0x156F000, 0x1000, PAGE_EXECUTE_READWRITE, &oldProt);
     }
 
     // Returns true if pAddr is in slow mem area
@@ -74,13 +84,12 @@ namespace SharedUtil
     // Temporarily unprotect slow mem area
     SMemWrite OpenMemWrite(const void* pAddr, uint uiAmount)
     {
-        SMemWrite hMem;
+        SMemWrite hMem{};
 
         // Check for incorrect use of function
         if (!IsSlowMem(pAddr, uiAmount))
         {
             dassert(0 && "Should use Mem*Fast function");
-            hMem.dwFirstPage = 0;
             return hMem;
         }
 
@@ -91,10 +100,18 @@ namespace SharedUtil
         hMem.dwFirstPage = ((DWORD)pAddr) & ~0xFFF;
         DWORD dwLastPage = (((DWORD)pAddr) + uiAmount - 1) & ~0xFFF;
         hMem.dwSize = dwLastPage - hMem.dwFirstPage + 0x1000;
-        VirtualProtect((LPVOID)hMem.dwFirstPage, 0x1000, PAGE_EXECUTE_READWRITE, &hMem.oldProt);
+
+        if (!VirtualProtect((LPVOID)hMem.dwFirstPage, 0x1000, PAGE_EXECUTE_READWRITE, &hMem.oldProt))
+        {
+            DWORD error = GetLastError();
+            OutputDebugLine(SString("MemAccess::OpenMemWrite: VirtualProtect failed at %08x, error: %d", hMem.dwFirstPage, error));
+            hMem = {};
+            assert(!"Failed to unprotect memory");
+            return hMem;
+        }
 
         // Make sure not using this slow function too much
-        OutputDebugLine(SString("[Mem] OpenMemWrite at %08x for %d bytes  (oldProt:%04x)", pAddr, uiAmount, hMem.oldProt));
+        OutputDebugLine(SString("[MemAccess] OpenMemWrite at %08x for %d bytes  (oldProt:%04x)", pAddr, uiAmount, hMem.oldProt));
 
 #ifdef MTA_DEBUG
     #if 0  // Annoying
@@ -110,7 +127,18 @@ namespace SharedUtil
         for (uint i = 0x1000; i < hMem.dwSize; i += 0x1000)
         {
             DWORD oldProtCheck;
-            VirtualProtect((LPVOID)(hMem.dwFirstPage + i), 0x1000, PAGE_EXECUTE_READWRITE, &oldProtCheck);
+            if (!VirtualProtect((LPVOID)(hMem.dwFirstPage + i), 0x1000, PAGE_EXECUTE_READWRITE, &oldProtCheck))
+            {
+                // Try to rollback
+                DWORD temp;
+                VirtualProtect((LPVOID)hMem.dwFirstPage, i, hMem.oldProt, &temp);
+
+                DWORD error = GetLastError();
+                OutputDebugLine(SString("[MemAccess] OpenMemWrite VirtualProtect failed at %08x, error: %d", hMem.dwFirstPage + i, error));
+                hMem = {};
+                assert(!"Failed to unprotect multi-page memory region");
+                return hMem;
+            }
             dassert(hMem.oldProt == oldProtCheck);
         }
 
@@ -122,9 +150,22 @@ namespace SharedUtil
     {
         if (hMem.dwFirstPage == 0)
             return;
+
         DWORD oldProt;
-        VirtualProtect((LPVOID)hMem.dwFirstPage, hMem.dwSize, hMem.oldProt, &oldProt);
-        dassert(oldProt == PAGE_EXECUTE_READWRITE);
+        BOOL  result = VirtualProtect((LPVOID)hMem.dwFirstPage, hMem.dwSize, hMem.oldProt, &oldProt);
+
+        if (!result)
+        {
+            DWORD error = GetLastError();
+            OutputDebugLine(SString("MemAccess::CloseMemWrite: VirtualProtect failed at %08x, size %08x, error: %d", hMem.dwFirstPage, hMem.dwSize, error));
+            assert(!"Failed to restore memory protection - critical");
+        }
+        else
+        {
+            dassert(oldProt == PAGE_EXECUTE_READWRITE);
+        }
+
+        hMem.dwFirstPage = 0;  // Invalidate handle
     }
 
 }  // namespace SharedUtil

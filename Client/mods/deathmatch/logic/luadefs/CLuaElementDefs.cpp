@@ -12,9 +12,8 @@
 
 #include "StdInc.h"
 #include <lua/CLuaFunctionParser.h>
+#include "CLuaElementDefs.h"
 using std::list;
-
-#define MIN_CLIENT_REQ_LOD_FOR_BUILDING "1.6.0-9.22470"
 
 void CLuaElementDefs::LoadFunctions()
 {
@@ -55,7 +54,7 @@ void CLuaElementDefs::LoadFunctions()
         {"getElementAttachedOffsets", GetElementAttachedOffsets},
         {"getElementAlpha", GetElementAlpha},
         {"getElementLighting", ArgumentParser<GetElementLighting>},
-        {"isElementOnScreen", IsElementOnScreen},
+        {"isElementOnScreen", ArgumentParserWarn<nullptr, IsElementOnScreen>},
         {"getElementHealth", GetElementHealth},
         {"getElementModel", GetElementModel},
         {"isElementStreamedIn", IsElementStreamedIn},
@@ -1365,6 +1364,14 @@ std::variant<bool, float> CLuaElementDefs::GetElementLighting(CClientEntity* ent
     return false;
 }
 
+bool CLuaElementDefs::IsElementOnScreen(CClientEntity* entity)
+{
+    if (entity->GetType() == CCLIENTMARKER)
+        return static_cast<CClientMarker*>(entity)->IsOnScreen();
+
+    return entity->IsOnScreen();
+}
+
 int CLuaElementDefs::GetElementHealth(lua_State* luaVM)
 {
     // Verify the argument
@@ -1585,6 +1592,16 @@ int CLuaElementDefs::IsElementStreamedIn(lua_State* luaVM)
         // Is this a streaming compatible class?
         if (pEntity->IsStreamingCompatibleClass())
         {
+            // Local player is always streamed in from its own perspective.
+            // Its entity is created via _CreateLocalModel() which doesn't go through
+            // InternalStreamIn(), so m_bStreamedIn can stay false even though the player
+            // is fully active — breaking scripts that filter handlers with isElementStreamedIn(source).
+            if (IS_PLAYER(pEntity) && static_cast<CClientPlayer*>(pEntity)->IsLocalPlayer())
+            {
+                lua_pushboolean(luaVM, true);
+                return 1;
+            }
+
             CClientStreamElement* pStreamElement = static_cast<CClientStreamElement*>(pEntity);
 
             // Return whether or not this class is streamed in
@@ -1638,30 +1655,6 @@ int CLuaElementDefs::IsElementStreamable(lua_State* luaVM)
         m_pScriptDebugging->LogCustom(luaVM, argStream.GetFullErrorMessage());
 
     // We failed
-    lua_pushnil(luaVM);
-    return 1;
-}
-
-int CLuaElementDefs::IsElementOnScreen(lua_State* luaVM)
-{
-    // Verify the argument
-    CClientEntity*   pEntity = NULL;
-    CScriptArgReader argStream(luaVM);
-    argStream.ReadUserData(pEntity);
-
-    if (!argStream.HasErrors())
-    {
-        // Return whether we're on the screen or not
-        bool bOnScreen;
-        if (CStaticFunctionDefinitions::IsElementOnScreen(*pEntity, bOnScreen))
-        {
-            lua_pushboolean(luaVM, bOnScreen);
-            return 1;
-        }
-    }
-    else
-        m_pScriptDebugging->LogCustom(luaVM, argStream.GetFullErrorMessage());
-
     lua_pushnil(luaVM);
     return 1;
 }
@@ -1795,7 +1788,7 @@ int CLuaElementDefs::SetElementData(lua_State* luaVM)
                 key = key->substr(0, MAX_CUSTOMDATA_NAME_LENGTH);
             }
 
-            if (CStaticFunctionDefinitions::SetElementData(*pEntity, key.ToCString(), value, bSynchronize))
+            if (CStaticFunctionDefinitions::SetElementData(*pEntity, key, value, bSynchronize))
             {
                 lua_pushboolean(luaVM, true);
                 return 1;
@@ -1834,7 +1827,7 @@ int CLuaElementDefs::RemoveElementData(lua_State* luaVM)
                 key = key->substr(0, MAX_CUSTOMDATA_NAME_LENGTH);
             }
 
-            if (CStaticFunctionDefinitions::RemoveElementData(*pEntity, key.ToCString()))
+            if (CStaticFunctionDefinitions::RemoveElementData(*pEntity, key))
             {
                 lua_pushboolean(luaVM, true);
                 return 1;
@@ -2517,10 +2510,6 @@ int CLuaElementDefs::GetLowLodElement(lua_State* luaVM)
 bool CLuaElementDefs::SetLowLodElement(lua_State* luaVM, CClientEntity* pEntity, std::optional<CClientEntity*> pLowLodEntity)
 {
     //  bool setLowLODElement ( element theElement [, element lowLowElement ] )
-
-    if (pEntity->GetType() == CCLIENTBUILDING)
-        MinClientReqCheck(luaVM, MIN_CLIENT_REQ_LOD_FOR_BUILDING, "target is building");
-
     return CStaticFunctionDefinitions::SetLowLodElement(*pEntity, pLowLodEntity.value_or(nullptr));
 }
 

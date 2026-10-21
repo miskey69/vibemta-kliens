@@ -32,7 +32,7 @@ extern CGame* g_pGame;
 static std::string GetAdminNameForLog(CClient* pClient)
 {
     std::string strName = pClient->GetNick();
-    std::string strAccountName = pClient->GetAccount() ? pClient->GetAccount()->GetName() : "no account";
+    std::string strAccountName = pClient->GetAccount() ? pClient->GetAccount()->GetName() : SStringX("no account");
     if (strName == strAccountName)
         return strName;
     return SString("%s(%s)", strName.c_str(), strAccountName.c_str());
@@ -86,8 +86,7 @@ bool CConsoleCommands::StartResource(CConsole* pConsole, const char* szArguments
 
         if (!resource->IsLoaded())
         {
-            pEchoClient->SendConsole(
-                SString("start: Resource '%s' is loaded, but has errors (%s)", resourceName.c_str(), resource->GetFailureReason().c_str()));
+            pEchoClient->SendConsole(SString("start: Resource '%s' is not loaded (%s)", resourceName.c_str(), resource->GetFailureReason().c_str()));
             continue;
         }
 
@@ -136,8 +135,7 @@ bool CConsoleCommands::RestartResource(CConsole* pConsole, const char* szArgumen
 
         if (!resource->IsLoaded())
         {
-            pEchoClient->SendConsole(
-                SString("restart: Resource '%s' is loaded, but has errors (%s)", resourceName.c_str(), resource->GetFailureReason().c_str()));
+            pEchoClient->SendConsole(SString("restart: Resource '%s' is not loaded (%s)", resourceName.c_str(), resource->GetFailureReason().c_str()));
             continue;
         }
 
@@ -240,7 +238,7 @@ bool CConsoleCommands::StopResource(CConsole* pConsole, const char* szArguments,
 
         if (!resource->IsLoaded())
         {
-            pEchoClient->SendConsole(SString("stop: Resource '%s' is loaded, but has errors (%s)", resourceName.c_str(), resource->GetFailureReason().c_str()));
+            pEchoClient->SendConsole(SString("stop: Resource '%s' is not loaded (%s)", resourceName.c_str(), resource->GetFailureReason().c_str()));
             continue;
         }
 
@@ -638,7 +636,7 @@ bool CConsoleCommands::Msg(CConsole* pConsole, const char* szInArguments, CClien
                                             // Send it to the player
                                             pPlayer->Send(CChatEchoPacket(strMessage, CHATCOLOR_INFO, false, MESSAGE_TYPE_PRIVATE));
 
-                                            // Send a reponse to the player who sent it
+                                            // Send a response to the player who sent it
                                             pEchoClient->SendEcho(SString("-> %s: %s", pPlayer->GetNick(), szMessage));
                                         }
                                         break;
@@ -788,7 +786,7 @@ bool CConsoleCommands::Nick(CConsole* pConsole, const char* szArguments, CClient
                         const char* szNick = pClient->GetNick();
                         if (!szNick || strcmp(szNewNick, szNick) != 0)
                         {
-                            // Check that it doesn't already exist, or if it matches our current nick case-independantly (means we changed to the same nick but
+                            // Check that it doesn't already exist, or if it matches our current nick case-independently (means we changed to the same nick but
                             // in a different case)
                             if ((szNick && stricmp(szNick, szNewNick) == 0) || !pConsole->GetPlayerManager()->Get(szNewNick))
                             {
@@ -1572,7 +1570,7 @@ bool CConsoleCommands::OpenPortsTest(CConsole* pConsole, const char* szArguments
 {
     if (pClient->GetClientType() == CClient::CLIENT_CONSOLE)
     {
-#if MTASA_VERSION_TYPE < VERSION_TYPE_RELEASE
+#if MTASA_VERSION_TYPE < VERSION_TYPE_UNTESTED
         if (SStringX(szArguments) == "crashme")
         {
             // For testing crash handling
@@ -1627,9 +1625,9 @@ bool DoAclRequest(CConsole* pConsole, const char* szArguments, CClient* pClient,
 
     std::vector<SString> parts;
     SStringX(szArguments).Split(" ", parts);
-    const SString& strAction = parts.size() > 0 ? parts[0] : "";
-    const SString& strResourceName = parts.size() > 1 ? parts[1] : "";
-    const SString& strRightName = parts.size() > 2 ? parts[2] : "";
+    const SString& strAction = parts.size() > 0 ? parts[0] : SStringX("");
+    const SString& strResourceName = parts.size() > 1 ? parts[1] : SStringX("");
+    const SString& strRightName = parts.size() > 2 ? parts[2] : SStringX("");
 
     bool bList = strAction == "list";
     bool bAllow = strAction == "allow";
@@ -1697,8 +1695,8 @@ bool CConsoleCommands::AuthorizeSerial(CConsole* pConsole, const char* szArgumen
 
     std::vector<SString> parts;
     SStringX(szArguments).Split(" ", parts);
-    const SString& strAccountName = parts.size() > 0 ? parts[0] : "";
-    const SString& strAction = parts.size() > 1 ? parts[1] : "";
+    const SString& strAccountName = parts.size() > 0 ? parts[0] : SStringX("");
+    const SString& strAction = parts.size() > 1 ? parts[1] : SStringX("");
 
     bool bList = strAction == "list";
     bool bAllow = strAction == "";

@@ -67,9 +67,11 @@ void      OnMy_CClothesDeleteRwObject()
 // Hook info
 #define HOOKPOS_CClothesDeleteRwObject  0x5A8243
 #define HOOKSIZE_CClothesDeleteRwObject 5
-DWORD                 RETURN_CClothesDeleteRwObject = 0x5A8248;
-void _declspec(naked) HOOK_CClothesDeleteRwObject()
+DWORD                         RETURN_CClothesDeleteRwObject = 0x5A8248;
+static void __declspec(naked) HOOK_CClothesDeleteRwObject()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -120,9 +122,11 @@ void OnMy_PostCPedDress()
 // Hook info
 #define HOOKPOS_PostCPedDress  0x5A835C
 #define HOOKSIZE_PostCPedDress 5
-DWORD                 RETURN_PostCPedDress = 0x5A8361;
-void _declspec(naked) HOOK_PostCPedDress()
+DWORD                         RETURN_PostCPedDress = 0x5A8361;
+static void __declspec(naked) HOOK_PostCPedDress()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {

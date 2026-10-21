@@ -1,10 +1,10 @@
 project "Client Launcher"
 	language "C++"
-	cppdialect "C++23"
 	kind "WindowedApp"
 	targetname "Multi Theft Auto"
 	targetdir(buildpath("."))
 	debugdir(buildpath("."))
+	clangtidy "On"
 
 	includedirs {
 		"../../Shared/sdk",

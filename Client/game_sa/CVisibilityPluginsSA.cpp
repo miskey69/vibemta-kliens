@@ -14,8 +14,20 @@
 
 #define FUNC_CVisibilityPlugins_InsertEntityIntoEntityList 0x733DD0
 
+int CVisibilityPluginsSA::GetClumpAlpha(RpClump* pClump)
+{
+    if (!pClump)
+        return 255;
+
+    using GetClumpAlpha = int(__cdecl*)(RpClump*);
+    return reinterpret_cast<GetClumpAlpha>(0x732B20)(pClump);
+}
+
 void CVisibilityPluginsSA::SetClumpAlpha(RpClump* pClump, int iAlpha)
 {
+    if (!pClump)
+        return;
+
     DWORD dwFunc = FUNC_CVisiblityPlugins_SetClumpAlpha;
     // clang-format off
     __asm
@@ -61,4 +73,12 @@ int CVisibilityPluginsSA::GetAtomicId(RwObject* pAtomic)
 bool CVisibilityPluginsSA::InsertEntityIntoEntityList(void* entity, float distance, void* callback)
 {
     return ((bool(_cdecl*)(void*, float, void*))FUNC_CVisibilityPlugins_InsertEntityIntoEntityList)(entity, distance, callback);
+}
+
+bool CVisibilityPluginsSA::IsAtomicVisible(RpAtomic* atomic) const
+{
+    if (!atomic)
+        return false;
+
+    return ((bool(__cdecl*)(RpAtomic*))0x732990)(atomic);
 }

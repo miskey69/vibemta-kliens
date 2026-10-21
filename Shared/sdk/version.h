@@ -43,10 +43,10 @@
 
 // New version info
 #define MTASA_VERSION_MAJOR       1
-#define MTASA_VERSION_MINOR       6
+#define MTASA_VERSION_MINOR       7
 #define MTASA_VERSION_MAINTENANCE 0
 #define MTASA_VERSION_TYPE        VERSION_TYPE_UNSTABLE   // VibeMTA: public fork release (see note above)
-#define MTASA_VERSION_BUILD       0
+#define MTASA_VERSION_BUILD       25982                   // VibeMTA: build number of the fork-support net modules
 
 #include "../build_overrides.h"
 
@@ -113,9 +113,9 @@
 
 #define _ASE_VERSION               QUOTE_DEFINE(MTASA_VERSION_MAJOR) "." QUOTE_DEFINE(MTASA_VERSION_MINOR)
 #define _NETCODE_VERSION_BRANCH_ID 0x4    // Use 0x1 - 0xF to indicate an incompatible branch is being used (0x0 is reserved, 0x4 is trunk)
-#define _CLIENT_NET_MODULE_VERSION 0x0B3  // (0x000 - 0xfff) Lvl9 wizards only
-#define _SERVER_NET_MODULE_VERSION 0x0AB  // (0x000 - 0xfff) Lvl9 wizards only
-#define _NETCODE_VERSION           0x1DA  // (0x000 - 0xfff) Increment when net messages change (pre-release)
+#define _CLIENT_NET_MODULE_VERSION 0x0B5  // (0x000 - 0xfff) Lvl9 wizards only
+#define _SERVER_NET_MODULE_VERSION 0x0AD  // (0x000 - 0xfff) Lvl9 wizards only
+#define _NETCODE_VERSION           0x1E0  // (0x000 - 0xfff) Increment when net messages change (pre-release)
 
 // (0x000 - 0xfff) Update bitstream.h when net messages change (post-release). (Changing will also require additional backward compatibility code).
 #define MTA_DM_BITSTREAM_VERSION eBitStreamVersion::Latest

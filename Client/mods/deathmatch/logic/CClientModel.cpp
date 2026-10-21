@@ -55,6 +55,7 @@ bool CClientModel::Allocate(ushort usParentID)
         {
             bool isValidModel = g_pClientGame->GetObjectManager()->IsValidModel(usParentID);
             bool isDamagable = pParentModelInfo->IsDamageableAtomic();
+
             if (isValidModel && isDamagable)
             {
                 pModelInfo->MakeObjectDamageableModel(usParentID);
@@ -136,14 +137,16 @@ void CClientModel::RestoreEntitiesUsingThisModel()
 
 void CClientModel::RestoreDFF(CModelInfo* pModelInfo)
 {
-    auto callElementChangeEvent = [](auto &element, unsigned short usParentID, auto modelId) {
+    auto callElementChangeEvent = [](auto& element, unsigned short usParentID, auto modelId)
+    {
         CLuaArguments Arguments;
         Arguments.PushNumber(modelId);
         Arguments.PushNumber(usParentID);
         element.CallEvent("onClientElementModelChange", Arguments, true);
     };
 
-    auto unloadModelsAndCallEvents = [&](auto iterBegin, auto iterEnd, unsigned short usParentID, auto setElementModelLambda) {
+    auto unloadModelsAndCallEvents = [&](auto iterBegin, auto iterEnd, unsigned short usParentID, auto setElementModelLambda)
+    {
         for (auto iter = iterBegin; iter != iterEnd; iter++)
         {
             auto& element = **iter;
@@ -189,8 +192,8 @@ void CClientModel::RestoreDFF(CModelInfo* pModelInfo)
         case eClientModelType::OBJECT_DAMAGEABLE:
         case eClientModelType::TIMED_OBJECT:
         {
-            const auto&    objects = &g_pClientGame->GetManager()->GetObjectManager()->GetObjects();
-            unsigned short usParentID = g_pGame->GetModelInfo(m_iModelID)->GetParentID();
+            const auto& objects = &g_pClientGame->GetManager()->GetObjectManager()->GetObjects();
+            const auto  usParentID = static_cast<unsigned short>(g_pGame->GetModelInfo(m_iModelID)->GetParentID());
 
             unloadModelsAndCallEvents(objects->begin(), objects->end(), usParentID, [=](auto& element) { element.SetModel(usParentID); });
 
@@ -202,17 +205,17 @@ void CClientModel::RestoreDFF(CModelInfo* pModelInfo)
             // Restore buildings
             CClientBuildingManager* pBuildingsManager = g_pClientGame->GetManager()->GetBuildingManager();
             auto&                   buildingsList = pBuildingsManager->GetBuildings();
-            unloadModelsAndCallEventsNonStreamed(buildingsList.begin(), buildingsList.end(), usParentID,
-                                      [=](auto& element) { element.SetModel(usParentID); });
+
+            unloadModelsAndCallEventsNonStreamed(buildingsList.begin(), buildingsList.end(), usParentID, [=](auto& element) { element.SetModel(usParentID); });
 
             // Restore COL
-            g_pClientGame->GetManager()->GetColModelManager()->RestoreModel(m_iModelID);
+            g_pClientGame->GetManager()->GetColModelManager()->RestoreModel(static_cast<unsigned short>(m_iModelID));
             break;
         }
         case eClientModelType::VEHICLE:
         {
             CClientVehicleManager* pVehicleManager = g_pClientGame->GetManager()->GetVehicleManager();
-            unsigned short         usParentID = g_pGame->GetModelInfo(m_iModelID)->GetParentID();
+            const auto             usParentID = static_cast<unsigned short>(g_pGame->GetModelInfo(m_iModelID)->GetParentID());
 
             unloadModelsAndCallEvents(pVehicleManager->IterBegin(), pVehicleManager->IterEnd(), usParentID,
                                       [=](auto& element) { element.SetModelBlocking(usParentID, 255, 255); });
@@ -221,17 +224,19 @@ void CClientModel::RestoreDFF(CModelInfo* pModelInfo)
     }
 
     // Restore DFF/TXD
-    g_pClientGame->GetManager()->GetDFFManager()->RestoreModel(m_iModelID);
+    g_pClientGame->GetManager()->GetDFFManager()->RestoreModel(static_cast<unsigned short>(m_iModelID));
 }
 
-bool CClientModel::AllocateTXD(std::string &strTxdName)
+bool CClientModel::AllocateTXD(std::string& strTxdName)
 {
     std::uint32_t uiSlotID = g_pGame->GetPools()->GetTxdPool().AllocateTextureDictonarySlot(m_iModelID - MAX_MODEL_DFF_ID, strTxdName);
+
     if (uiSlotID != -1)
     {
         m_bAllocatedByUs = true;
         return true;
     }
+
     return false;
 }
 

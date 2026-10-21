@@ -10,6 +10,7 @@
  *****************************************************************************/
 
 #include "StdInc.h"
+#include <numbers>
 #include <multiplayer/CMultiplayer.h>
 #include <core/CCoreInterface.h>
 #include "CGameSA.h"
@@ -77,66 +78,60 @@ bool CWorldSA::ResetSurfaceInfo(short sSurfaceID)
     return false;
 }
 
-void HOOK_FallenPeds();
-void HOOK_FallenCars();
-
-void CWorldSA::InstallHooks()
-{
-    HookInstall(0x565CB0, (DWORD)HOOK_FallenPeds, 5);
-    HookInstall(0x565E80, (DWORD)HOOK_FallenCars, 5);
-}
-
 DWORD CONTINUE_CWorld_FallenPeds = 0x00565CBA;
 DWORD CONTINUE_CWorld_FallenCars = 0x00565E8A;
 
-void _declspec(naked) HOOK_FallenPeds()
+static bool IsUnderWorldWarpEnabled()
 {
-    if (pGame && pGame->IsUnderWorldWarpEnabled())
-    {
-        // clang-format off
-        __asm
-        {
-            sub esp, 2Ch
-            push ebx
-            mov ebx, ds:0B74490h
-            jmp CONTINUE_CWorld_FallenPeds
-        }
-        // clang-format on
-    }
-    else
-    {
-        // clang-format off
-        __asm
-        {
-            ret
-        }
-        // clang-format on
-    }
+    return pGame && pGame->IsUnderWorldWarpEnabled();
 }
 
-void _declspec(naked) HOOK_FallenCars()
+static void __declspec(naked) HOOK_FallenPeds()
 {
-    if (pGame && pGame->IsUnderWorldWarpEnabled())
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
     {
-        // clang-format off
-        __asm
-        {
-            sub esp, 2Ch
-            push ebx
-            mov ebx, ds:0B74494h
-            jmp CONTINUE_CWorld_FallenCars
-        }
-        // clang-format on
+        call    IsUnderWorldWarpEnabled
+        test    al, al
+        jnz     continueWithOriginalCode
+        ret
+
+        continueWithOriginalCode:
+        sub     esp, 2Ch
+        push    ebx
+        mov     ebx, ds:0B74490h
+        jmp     CONTINUE_CWorld_FallenPeds
     }
-    else
+    // clang-format on
+}
+
+static void __declspec(naked) HOOK_FallenCars()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
     {
-        // clang-format off
-        __asm
-        {
-            ret
-        }
-        // clang-format on
+        call    IsUnderWorldWarpEnabled
+        test    al, al
+        jnz     continueWithOriginalCode
+        ret
+
+        continueWithOriginalCode:
+        sub     esp, 2Ch
+        push    ebx
+        mov     ebx, ds:0B74494h
+        jmp     CONTINUE_CWorld_FallenCars
     }
+    // clang-format on
+}
+
+void CWorldSA::InstallHooks()
+{
+    HookInstall(0x565CB0, (DWORD)HOOK_FallenPeds, 10);
+    HookInstall(0x565E80, (DWORD)HOOK_FallenCars, 10);
 }
 
 void CWorldSA::Add(CEntity* pEntity, eDebugCaller CallerId)
@@ -297,7 +292,13 @@ auto CWorldSA::ProcessLineAgainstMesh(CEntitySAInterface* targetEntity, CVector 
     }
 
     // Get matrix, and it's inverse
-    c.entity->matrix->ConvertToMatrix(c.entMat);
+    if (c.entity->matrix)
+        c.entity->matrix->ConvertToMatrix(c.entMat);
+    else
+    {
+        c.entMat.SetPosition(c.entity->m_transform.m_translate);
+        c.entMat.SetRotation(CVector{0.0f, 0.0f, c.entity->m_transform.m_heading});
+    }
     c.entInvMat = c.entMat.Inverse();
 
     // ...to transform the line origin and end into object space
@@ -587,7 +588,7 @@ CEntity* CWorldSA::TestSphereAgainstWorld(const CVector& sphereCenter, float rad
     {
         result.entityPosition = entity->m_transform.m_translate;
         result.entityRotation.fX = result.entityRotation.fY = 0.0f;
-        result.entityRotation.fZ = entity->m_transform.m_heading * (180.0f / PI);
+        result.entityRotation.fZ = entity->m_transform.m_heading * (180.0f / std::numbers::pi);
     }
     result.entityRotation = -result.entityRotation;
     result.lodID = entity->m_pLod ? entity->m_pLod->m_nModelIndex : 0;
@@ -788,10 +789,8 @@ int CWorldSA::FindClosestRailTrackNode(const CVector& vecPosition, uchar& ucOutT
             {
                 SRailNodeSA& railNode = aTrackNodes[ucTrackId][i];
 
-                const float fDeltaZ = vecPosition.fZ - railNode.sZ * 0.125f;
-                const float fDeltaY = vecPosition.fY - railNode.sY * 0.125f;
-                const float fDeltaX = vecPosition.fX - railNode.sX * 0.125f;
-                const float fDistance = std::sqrt(fDeltaZ * fDeltaZ + fDeltaY * fDeltaY + fDeltaX * fDeltaX);
+                float fDistance = sqrtf(powf(vecPosition.fZ - railNode.sZ * 0.125f, 2) + powf(vecPosition.fY - railNode.sY * 0.125f, 2) +
+                                        powf(vecPosition.fX - railNode.sX * 0.125f, 2));
                 if (fDistance < fMinDistance)
                 {
                     fMinDistance = fDistance;

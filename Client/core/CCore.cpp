@@ -40,20 +40,8 @@ namespace fs = std::filesystem;
 
 // Set to true to enable the freeze watchdog (monitors main thread responsiveness)
 // Do NOT enable it unless you run a QA testing cycle (see commit desc: 3e54dcb2742bccf0319b9552b2ed5a2c0a012425)
-constexpr bool bFreezeWatchdogEnabled = false;
-
-// Watchdog active in debug builds
-// In debug builds, the contributor should get an early heads up if their changes are this level of blocking (it can't make it in).
-// If you freeze beyond 20 secs in a debug build, not due to a bug in your code changes but due to your local server assets, you have 2 options:
-// 1. Disable the watchdog
-// 2. Fix your mess (imagine what that would do to players in release builds)
-#ifdef MTA_DEBUG
-constexpr bool  bFreezeWatchdogEnabledInCurrentBuild = true;
-constexpr DWORD uiFreezeWatchdogTimeoutSeconds = 20;  // Already unacceptable. Strikes a balance: you'll still be able to a load heavy asseted local server
-#else
-constexpr bool  bFreezeWatchdogEnabledInCurrentBuild = bFreezeWatchdogEnabled;
-constexpr DWORD uiFreezeWatchdogTimeoutSeconds = 40;  // Player won't be patient beyond this; we get no info
-#endif
+constexpr bool  bFreezeWatchdogEnabled = false;
+constexpr DWORD uiFreezeWatchdogTimeoutSeconds = 30;  // Player won't be patient beyond this; we get no info
 
 static float fTest = 1;
 
@@ -83,13 +71,13 @@ static HMODULE WINAPI SkipDirectPlay_LoadLibraryA(LPCSTR fileName)
         const fs::path inLaunchDir = fs::path{FromUTF8(GetLaunchPath())} / "enbseries" / "enbhelper.dll";
 
         if (fs::is_regular_file(inLaunchDir, ec))
-            return Win32LoadLibraryA(inLaunchDir.u8string().c_str());
+            return Win32LoadLibraryA(UTF8FilePath(inLaunchDir).c_str());
 
         // Try to load enbhelper.dll from the GTA install directory second.
         const fs::path inGTADir = g_gtaDirectory / "enbseries" / "enbhelper.dll";
 
         if (fs::is_regular_file(inGTADir, ec))
-            return Win32LoadLibraryA(inGTADir.u8string().c_str());
+            return Win32LoadLibraryA(UTF8FilePath(inGTADir).c_str());
 
         return nullptr;
     }
@@ -172,10 +160,11 @@ CCore::CCore()
     // Setup our hooks.
     ApplyHooks();
 
-    // No initial fps limit
-    m_bDoneFrameRateLimit = false;
-    m_uiFrameRateLimit = 0;
-    m_uiServerFrameRateLimit = 0;
+    m_pModelCacheManager = nullptr;
+    m_iDummyProgressValue = 0;
+    m_DummyProgressTimerHandle = NULL;
+    m_bDummyProgressUpdateAlways = false;
+
     m_iUnminimizeFrameCounter = 0;
     m_bDidRecreateRenderTargets = false;
     m_fMinStreamingMemory = 0;
@@ -183,7 +172,9 @@ CCore::CCore()
     m_bGettingIdleCallsFromMultiplayer = false;
     m_bWindowsTimerEnabled = false;
     m_timeDiscordAppLastUpdate = 0;
-    m_CurrentRefreshRate = 60;
+
+    // Initialize FPS limiter
+    m_pFPSLimiter = std::make_unique<FPSLimiter::FPSLimiter>();
 
     // Create tray icon
     m_pTrayIcon = new CTrayIcon();
@@ -197,7 +188,7 @@ CCore::~CCore()
 {
     WriteDebugEvent("CCore::~CCore");
 
-    if constexpr (bFreezeWatchdogEnabledInCurrentBuild)
+    if constexpr (bFreezeWatchdogEnabled)
         StopWatchdogThread();
 
     // Reset Discord rich presence
@@ -209,6 +200,8 @@ CCore::~CCore()
     // Destroy tray icon
     delete m_pTrayIcon;
 
+    m_pFPSLimiter.reset();
+
     // This will set the GTA volume to the GTA volume value in the settings,
     // and is not affected by the master volume setting.
     m_pLocalGUI->GetMainMenu()->GetSettingsWindow()->ResetGTAVolume();
@@ -216,9 +209,26 @@ CCore::~CCore()
     // Remove input hook
     CMessageLoopHook::GetSingleton().RemoveHook();
 
+    if (m_bWindowsTimerEnabled)
+    {
+        KillTimer(GetHookedWindow(), IDT_TIMER1);
+        m_bWindowsTimerEnabled = false;
+    }
+
+    extern int ms_iDummyProgressTimerCounter;
+
+    if (m_DummyProgressTimerHandle != NULL)
+    {
+        DeleteTimerQueueTimer(NULL, m_DummyProgressTimerHandle, INVALID_HANDLE_VALUE);
+        m_DummyProgressTimerHandle = NULL;
+        ms_iDummyProgressTimerCounter = 0;
+    }
+
     // Delete the mod manager
     delete m_pModManager;
     SAFE_DELETE(m_pMessageBox);
+
+    SAFE_DELETE(m_pModelCacheManager);
 
     // Destroy early subsystems
     m_bModulesLoaded = false;
@@ -253,6 +263,8 @@ CCore::~CCore()
     // Delete lazy subsystems
     DestroyGUI();
     DestroyXML();
+
+    SAFE_DELETE(g_pLocalization);
 
     // Delete keybinds
     delete m_pKeyBinds;
@@ -639,9 +651,11 @@ bool CCore::IsCursorForcedVisible()
 
 void CCore::ApplyConsoleSettings()
 {
-    CVector2D vec;
     CConsole* pConsole = m_pLocalGUI->GetConsole();
+    if (!pConsole) [[unlikely]]
+        return;
 
+    CVector2D vec;
     CVARS_GET("console_pos", vec);
     pConsole->SetPosition(vec);
     CVARS_GET("console_size", vec);
@@ -684,9 +698,10 @@ void CCore::ApplyGameSettings()
     CVARS_GET("dynamic_ped_shadows", bVal);
     pGameSettings->SetDynamicPedShadowsEnabled(bVal);
     pController->SetVerticalAimSensitivityRawValue(CVARS_GET_VALUE<float>("vertical_aim_sensitivity"));
+    pController->SetVerticalAimSensitivitySameAsHorizontal(CVARS_GET_VALUE<bool>("use_mouse_sensitivity_for_aiming"));
     CVARS_GET("mastervolume", fVal);
-    pGameSettings->SetRadioVolume(pGameSettings->GetRadioVolume() * fVal);
-    pGameSettings->SetSFXVolume(pGameSettings->GetSFXVolume() * fVal);
+    pGameSettings->SetRadioVolume(CVARS_GET_VALUE<float>("radiovolume") * fVal * 64.0f);
+    pGameSettings->SetSFXVolume(CVARS_GET_VALUE<float>("sfxvolume") * fVal * 64.0f);
 }
 
 void CCore::SetConnected(bool bConnected)
@@ -942,7 +957,7 @@ void LoadModule(CModuleLoader& m_Loader, const SString& strName, const SString& 
     // Save current directory (shouldn't change anyway)
     SString strSavedCwd = GetSystemCurrentDirectory();
 
-    // Load approrpiate compilation-specific library.
+    // Load appropriate compilation-specific library.
 #ifdef MTA_DEBUG
     SString strModuleFileName = strModuleName + "_d.dll";
 #else
@@ -1114,6 +1129,16 @@ void CCore::CreateXML()
         if (!m_pConfigFile)
         {
             assert(false);
+
+            if (m_pXML)
+            {
+                using PFNReleaseXMLInterface = void (*)();
+                if (auto pfnRelease = reinterpret_cast<PFNReleaseXMLInterface>(m_XMLModule.GetFunctionPointer("ReleaseXMLInterface")))
+                    pfnRelease();
+            }
+
+            m_pXML = NULL;
+            m_XMLModule.UnloadModule();
             return;
         }
 
@@ -1165,10 +1190,14 @@ void CCore::DestroyXML()
     {
         SaveConfig(true);
         delete m_pConfigFile;
+        m_pConfigFile = nullptr;
     }
 
     if (m_pXML)
     {
+        using PFNReleaseXMLInterface = void (*)();
+        if (auto pfnRelease = reinterpret_cast<PFNReleaseXMLInterface>(m_XMLModule.GetFunctionPointer("ReleaseXMLInterface")))
+            pfnRelease();
         m_pXML = NULL;
     }
 
@@ -1278,7 +1307,7 @@ void CCore::DoPreFramePulse()
 {
     TIMING_CHECKPOINT("+CorePreFrame");
 
-    if constexpr (bFreezeWatchdogEnabledInCurrentBuild)
+    if constexpr (bFreezeWatchdogEnabled)
         UpdateWatchdogHeartbeat();
 
     m_pKeyBinds->DoPreFramePulse();
@@ -1338,7 +1367,7 @@ void CCore::DoPostFramePulse()
             WatchDogCompletedSection("L3");  // No hang on startup
 
             // Start watchdog thread now that initial loading is complete
-            if constexpr (bFreezeWatchdogEnabledInCurrentBuild)
+            if constexpr (bFreezeWatchdogEnabled)
             {
                 if (!StartWatchdogThread(GetCurrentThreadId(), uiFreezeWatchdogTimeoutSeconds))
                 {
@@ -1404,7 +1433,12 @@ void CCore::DoPostFramePulse()
     if (!IsFocused() && m_bLastFocused)
     {
         // Fix for #4948
-        m_pKeyBinds->CallAllGTAControlBinds(CONTROL_BOTH, false);
+        // A fatal fault dialog takes focus while pumping messages; releasing the
+        // control binds runs Lua handlers that touch the half-destroyed GUI.
+        // Skipping the release is safe because both fault paths terminate the
+        // process when the dialog closes.
+        if (!CLocalGUI::IsFaultDialogOpen())
+            m_pKeyBinds->CallAllGTAControlBinds(CONTROL_BOTH, false);
         m_bLastFocused = false;
     }
     else if (IsFocused() && !m_bLastFocused)
@@ -1456,7 +1490,7 @@ void CCore::OnModUnload()
     m_pKeyBinds->RemoveAllControlFunctions();
 
     // Reset client script frame rate limit
-    m_uiClientScriptFrameRateLimit = 0;
+    GetFPSLimiter()->SetClientEnforcedFPS(FPSLimits::FPS_UNLIMITED);
 
     // Clear web whitelist
     if (m_pWebCore)
@@ -1901,7 +1935,6 @@ void CCore::OnPostColorFilterRender()
 
 void CCore::ApplyCoreInitSettings()
 {
-#if (_WIN32_WINNT >= _WIN32_WINNT_LONGHORN)
     bool aware = CVARS_GET_VALUE<bool>("process_dpi_aware");
 
     // The minimum supported client for the function below is Windows Vista (Longhorn).
@@ -1909,7 +1942,6 @@ void CCore::ApplyCoreInitSettings()
     // https://learn.microsoft.com/en-us/windows/win32/hidpi/high-dpi-desktop-application-development-on-windows
     if (aware)
         SetProcessDPIAware();
-#endif
 
     int revision = GetApplicationSettingInt("reset-settings-revision");
 
@@ -1937,141 +1969,16 @@ void CCore::ApplyCoreInitSettings()
 //
 void CCore::OnGameTimerUpdate()
 {
-    ApplyQueuedFrameRateLimit();
+    // GTA samples its clock right after this. Waiting here keeps the frame deltas it
+    // measures exact, whatever runs between Present and the next frame does not leak in
+    if (m_pFPSLimiter)
+        m_pFPSLimiter->OnGameTimerUpdate();
 }
 
-//
-// Recalculate FPS limit to use
-//
-// Uses client rate from config
-// Uses client rate from script
-// Uses server rate from argument, or last time if not supplied
-//
-void CCore::RecalculateFrameRateLimit(uint uiServerFrameRateLimit, bool bLogToConsole)
+void CCore::OnFPSLimitChange(std::uint16_t fps)
 {
-    // Save rate from server if valid
-    if (uiServerFrameRateLimit != -1)
-        m_uiServerFrameRateLimit = uiServerFrameRateLimit;
-
-    // Start with value set by the server
-    m_uiFrameRateLimit = m_uiServerFrameRateLimit;
-
-    // Apply client config setting
-    uint uiClientConfigRate;
-    g_pCore->GetCVars()->Get("fps_limit", uiClientConfigRate);
-    if (uiClientConfigRate > 0)
-        uiClientConfigRate = std::max(45U, uiClientConfigRate);
-    // Lowest wins (Although zero is highest)
-    if ((m_uiFrameRateLimit == 0 || uiClientConfigRate < m_uiFrameRateLimit) && uiClientConfigRate > 0)
-        m_uiFrameRateLimit = uiClientConfigRate;
-
-    // Apply client script setting
-    uint uiClientScriptRate = m_uiClientScriptFrameRateLimit;
-    // Lowest wins (Although zero is highest)
-    if ((m_uiFrameRateLimit == 0 || uiClientScriptRate < m_uiFrameRateLimit) && uiClientScriptRate > 0)
-        m_uiFrameRateLimit = uiClientScriptRate;
-
-    if (!IsConnected())
-        m_uiFrameRateLimit = m_CurrentRefreshRate;
-
-    // Removes Limiter from Frame Graph if limit is zero and skips frame limit
-    if (m_uiFrameRateLimit == 0)
-    {
-        m_bQueuedFrameRateValid = false;
-        GetGraphStats()->RemoveTimingPoint("Limiter");
-    }
-
-    // Print new limits to the console
-    if (bLogToConsole)
-    {
-        SString strStatus("Server FPS limit: %d", m_uiServerFrameRateLimit);
-        if (m_uiFrameRateLimit != m_uiServerFrameRateLimit)
-            strStatus += SString(" (Using %d)", m_uiFrameRateLimit);
-        CCore::GetSingleton().GetConsole()->Print(strStatus);
-    }
-}
-
-//
-// Change client rate as set by script
-//
-void CCore::SetClientScriptFrameRateLimit(uint uiClientScriptFrameRateLimit)
-{
-    m_uiClientScriptFrameRateLimit = uiClientScriptFrameRateLimit;
-    RecalculateFrameRateLimit(-1, false);
-}
-
-void CCore::SetCurrentRefreshRate(uint value)
-{
-    m_CurrentRefreshRate = value;
-    RecalculateFrameRateLimit(-1, false);
-}
-
-//
-// Make sure the frame rate limit has been applied since the last call
-//
-void CCore::EnsureFrameRateLimitApplied()
-{
-    if (!m_bDoneFrameRateLimit)
-    {
-        ApplyFrameRateLimit();
-    }
-    m_bDoneFrameRateLimit = false;
-}
-
-//
-// Do FPS limiting
-//
-// This is called once a frame even if minimized
-//
-void CCore::ApplyFrameRateLimit(uint uiOverrideRate)
-{
-    TIMING_CHECKPOINT("-CallIdle1");
-    ms_TimingCheckpoints.EndTimingCheckpoints();
-
-    // Frame rate limit stuff starts here
-    m_bDoneFrameRateLimit = true;
-
-    uint uiUseRate = uiOverrideRate != -1 ? uiOverrideRate : m_uiFrameRateLimit;
-
-    if (uiUseRate > 0)
-    {
-        // Apply previous frame rate if is hasn't been done yet
-        ApplyQueuedFrameRateLimit();
-
-        // Limit is usually applied in OnGameTimerUpdate
-        m_uiQueuedFrameRate = uiUseRate;
-        m_bQueuedFrameRateValid = true;
-    }
-
-    DoReliablePulse();
-
-    TIMING_GRAPH("FrameEnd");
-    TIMING_GRAPH("");
-}
-
-//
-// Frame rate limit (wait) is done here.
-//
-void CCore::ApplyQueuedFrameRateLimit()
-{
-    if (m_bQueuedFrameRateValid)
-    {
-        m_bQueuedFrameRateValid = false;
-        // Calc required time in ms between frames
-        const double dTargetTimeToUse = 1000.0 / m_uiQueuedFrameRate;
-
-        while (true)
-        {
-            // See if we need to wait
-            double dSpare = dTargetTimeToUse - m_FrameRateTimer.Get();
-            if (dSpare <= 0.0)
-                break;
-            if (dSpare >= 10.0)
-                Sleep(1);
-        }
-        m_FrameRateTimer.Reset();
-        TIMING_GRAPH("Limiter");
-    }
+    if (m_pNet != nullptr && IsWebCoreLoaded())  // We have to wait for the network module to be loaded
+        GetWebCore()->OnFPSLimitChange(fps);
 }
 
 //
@@ -2209,7 +2116,7 @@ void CCore::CalculateStreamingMemoryRange()
     float fMaxAmount = EvalSamplePosition<float>(maxPoints, NUMELMS(maxPoints), iSystemRamMB);
 
     // Scale max if gta3.img is over 1GB
-    SString strGta3imgFilename = PathJoin(GetLaunchPath(), "models", "gta3.img");
+    SString strGta3imgFilename = PathJoin(UTF8FilePath(g_gtaDirectory), "models", "gta3.img");
     uint    uiFileSizeMB = FileSize(strGta3imgFilename) / 0x100000LL;
     float   fSizeScale = UnlerpClamped(1024, uiFileSizeMB, 2048);
     fMaxAmount += fMaxAmount * fSizeScale;
@@ -2340,6 +2247,9 @@ void CCore::HandleIdlePulse()
     {
         DoPreFramePulse();
         DoPostFramePulse();
+
+        // GTA keeps ticking while minimized but renders nothing, so end the frame here for the FPS limiter
+        m_pFPSLimiter->OnFrameEnd();
     }
 
     if (m_pModManager->IsLoaded())

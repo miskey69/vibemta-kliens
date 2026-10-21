@@ -20,6 +20,7 @@ CGame*                  g_pGame = NULL;
 CMultiplayer*           g_pMultiplayer = NULL;
 CNet*                   g_pNet = NULL;
 CClientGame*            g_pClientGame = NULL;
+bool                    g_bClientShuttingDown = false;
 
 int CClient::ClientInitialize(const char* szArguments, CCoreInterface* pCore)
 {
@@ -34,7 +35,7 @@ int CClient::ClientInitialize(const char* szArguments, CCoreInterface* pCore)
     // Unused relic from 10+ years ago (as of 2025) but could still be used. Defined by net.
     if (GetDaysUntilExpire() < -1)
     {
-        MessageBox(NULL, _("This version has expired."), (SString("MTA: San Andreas %s", MTA_DM_BUILDTAG_LONG) + _E("CD64")).c_str(),
+        MessageBox(NULL, _("This version has expired."), (std::string("MTA: San Andreas ") + MTA_DM_BUILDTAG_LONG + _E("CD64")).c_str(),
                    MB_OK | MB_ICONEXCLAMATION | MB_TOPMOST);
         TerminateProcess(GetCurrentProcess(), 1);
     }
@@ -184,6 +185,9 @@ int CClient::ClientInitialize(const char* szArguments, CCoreInterface* pCore)
 
 void CClient::ClientShutdown()
 {
+    // Global shutdown flag
+    g_bClientShuttingDown = true;
+
     // Unbind our radio controls
     g_pCore->GetKeyBinds()->RemoveControlFunction("radio_next", CClientGame::HandleRadioNext);
     g_pCore->GetKeyBinds()->RemoveControlFunction("radio_previous", CClientGame::HandleRadioPrevious);

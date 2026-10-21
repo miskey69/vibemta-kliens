@@ -169,7 +169,7 @@ bool CResourceManager::ParseResourcePathInput(std::string strInput, CResource*& 
     ReplaceOccurrencesInString(strInput, "\\", "/");
 
     // Disallow file paths with a directory separator at the end
-    if (strInput.back() == '/')
+    if (strInput.empty() || strInput.back() == '/')
         return false;
 
     eAccessType accessType = ACCESS_PUBLIC;
@@ -179,12 +179,14 @@ bool CResourceManager::ParseResourcePathInput(std::string strInput, CResource*& 
     {
         accessType = ACCESS_PRIVATE;
         strInput = strInput.substr(1);
+        if (strInput.empty())
+            return false;
     }
 
     if (strInput[0] == ':')
     {
-        unsigned int iEnd = strInput.find_first_of("/");
-        if (iEnd)
+        const std::size_t iEnd = strInput.find_first_of("/");
+        if (iEnd != std::string::npos && iEnd > 1 && iEnd + 1 < strInput.size())
         {
             std::string strResourceName = strInput.substr(1, iEnd - 1);
             pResource = g_pClientGame->GetResourceManager()->GetResource(strResourceName.c_str());
@@ -286,8 +288,7 @@ void CResourceManager::ValidateResourceFile(const SString& strInFilename, const 
                 CMD5Hasher::ConvertToHex(pResourceFile->GetServerChecksum().md5, szMd5Wanted);
                 const int iGotSize = buffer ? static_cast<int>(bufferSize) : static_cast<int>(FileSize(strInFilename));
                 SString   strMessage("%s [Expected Size:%d CRC:%08lX MD5:%s][Got Size:%d CRC:%08lX MD5:%s] ", *ConformResourcePath(strInFilename),
-                                     pResourceFile->GetDownloadSize(), pResourceFile->GetServerChecksum().ulCRC, szMd5Wanted, iGotSize, checksum.ulCRC,
-                                     szMd5);
+                                     pResourceFile->GetDownloadSize(), pResourceFile->GetServerChecksum().ulCRC, szMd5Wanted, iGotSize, checksum.ulCRC, szMd5);
                 if (pResourceFile->IsDownloaded())
                 {
                     strMessage = "Resource file unexpected change: " + strMessage;

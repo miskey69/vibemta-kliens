@@ -1,6 +1,3 @@
-// This file is modified by MTA, by reverting json-c commit 1ee1210 (See https://github.com/multitheftauto/mtasa-blue/commit/ee7d32a7abcfaf6dc748485c94f03fec4df64b17) and will continue to deviate from json-c master version.
-// Description: "Not relevant for us and causes build error"
-
 
 /**
  * @file
@@ -16,7 +13,15 @@
 #include <inttypes.h>
 
 #else
+#ifdef JSON_C_HAVE_STDINT_H
 #include <stdint.h>
+#else
+/* Really only valid for old MS compilers, VS2008 and earlier: */
+typedef __int32 int32_t;
+typedef unsigned __int32 uint32_t;
+typedef __int64 int64_t;
+typedef unsigned __int64 uint64_t;
+#endif
 
 #define PRId64 "I64d"
 #define SCNd64 "I64d"
@@ -24,7 +29,7 @@
 
 #endif
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(ssize_t)
 #include <BaseTsd.h>
 typedef SSIZE_T ssize_t;
 #endif

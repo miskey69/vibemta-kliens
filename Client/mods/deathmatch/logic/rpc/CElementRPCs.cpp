@@ -12,6 +12,7 @@
 #include "StdInc.h"
 #include "CElementRPCs.h"
 #include "net/SyncStructures.h"
+#include "game/CWeaponStat.h"
 
 using std::list;
 
@@ -45,6 +46,7 @@ void CElementRPCs::LoadFunctions()
     AddHandler(SET_CUSTOM_WEAPON_FLAGS, SetCustomWeaponFlags, "setWeaponFlags");
     AddHandler(SET_CUSTOM_WEAPON_FIRING_RATE, SetCustomWeaponFiringRate, "setWeaponFiringRate");
     AddHandler(RESET_CUSTOM_WEAPON_FIRING_RATE, ResetCustomWeaponFiringRate, "resetWeaponFiringRate");
+    AddHandler(SET_CUSTOM_WEAPON_WEAPON_RANGE, SetCustomWeaponWeaponRange, "setWeaponWeaponRange");
     AddHandler(SET_WEAPON_OWNER, SetWeaponOwner, "setWeaponOwner");
     AddHandler(SET_CUSTOM_WEAPON_FLAGS, SetWeaponConfig, "setWeaponFlags");
     AddHandler(SET_PROPAGATE_CALLS_ENABLED, SetCallPropagationEnabled, "setCallPropagationEnabled");
@@ -92,11 +94,13 @@ void CElementRPCs::SetElementData(CClientEntity* pSource, NetBitStreamInterface&
             CLogger::ErrorPrintf("RPC SetElementData name length > MAX_CUSTOMDATA_NAME_LENGTH");
             return;
         }
+
         SString      strName;
         CLuaArgument Argument;
+
         if (bitStream.ReadStringCharacters(strName, usNameLength) && Argument.ReadFromBitStream(bitStream))
         {
-            pSource->SetCustomData(strName, Argument);
+            pSource->SetCustomData(CStringName{strName}, Argument);
         }
     }
 }
@@ -111,10 +115,11 @@ void CElementRPCs::RemoveElementData(CClientEntity* pSource, NetBitStreamInterfa
         SString strName;
 
         // Read out the name plus whether it's recursive or not
+
         if (bitStream.ReadStringCharacters(strName, usNameLength) && bitStream.ReadBit(bRecursive))
         {
             // Remove that name
-            pSource->DeleteCustomData(strName);
+            pSource->DeleteCustomData(CStringName{strName});
         }
     }
 }
@@ -275,6 +280,35 @@ void CElementRPCs::SetElementInterior(CClientEntity* pSource, NetBitStreamInterf
                 pSource->SetPosition(vecPosition);
             }
         }
+
+        CClientColManager* pColManager = m_pClientGame->GetManager()->GetColManager();
+        switch (pSource->GetType())
+        {
+            case CCLIENTPLAYER:
+            case CCLIENTPED:
+            case CCLIENTVEHICLE:
+            {
+                CVector vecEntityPosition;
+                pSource->GetPosition(vecEntityPosition);
+                pColManager->DoHitDetection(vecEntityPosition, 0.0f, pSource);
+                break;
+            }
+            case CCLIENTMARKER:
+            case CCLIENTPICKUP:
+            {
+                CClientColShape* pColShape = NULL;
+                if (pSource->GetType() == CCLIENTMARKER)
+                    pColShape = static_cast<CClientMarker*>(pSource)->GetColShape();
+                else
+                    pColShape = static_cast<CClientPickup*>(pSource)->GetColShape();
+
+                if (pColShape)
+                    CStaticFunctionDefinitions::RefreshColShapeColliders(pColShape);
+                break;
+            }
+            default:
+                break;
+        }
     }
 }
 
@@ -319,32 +353,90 @@ void CElementRPCs::SetElementDimension(CClientEntity* pSource, NetBitStreamInter
 void CElementRPCs::AttachElements(CClientEntity* pSource, NetBitStreamInterface& bitStream)
 {
     ElementID usAttachedToID;
-    CVector   vecPosition, vecRotation;
-    if (bitStream.Read(usAttachedToID) && bitStream.Read(vecPosition.fX) && bitStream.Read(vecPosition.fY) && bitStream.Read(vecPosition.fZ) &&
-        bitStream.Read(vecRotation.fX) && bitStream.Read(vecRotation.fY) && bitStream.Read(vecRotation.fZ))
+
+    CVector vecPosition;
+    CVector vecRotation;
+
+    if (!(bitStream.Read(usAttachedToID) && bitStream.Read(vecPosition.fX) && bitStream.Read(vecPosition.fY) && bitStream.Read(vecPosition.fZ) &&
+          bitStream.Read(vecRotation.fX) && bitStream.Read(vecRotation.fY) && bitStream.Read(vecRotation.fZ)))
     {
-        CClientEntity* pAttachedToEntity = CElementIDs::GetElement(usAttachedToID);
-        if (pAttachedToEntity)
-        {
-            pSource->SetAttachedOffsets(vecPosition, vecRotation);
-            pSource->AttachTo(pAttachedToEntity);
-        }
+        return;
     }
+
+    CClientEntity* pAttachedToEntity = CElementIDs::GetElement(usAttachedToID);
+    if (!pAttachedToEntity)
+    {
+        return;
+    }
+
+    ConvertRadiansToDegrees(vecRotation);
+
+    CLuaArguments Arguments;
+    Arguments.PushElement(pAttachedToEntity);
+    Arguments.PushNumber(vecPosition.fX);
+    Arguments.PushNumber(vecPosition.fY);
+    Arguments.PushNumber(vecPosition.fZ);
+    Arguments.PushNumber(vecRotation.fX);
+    Arguments.PushNumber(vecRotation.fY);
+    Arguments.PushNumber(vecRotation.fZ);
+
+    if (!pSource->CallEvent("onClientElementAttach", Arguments, true))
+    {
+        return;
+    }
+
+    ConvertDegreesToRadians(vecRotation);
+
+    pSource->SetAttachedOffsets(vecPosition, vecRotation);
+    pSource->AttachTo(pAttachedToEntity);
 }
 
 void CElementRPCs::DetachElements(CClientEntity* pSource, NetBitStreamInterface& bitStream)
 {
     unsigned char ucTimeContext;
-    if (bitStream.Read(ucTimeContext))
+    if (!bitStream.Read(ucTimeContext))
     {
-        pSource->SetSyncTimeContext(ucTimeContext);
-        pSource->AttachTo(NULL);
+        return;
+    }
 
-        CVector vecPosition;
-        if (bitStream.Read(vecPosition.fX) && bitStream.Read(vecPosition.fY) && bitStream.Read(vecPosition.fZ))
-        {
-            pSource->SetPosition(vecPosition);
-        }
+    ElementID      usAttachedToID;
+    CClientEntity* pAttachedToEntity = CElementIDs::GetElement(usAttachedToID);
+
+    CVector vecPosition;
+    CVector vecRotation;
+
+    bitStream.Read(vecPosition.fX);
+    bitStream.Read(vecPosition.fY);
+    bitStream.Read(vecPosition.fZ);
+    bitStream.Read(vecRotation.fX);
+    bitStream.Read(vecRotation.fY);
+    bitStream.Read(vecRotation.fZ);
+
+    CLuaArguments Arguments;
+    Arguments.PushElement(pAttachedToEntity);
+    Arguments.PushNumber(vecPosition.fX);
+    Arguments.PushNumber(vecPosition.fY);
+    Arguments.PushNumber(vecPosition.fZ);
+    Arguments.PushNumber(vecRotation.fX);
+    Arguments.PushNumber(vecRotation.fY);
+    Arguments.PushNumber(vecRotation.fZ);
+
+    if (!pSource->CallEvent("onClientElementDetach", Arguments, true))
+    {
+        return;
+    }
+
+    pSource->SetSyncTimeContext(ucTimeContext);
+    pSource->AttachTo(NULL);
+
+    if (vecPosition.fX != 0.0f || vecPosition.fY != 0.0f || vecPosition.fZ != 0.0f)
+    {
+        pSource->SetPosition(vecPosition);
+    }
+
+    if (vecRotation.fX != 0.0f || vecRotation.fY != 0.0f || vecRotation.fZ != 0.0f)
+    {
+        pSource->SetRotationDegrees(vecRotation);
     }
 }
 
@@ -373,6 +465,16 @@ void CElementRPCs::SetElementAlpha(CClientEntity* pSource, NetBitStreamInterface
             {
                 CClientObject* pObject = static_cast<CClientObject*>(pSource);
                 pObject->SetAlpha(ucAlpha);
+                break;
+            }
+            case CCLIENTBUILDING:
+            {
+                static_cast<CClientBuilding*>(pSource)->SetAlpha(ucAlpha);
+                break;
+            }
+            case CCLIENTPROJECTILE:
+            {
+                static_cast<CClientProjectile*>(pSource)->SetAlpha(ucAlpha);
                 break;
             }
             default:
@@ -414,7 +516,33 @@ void CElementRPCs::SetElementHealth(CClientEntity* pSource, NetBitStreamInterfac
                 if (pPed->IsHealthLocked())
                     pPed->LockHealth(fHealth);
                 else
+                {
                     pPed->SetHealth(fHealth);
+                    // If server sets health to 0 for local player, mark as server-processed death
+                    // to prevent DoWastedCheck from firing with stale local damage data
+                    if (fHealth == 0.0f && pPed->IsLocalPlayer())
+                    {
+                        CClientPlayer* pPlayer = static_cast<CClientPlayer*>(pPed);
+                        bool           bWasAlreadyDead = pPlayer->IsDeadOnNetwork();
+
+                        g_pClientGame->ClearDamageData();
+                        pPlayer->SetDeadOnNetwork(true);
+
+                        // Fire onClientPlayerWasted to compensate for the server intentionally
+                        // skipping the CPlayerWastedPacket broadcast to the dying player.
+                        if (!bWasAlreadyDead)
+                        {
+                            CLuaArguments Arguments;
+                            Arguments.PushBoolean(false);  // killer = none
+                            Arguments.PushBoolean(false);  // weapon = unknown
+                            Arguments.PushBoolean(false);  // bodypart = unknown
+                            Arguments.PushBoolean(false);  // isStealth = false
+                            Arguments.PushNumber(0);       // animGroup
+                            Arguments.PushNumber(15);      // animID
+                            pPlayer->CallEvent("onClientPlayerWasted", Arguments, true);
+                        }
+                    }
+                }
                 break;
             }
 
@@ -560,6 +688,7 @@ void CElementRPCs::SetElementCollisionsEnabled(CClientEntity* pSource, NetBitStr
             }
 
             case CCLIENTOBJECT:
+            case CCLIENTWEAPON:
             {
                 CClientObject* pObject = static_cast<CClientObject*>(pSource);
                 pObject->SetCollisionEnabled(bEnable);
@@ -599,9 +728,15 @@ void CElementRPCs::SetElementFrozen(CClientEntity* pSource, NetBitStreamInterfac
             }
 
             case CCLIENTOBJECT:
+            case CCLIENTWEAPON:
             {
                 CClientObject* pObject = static_cast<CClientObject*>(pSource);
                 pObject->SetFrozen(bFrozen);
+                break;
+            }
+            case CCLIENTPROJECTILE:
+            {
+                static_cast<CClientProjectile*>(pSource)->SetFrozen(bFrozen);
                 break;
             }
         }
@@ -733,6 +868,16 @@ void CElementRPCs::ResetCustomWeaponFiringRate(CClientEntity* pSource, NetBitStr
     {
         CClientWeapon* pWeapon = static_cast<CClientWeapon*>(pSource);
         pWeapon->ResetWeaponFireTime();
+    }
+}
+
+void CElementRPCs::SetCustomWeaponWeaponRange(CClientEntity* pSource, NetBitStreamInterface& bitStream)
+{
+    float fRange = 0.0f;
+    if (bitStream.Read(fRange) && pSource->GetType() == CCLIENTWEAPON)
+    {
+        CClientWeapon* pWeapon = static_cast<CClientWeapon*>(pSource);
+        pWeapon->GetWeaponStat()->SetWeaponRange(fRange);
     }
 }
 

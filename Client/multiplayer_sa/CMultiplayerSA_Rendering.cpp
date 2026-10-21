@@ -9,6 +9,7 @@
  *****************************************************************************/
 
 #include "StdInc.h"
+#include <game/RenderWare.h>
 extern CCoreInterface*           g_pCore;
 GameEntityRenderHandler*         pGameEntityRenderHandler = nullptr;
 PreRenderSkyHandler*             pPreRenderSkyHandlerHandler = nullptr;
@@ -46,10 +47,12 @@ void OnMY_CallIdle_Post(RwGeometry* pGeometry, DWORD calledFrom)
 // Hook info
 #define HOOKPOS_CallIdle  0x53ECBD
 #define HOOKSIZE_CallIdle 5
-DWORD                 RETURN_CallIdle = 0x53ECC2;
-DWORD                 DO_CallIdle = 0x53E920;
-void _declspec(naked) HOOK_CallIdle()
+DWORD                         RETURN_CallIdle = 0x53ECC2;
+DWORD                         DO_CallIdle = 0x53E920;
+static void __declspec(naked) HOOK_CallIdle()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -115,9 +118,11 @@ void OnMY_CEntity_Render_Post()
 // Hook info
 #define HOOKPOS_CEntity_Render  0x534310
 #define HOOKSIZE_CEntity_Render 6
-DWORD                 RETURN_CEntity_Render = 0x534317;
-void _declspec(naked) HOOK_CEntity_Render()
+DWORD                         RETURN_CEntity_Render = 0x534317;
+static void __declspec(naked) HOOK_CEntity_Render()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -151,15 +156,77 @@ inner:
 // Detect entity rendering
 //
 //////////////////////////////////////////////////////////////////////////////////////////
+
+// #425: the game sets ALPHAREF before the entity render call (140 in
+// RenderEverythingBarRoads, 100 in CVisibilityPlugins::RenderEntity), alpha func is
+// GREATER. MTA applies setElementAlpha by scaling material alpha during the render,
+// so at element alpha A every pixel lands at (texel * A / 255) and the object drops
+// below the ref once A <= 140 or A <= 100 depending on path. lowering the refs
+// globally is what smeared the LV neon textures (#4996), so scale the ref for this
+// entity only: ref' = ref * A / 255. both sides of the compare scale equally, cutouts
+// keep their shape and ref' < A so the object never fully vanishes. restored in the
+// Post handler. player peds, cars and bikes set ref 1 and restore it inside their
+// own Render fns. boats and trains never did, so vehicles get the same scaling,
+// for cars and bikes it's a no-op since their own ref write lands after ours.
+static bool  ms_bAlphaTestRefOverridden = false;
+static DWORD ms_dwSavedAlphaTestRef = 0;
+
+static void OverrideAlphaTestRefForElementAlpha(CEntitySAInterface* pEntity)
+{
+    unsigned char ucAlpha = 255;
+
+    if (pEntity->nType == ENTITY_TYPE_OBJECT)
+    {
+        SClientEntity<CObjectSA>* pObjectClientEntity = pGameInterface->GetPools()->GetObject((DWORD*)pEntity);
+        if (pObjectClientEntity && pObjectClientEntity->pEntity)
+            ucAlpha = pObjectClientEntity->pEntity->GetAlpha();
+    }
+    else if (pEntity->nType == ENTITY_TYPE_VEHICLE)
+    {
+        SClientEntity<CVehicleSA>* pVehicleClientEntity = pGameInterface->GetPools()->GetVehicle((DWORD*)pEntity);
+        if (pVehicleClientEntity && pVehicleClientEntity->pEntity)
+            ucAlpha = pVehicleClientEntity->pEntity->GetAlpha();
+    }
+
+    if (ucAlpha == 255)
+        return;
+
+    // RwEngineInstance->dOpenDevice.fpRenderStateGet/fpRenderStateSet
+    DWORD engine = *(DWORD*)0xC97B24;
+    auto  fpGet = reinterpret_cast<BOOL(__cdecl*)(DWORD, void*)>(*(DWORD*)(engine + 0x24));
+    auto  fpSet = reinterpret_cast<BOOL(__cdecl*)(DWORD, void*)>(*(DWORD*)(engine + 0x20));
+
+    fpGet(0x1e /*rwRENDERSTATEALPHATESTFUNCTIONREF*/, &ms_dwSavedAlphaTestRef);
+    fpSet(0x1e /*rwRENDERSTATEALPHATESTFUNCTIONREF*/, reinterpret_cast<void*>(ms_dwSavedAlphaTestRef * ucAlpha / 255));
+    ms_bAlphaTestRefOverridden = true;
+}
+
+static void RestoreAlphaTestRef()
+{
+    if (!ms_bAlphaTestRefOverridden)
+        return;
+
+    ms_bAlphaTestRefOverridden = false;
+
+    DWORD engine = *(DWORD*)0xC97B24;
+    auto  fpSet = reinterpret_cast<BOOL(__cdecl*)(DWORD, void*)>(*(DWORD*)(engine + 0x20));
+    fpSet(0x1e /*rwRENDERSTATEALPHATESTFUNCTIONREF*/, reinterpret_cast<void*>(ms_dwSavedAlphaTestRef));
+}
+
 bool OnMY_CEntity_RenderOneNonRoad_Pre(CEntitySAInterface* pEntity)
 {
     ms_RenderingOneNonRoad = pEntity;
     CallGameEntityRenderHandler(ms_RenderingOneNonRoad);
+
+    OverrideAlphaTestRefForElementAlpha(pEntity);
+
     return IsEntityRenderable(pEntity);
 }
 
 void OnMY_CEntity_RenderOneNonRoad_Post(CEntitySAInterface* pEntity)
 {
+    RestoreAlphaTestRef();
+
     if (ms_RenderingOneNonRoad)
     {
         ms_RenderingOneNonRoad = NULL;
@@ -170,9 +237,11 @@ void OnMY_CEntity_RenderOneNonRoad_Post(CEntitySAInterface* pEntity)
 // Hook info
 #define HOOKPOS_CEntity_RenderOneNonRoad  0x553260
 #define HOOKSIZE_CEntity_RenderOneNonRoad 5
-DWORD                 RETURN_CEntity_RenderOneNonRoad = 0x553265;
-void _declspec(naked) HOOK_CEntity_RenderOneNonRoad()
+DWORD                         RETURN_CEntity_RenderOneNonRoad = 0x553265;
+static void __declspec(naked) HOOK_CEntity_RenderOneNonRoad()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -219,9 +288,11 @@ void OnMY_CVisibilityPlugins_RenderWeaponPedsForPC_Mid(CPedSAInterface* pEntity)
 // Hook info
 #define HOOKPOS_CVisibilityPlugins_RenderWeaponPedsForPC_Mid  0x733080
 #define HOOKSIZE_CVisibilityPlugins_RenderWeaponPedsForPC_Mid 6
-DWORD                 RETURN_CVisibilityPlugins_RenderWeaponPedsForPC_Mid = 0x733086;
-void _declspec(naked) HOOK_CVisibilityPlugins_RenderWeaponPedsForPC_Mid()
+DWORD                         RETURN_CVisibilityPlugins_RenderWeaponPedsForPC_Mid = 0x733086;
+static void __declspec(naked) HOOK_CVisibilityPlugins_RenderWeaponPedsForPC_Mid()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -253,8 +324,10 @@ void OnMY_CVisibilityPlugins_RenderWeaponPedsForPC_End()
 // Hook info
 #define HOOKPOS_CVisibilityPlugins_RenderWeaponPedsForPC_End  0x73314D
 #define HOOKSIZE_CVisibilityPlugins_RenderWeaponPedsForPC_End 5
-void _declspec(naked) HOOK_CVisibilityPlugins_RenderWeaponPedsForPC_End()
+static void __declspec(naked) HOOK_CVisibilityPlugins_RenderWeaponPedsForPC_End()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -280,9 +353,11 @@ void _declspec(naked) HOOK_CVisibilityPlugins_RenderWeaponPedsForPC_End()
 // Hook info
 #define HOOKPOS_Check_NoOfVisibleLods  0x5534F9
 #define HOOKSIZE_Check_NoOfVisibleLods 6
-DWORD                 RETURN_Check_NoOfVisibleLods = 0x5534FF;
-void _declspec(naked) HOOK_Check_NoOfVisibleLods()
+DWORD                         RETURN_Check_NoOfVisibleLods = 0x5534FF;
+static void __declspec(naked) HOOK_Check_NoOfVisibleLods()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -306,9 +381,11 @@ limit:
 // Hook info
 #define HOOKPOS_Check_NoOfVisibleEntities  0x55352D
 #define HOOKSIZE_Check_NoOfVisibleEntities 6
-DWORD                 RETURN_Check_NoOfVisibleEntities = 0x553533;
-void _declspec(naked) HOOK_Check_NoOfVisibleEntities()
+DWORD                         RETURN_Check_NoOfVisibleEntities = 0x553533;
+static void __declspec(naked) HOOK_Check_NoOfVisibleEntities()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -336,9 +413,11 @@ void OnMY_WinLoop()
 // Hook info
 #define HOOKPOS_WinLoop  0x748A93
 #define HOOKSIZE_WinLoop 5
-DWORD                 RETURN_WinLoop = 0x748A98;
-void _declspec(naked) HOOK_WinLoop()
+DWORD                         RETURN_WinLoop = 0x748A98;
+static void __declspec(naked) HOOK_WinLoop()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -361,9 +440,11 @@ void _declspec(naked) HOOK_WinLoop()
 //////////////////////////////////////////////////////////////////////////////////////////
 #define HOOKPOS_CTimer_Update  0x561B10
 #define HOOKSIZE_CTimer_Update 6
-static const DWORD           CONTINUE_CTimer_Update = 0x561B16;
-static void _declspec(naked) HOOK_CTimer_Update()
+static const DWORD            CONTINUE_CTimer_Update = 0x561B16;
+static void __declspec(naked) HOOK_CTimer_Update()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -397,18 +478,20 @@ static void _declspec(naked) HOOK_CTimer_Update()
 static const DWORD           CONTINUE_CTimer_Suspend = 0x5619EF;
 static void _declspec(naked) HOOK_CTimer_Suspend()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
-    __asm
+    _asm
     {
         // Check if _timerFunction is NULL
         mov     eax, dword ptr ds:[0B7CB28h]
         test    eax, eax
         jz      skip_suspend
 
-        // Original code: call [_timerFunction]
+             // Original code: call [_timerFunction]
         call    eax
         jmp     CONTINUE_CTimer_Suspend
-
+        
     skip_suspend:
         // If NULL, return zero timestamp (EAX:EDX = 0) to avoid corrupting pause time
         xor     eax, eax
@@ -423,18 +506,20 @@ static void _declspec(naked) HOOK_CTimer_Suspend()
 static const DWORD           CONTINUE_CTimer_Resume = 0x561A17;
 static void _declspec(naked) HOOK_CTimer_Resume()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
-    __asm
+    _asm
     {
         // Check if _timerFunction is NULL
         mov     eax, dword ptr ds:[0B7CB28h]
         test    eax, eax
         jz      skip_resume
 
-        // Original code: call [_timerFunction]
+             // Original code: call [_timerFunction]
         call    eax
         jmp     CONTINUE_CTimer_Resume
-
+        
     skip_resume:
         // If NULL, return zero timestamp (EAX:EDX = 0) to avoid corrupting resume time calculations
         xor     eax, eax
@@ -480,10 +565,12 @@ bool OnMY_psGrabScreen_ShouldUseRect()
 // Hook info
 #define HOOKPOS_psGrabScreen  0x7452FC
 #define HOOKSIZE_psGrabScreen 5
-DWORD                 RETURN_psGrabScreen_YesChange = 0x745311;
-DWORD                 RETURN_psGrabScreen_NoChange = 0x745336;
-void _declspec(naked) HOOK_psGrabScreen()
+DWORD                         RETURN_psGrabScreen_YesChange = 0x745311;
+DWORD                         RETURN_psGrabScreen_NoChange = 0x745336;
+static void __declspec(naked) HOOK_psGrabScreen()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -527,9 +614,11 @@ void OnMY_CClouds_RenderSkyPolys()
 #define HOOKCHECK_CClouds_RenderSkyPolys 0xA1
 #define HOOKPOS_CClouds_RenderSkyPolys   0x714650
 #define HOOKSIZE_CClouds_RenderSkyPolys  5
-DWORD                 RETURN_CClouds_RenderSkyPolys = 0x714655;
-void _declspec(naked) HOOK_CClouds_RenderSkyPolys()
+DWORD                         RETURN_CClouds_RenderSkyPolys = 0x714655;
+static void __declspec(naked) HOOK_CClouds_RenderSkyPolys()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -584,9 +673,11 @@ float OnMY_RwCameraSetNearClipPlane(DWORD dwCalledFrom, void* pUnknown, float fD
 #define HOOKCHECK_RwCameraSetNearClipPlane 0xD9
 #define HOOKPOS_RwCameraSetNearClipPlane   0x7EE1D0
 #define HOOKSIZE_RwCameraSetNearClipPlane  5
-DWORD                 RETURN_RwCameraSetNearClipPlane = 0x7EE1D5;
-void _declspec(naked) HOOK_RwCameraSetNearClipPlane()
+DWORD                         RETURN_RwCameraSetNearClipPlane = 0x7EE1D5;
+static void __declspec(naked) HOOK_RwCameraSetNearClipPlane()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -617,9 +708,11 @@ void _declspec(naked) HOOK_RwCameraSetNearClipPlane()
 // Hook info
 #define HOOKPOS_RenderEffects_HeliLight  0x53E1B9
 #define HOOKSIZE_RenderEffects_HeliLight 5
-DWORD                 RETURN_RenderEffects_HeliLight = 0x53E1BE;
-void _declspec(naked) HOOK_RenderEffects_HeliLight()
+DWORD                         RETURN_RenderEffects_HeliLight = 0x53E1BE;
+static void __declspec(naked) HOOK_RenderEffects_HeliLight()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -776,25 +869,27 @@ bool AreMatricesOfRpAtomicValid(RpAtomic* pAtomic)
 
 #define HOOKPOS_CVisibilityPlugins_RenderPedCB  0x7335B0
 #define HOOKSIZE_CVisibilityPlugins_RenderPedCB 5
-void _declspec(naked) HOOK_CVisibilityPlugins_RenderPedCB()
+static void __declspec(naked) HOOK_CVisibilityPlugins_RenderPedCB()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
         push esi;
         push edi;
         mov edi, [esp + 0Ch]; // RpAtomic
-
+        
         push edi;
         call AreMatricesOfRpAtomicValid;
         add esp, 4;
-
+        
         test al, al;
         jz skipRender;
-
+        
         push 0x7335B6; // Continue rendering
         retn;
-
+        
     skipRender:
         pop edi;
         pop esi;
@@ -806,10 +901,12 @@ void _declspec(naked) HOOK_CVisibilityPlugins_RenderPedCB()
 // Hook info
 #define HOOKPOS_CRenderer_EverythingBarRoads  0x553C78
 #define HOOKSIZE_CRenderer_EverythingBarRoads 5
-DWORD                 RETURN_CRenderer_EverythingBarRoads = 0x553C7D;
-DWORD                 DO_CRenderer_EverythingBarRoads = 0x7EE180;
-void _declspec(naked) HOOK_CRenderer_EverythingBarRoads()
+DWORD                         RETURN_CRenderer_EverythingBarRoads = 0x553C7D;
+DWORD                         DO_CRenderer_EverythingBarRoads = 0x7EE180;
+static void __declspec(naked) HOOK_CRenderer_EverythingBarRoads()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -839,6 +936,15 @@ void _declspec(naked) HOOK_CRenderer_EverythingBarRoads()
 //////////////////////////////////////////////////////////////////////////////////////////
 void CMultiplayerSA::InitHooks_Rendering()
 {
+    // GTA assigns main-world temporary directional lights to slots 1 through 6,
+    // but the vehicle env-map pipeline overwrites slot 1 with its specular light.
+    // Reserve slot 7 for the specular light so headlights can illuminate vehicle
+    // materials without being discarded immediately before the draw.
+    constexpr BYTE VEHICLE_SPECULAR_LIGHT_SLOT = 7;
+    MemPut<BYTE>(0x5D9A88, VEHICLE_SPECULAR_LIGHT_SLOT);  // RwD3D9SetLight
+    MemPut<BYTE>(0x5D9A91, VEHICLE_SPECULAR_LIGHT_SLOT);  // RwD3D9EnableLight(TRUE)
+    MemPut<BYTE>(0x5D9F1F, VEHICLE_SPECULAR_LIGHT_SLOT);  // RwD3D9EnableLight(FALSE)
+
     EZHookInstall(CallIdle);
     EZHookInstall(CEntity_Render);
     EZHookInstall(CEntity_RenderOneNonRoad);

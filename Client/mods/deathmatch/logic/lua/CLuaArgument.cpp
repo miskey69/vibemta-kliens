@@ -73,7 +73,7 @@ void CLuaArgument::CopyRecursive(const CLuaArgument& Argument, CFastHashMap<CLua
     // Clear the string
     m_strString = "";
 
-    // Destroy our old tabledata if neccessary
+    // Destroy our old tabledata if necessary
     DeleteTableData();
 
 #ifdef MTA_DEBUG
@@ -336,6 +336,13 @@ void CLuaArgument::ReadString(const std::string_view& string)
     m_iType = LUA_TSTRING;
     DeleteTableData();
     m_strString = std::string{string};
+}
+
+void CLuaArgument::ReadString(const CStringName& string)
+{
+    m_iType = LUA_TSTRING;
+    DeleteTableData();
+    m_strString = string.ToString();
 }
 
 void CLuaArgument::ReadString(const char* string)
@@ -611,7 +618,7 @@ bool CLuaArgument::ReadFromBitStream(NetBitStreamInterface& bitStream, std::vect
         case LUA_TLIGHTUSERDATA:
         case LUA_TUSERDATA:
         {
-            // Read out the elemnt ID
+            // Read out the element ID
             ElementID ElementID;
             if (bitStream.Read(ElementID))
             {

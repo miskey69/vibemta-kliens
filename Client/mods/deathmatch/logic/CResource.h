@@ -110,9 +110,13 @@ public:
     int                GetDownloadPriorityGroup() { return m_iDownloadPriorityGroup; }
     void               SetDownloadPriorityGroup(int iDownloadPriorityGroup) { m_iDownloadPriorityGroup = iDownloadPriorityGroup; }
 
+    void         SetStartCounter(unsigned int startCounter) { m_startCounter = startCounter; }
+    unsigned int GetStartCounter() const noexcept { return m_startCounter; }
+
 private:
     unsigned short       m_usNetID;
     uint                 m_uiScriptID;
+    unsigned int         m_startCounter{};
     SString              m_strResourceName;
     CLuaMain*            m_pLuaVM;
     CLuaManager*         m_pLuaManager;
@@ -138,6 +142,8 @@ private:
     // To control cursor show/hide
     static int m_iShowingCursor;
     bool       m_bShowingCursor;
+    static int m_iToggleControls;
+    bool       m_bToggleControls;
 
     SString m_strResourceDirectoryPath;            // stores the path to /mods/deathmatch/resources/resource_name
     SString m_strResourcePrivateDirectoryPath;     // stores the path to /mods/deathmatch/priv/server-id/resource_name

@@ -46,8 +46,10 @@ static void ColStoreRemoveRef(CObjectSAInterface* gameObject)
 #define HOOKSIZE_CObject_Init 30
 static const DWORD CONTINUE_CObject_Init = 0x59F8DC;
 
-static void _declspec(naked) HOOK_CObject_Init()
+static void __declspec(naked) HOOK_CObject_Init()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -87,8 +89,10 @@ static void _declspec(naked) HOOK_CObject_Init()
 #define HOOKSIZE_CObject_Destructor 27
 static const DWORD CONTINUE_CObject_Destructor = 0x59F709;
 
-static void _declspec(naked) HOOK_CObject_Destructor()
+static void __declspec(naked) HOOK_CObject_Destructor()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {

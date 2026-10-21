@@ -26,19 +26,21 @@ static void CObject_PreRender(CObjectSAInterface* objectInterface)
         objectEntity->pEntity->SetPreRenderRequired(true);
 }
 
-const std::uintptr_t         RETURN_CCObject_PreRender = 0x59FD56;
-static void _declspec(naked) HOOK_CCObject_PreRender()
+const std::uintptr_t          RETURN_CCObject_PreRender = 0x59FD56;
+static void __declspec(naked) HOOK_CCObject_PreRender()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
-        push ecx
-        call CObject_PreRender
-        pop  ecx
-        sub  esp, 10h
-        push esi
-        mov  esi, ecx
-        jmp  RETURN_CCObject_PreRender
+        push    ecx
+        call    CObject_PreRender
+        pop     ecx
+        sub     esp, 16
+        push    esi
+        mov     esi, ecx
+        jmp     RETURN_CCObject_PreRender
     }
     // clang-format on
 }

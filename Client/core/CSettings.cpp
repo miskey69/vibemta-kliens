@@ -45,8 +45,8 @@ namespace
     constexpr float kBorderlessSaturationMax = 2.0f;
     constexpr float kBorderlessSaturationDefault = 1.0f;
 
-    constexpr float kSettingsContentWidth = 680.0f;
-    constexpr float kSettingsBaseContentHeight = 480.0f;
+    constexpr float kSettingsContentWidth = 760.0f;
+    constexpr float kSettingsBaseContentHeight = 560.0f;
     constexpr float kSettingsWindowFrameHorizontal = 18.0f;  // 9px left + 9px right
     constexpr float kSettingsWindowFrameVertical = 22.0f;    // 20px top + 2px bottom
     constexpr float kSettingsBottomButtonAreaHeight = 38.0f;
@@ -102,6 +102,13 @@ namespace
             width = std::min(std::max(width, kSettingsSliderMinWidth), totalAvailable);
 
         return width;
+    }
+
+    int QuantizeVolumePercent(float& value)
+    {
+        const int iPercent = std::clamp(static_cast<int>(value * 100.0f + 0.5f), 0, 100);
+        value = iPercent / 100.0f;
+        return iPercent;
     }
 
     void FinalizeSliderRow(float tabWidth, CGUIScrollBar* slider, CGUILabel* valueLabel, float preferredWidth, float labelSpacing = kSliderLabelSpacing,
@@ -270,6 +277,7 @@ void CSettings::ResetGuiPointers()
     m_pAdvancedSettingDescriptionLabel = NULL;
     m_pFullscreenStyleLabel = NULL;
     m_pFullscreenStyleCombo = NULL;
+    m_pCheckBoxVSync = NULL;
     m_pPriorityLabel = NULL;
     m_pPriorityCombo = NULL;
     m_pPlayerMapImageLabel = NULL;
@@ -288,9 +296,6 @@ void CSettings::ResetGuiPointers()
     m_pProgressAnimationCombo = NULL;
     m_pDebugSettingLabel = NULL;
     m_pDebugSettingCombo = NULL;
-    m_pWin8Label = NULL;
-    m_pWin8ColorCheckBox = NULL;
-    m_pWin8MouseCheckBox = NULL;
     m_pPhotoSavingCheckbox = NULL;
     m_pCheckBoxAskBeforeDisconnect = NULL;
     m_pProcessAffinityCheckbox = NULL;
@@ -338,12 +343,15 @@ void CSettings::ResetGuiPointers()
     m_pBindsList = NULL;
     m_pBindsDefButton = NULL;
 
-    m_pJoypadName = NULL;
-    m_pJoypadUnderline = NULL;
+    m_pJoypadDeviceCombo = NULL;
     m_pEditDeadzone = NULL;
     m_pEditSaturation = NULL;
+    m_pEditTriggerDeadzone = NULL;
+    m_pEditTriggerSaturation = NULL;
+    m_pCheckBoxJoypadVibration = NULL;
     m_pJoypadLabels.clear();
     m_pJoypadButtons.clear();
+    m_bUpdatingJoypadCombo = false;
 
     m_pSelectedBind = NULL;
 
@@ -357,6 +365,7 @@ void CSettings::ResetGuiPointers()
     m_pLabelVerticalAimSensitivity = NULL;
     m_pVerticalAimSensitivity = NULL;
     m_pLabelVerticalAimSensitivityValue = NULL;
+    m_pCheckboxVerticalAimSensitivity = nullptr;
 
     m_pControlsJoypadLabel = NULL;
     m_pControlsInputTypePane = NULL;
@@ -421,15 +430,45 @@ void CSettings::ResetGuiPointers()
     m_pGridBrowserWhitelist = NULL;
     m_pButtonBrowserWhitelistRemove = NULL;
     m_pCheckBoxBrowserGPUEnabled = NULL;
+    m_pCheckBoxBrowserVideoAccelEnabled = NULL;
 }
 
 CSettings::CSettings()
 {
     ResetGuiPointers();
 
-    CGameSettings* gameSettings = CCore::GetSingleton().GetGame()->GetSettings();
-    m_fRadioVolume = (float)gameSettings->GetRadioVolume() / 64.0f;
-    m_fSFXVolume = (float)gameSettings->GetSFXVolume() / 64.0f;
+    CClientVariables& clientVars = CClientVariables::GetSingleton();
+    CGameSettings*    gameSettings = CCore::GetSingleton().GetGame()->GetSettings();
+
+    float fRadioVolume = 0.0f;
+    float fSFXVolume = 0.0f;
+
+    // Keep exact slider values in CVARs. Fall back to reconstructed values for
+    // one-time migration when those keys do not exist yet.
+    if (clientVars.Exists("radiovolume"))
+    {
+        CVARS_GET("radiovolume", fRadioVolume);
+    }
+    else
+    {
+        fRadioVolume = (float)gameSettings->GetRadioVolume() / 64.0f;
+        CVARS_SET("radiovolume", fRadioVolume);
+    }
+
+    if (clientVars.Exists("sfxvolume"))
+    {
+        CVARS_GET("sfxvolume", fSFXVolume);
+    }
+    else
+    {
+        fSFXVolume = (float)gameSettings->GetSFXVolume() / 64.0f;
+        CVARS_SET("sfxvolume", fSFXVolume);
+    }
+
+    m_fRadioVolume = std::max(0.0f, std::min(fRadioVolume, 1.0f));
+    m_fSFXVolume = std::max(0.0f, std::min(fSFXVolume, 1.0f));
+    QuantizeVolumePercent(m_fRadioVolume);
+    QuantizeVolumePercent(m_fSFXVolume);
 
     m_iMaxAnisotropic = g_pDeviceState->AdapterState.MaxAnisotropicSetting;
     m_bBrowserListsChanged = false;
@@ -655,6 +694,10 @@ void CSettings::CreateGUI()
                       m_pLabelVerticalAimSensitivity);
     vecTemp.fY += 30.f;
 
+    m_pCheckboxVerticalAimSensitivity = reinterpret_cast<CGUICheckBox*>(pManager->CreateCheckBox(pTabControls, _("Use mouse sensitivity for aiming"), false));
+    m_pCheckboxVerticalAimSensitivity->SetPosition(CVector2D(verticalSliderPos.fX, verticalSliderPos.fY + 20.0f));
+    m_pCheckboxVerticalAimSensitivity->AutoSize(nullptr, 20.0f);
+
     vecTemp.fX = 16;
     // Joypad options
     m_pControlsJoypadLabel = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabControls, _("Joypad options")));
@@ -687,19 +730,21 @@ void CSettings::CreateGUI()
     // Advanced Joypad settings
     {
         m_JoypadSettingsRevision = -1;
+        m_JoypadDeviceListRevision = -1;
 
         CJoystickManagerInterface* JoyMan = GetJoystickManager();
 
-        m_pJoypadName = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabControls));
-        m_pJoypadName->SetHorizontalAlign(CGUI_ALIGN_HORIZONTALCENTER);
-        m_pJoypadName->SetVerticalAlign(CGUI_ALIGN_VERTICALCENTER);
-        m_pJoypadName->SetPosition(CVector2D(270, vecTemp.fY));
+        m_pJoypadDeviceCombo = reinterpret_cast<CGUIComboBox*>(pManager->CreateComboBox(pTabControls, ""));
+        m_pJoypadDeviceCombo->SetPosition(CVector2D(11, vecTemp.fY));
+        m_pJoypadDeviceCombo->SetSize(CVector2D(320.0f, 120.0f));
+        m_pJoypadDeviceCombo->SetReadOnly(true);
+        m_pJoypadDeviceCombo->SetSelectionHandler(GUI_CALLBACK(&CSettings::OnJoypadDeviceChanged, this));
 
-        m_pJoypadUnderline = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabControls));
-        m_pJoypadUnderline->SetHorizontalAlign(CGUI_ALIGN_HORIZONTALCENTER);
-        m_pJoypadUnderline->SetVerticalAlign(CGUI_ALIGN_VERTICALCENTER);
-        m_pJoypadUnderline->SetPosition(CVector2D(270, vecTemp.fY + 2));
-        vecTemp.fY += 50;
+        m_pCheckBoxJoypadVibration = reinterpret_cast<CGUICheckBox*>(pManager->CreateCheckBox(pTabControls, _("Vibration"), true));
+        m_pCheckBoxJoypadVibration->SetPosition(CVector2D(340, vecTemp.fY + 3.0f));
+        m_pCheckBoxJoypadVibration->AutoSize(NULL, 20.0f);
+        m_pCheckBoxJoypadVibration->SetClickHandler(GUI_CALLBACK(&CSettings::OnJoypadVibrationClick, this));
+        vecTemp.fY += 32;
 
         m_pEditDeadzone = reinterpret_cast<CGUIEdit*>(pManager->CreateEdit(pTabControls));
         m_pEditDeadzone->SetPosition(CVector2D(10, vecTemp.fY));
@@ -713,17 +758,41 @@ void CSettings::CreateGUI()
         m_pEditSaturation->SetSize(CVector2D(45.0f, 24.0f));
         m_pEditSaturation->SetMaxLength(3);
         m_pEditSaturation->SetTextChangedHandler(GUI_CALLBACK(&CSettings::OnJoypadTextChanged, this));
+        vecTemp.fY += 31;
 
-        CGUILabel* pLabelDeadZone = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabControls, _("Dead Zone")));
+        m_pEditTriggerDeadzone = reinterpret_cast<CGUIEdit*>(pManager->CreateEdit(pTabControls));
+        m_pEditTriggerDeadzone->SetPosition(CVector2D(10, vecTemp.fY));
+        m_pEditTriggerDeadzone->SetSize(CVector2D(45.0f, 24.0f));
+        m_pEditTriggerDeadzone->SetMaxLength(3);
+        m_pEditTriggerDeadzone->SetTextChangedHandler(GUI_CALLBACK(&CSettings::OnJoypadTextChanged, this));
+        vecTemp.fY += 31;
+
+        m_pEditTriggerSaturation = reinterpret_cast<CGUIEdit*>(pManager->CreateEdit(pTabControls));
+        m_pEditTriggerSaturation->SetPosition(CVector2D(10, vecTemp.fY));
+        m_pEditTriggerSaturation->SetSize(CVector2D(45.0f, 24.0f));
+        m_pEditTriggerSaturation->SetMaxLength(3);
+        m_pEditTriggerSaturation->SetTextChangedHandler(GUI_CALLBACK(&CSettings::OnJoypadTextChanged, this));
+
+        CGUILabel* pLabelDeadZone = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabControls, _("Stick dead zone")));
         pLabelDeadZone->SetPosition(m_pEditDeadzone->GetPosition() + CVector2D(52.f, 1.f));
         pLabelDeadZone->AutoSize();
         pLabelDeadZone->SetVerticalAlign(CGUI_ALIGN_VERTICALCENTER);
 
-        CGUILabel* pLabelSaturation = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabControls, _("Saturation")));
+        CGUILabel* pLabelSaturation = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabControls, _("Stick saturation")));
         pLabelSaturation->SetPosition(m_pEditSaturation->GetPosition() + CVector2D(52.f, 1.f));
         pLabelSaturation->AutoSize();
         pLabelSaturation->SetVerticalAlign(CGUI_ALIGN_VERTICALCENTER);
-        vecTemp.fY += 106;
+
+        CGUILabel* pLabelTriggerDeadZone = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabControls, _("Trigger dead zone")));
+        pLabelTriggerDeadZone->SetPosition(m_pEditTriggerDeadzone->GetPosition() + CVector2D(52.f, 1.f));
+        pLabelTriggerDeadZone->AutoSize();
+        pLabelTriggerDeadZone->SetVerticalAlign(CGUI_ALIGN_VERTICALCENTER);
+
+        CGUILabel* pLabelTriggerSaturation = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabControls, _("Trigger saturation")));
+        pLabelTriggerSaturation->SetPosition(m_pEditTriggerSaturation->GetPosition() + CVector2D(52.f, 1.f));
+        pLabelTriggerSaturation->AutoSize();
+        pLabelTriggerSaturation->SetVerticalAlign(CGUI_ALIGN_VERTICALCENTER);
+        vecTemp.fY += 44;
 
         CGUILabel* pLabelHelp = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabControls, _("Use the 'Binds' tab for joypad buttons.")));
         pLabelHelp->SetPosition(CVector2D(10, vecTemp.fY));
@@ -1158,19 +1227,27 @@ void CSettings::CreateGUI()
 
     m_pFullscreenStyleCombo = reinterpret_cast<CGUIComboBox*>(pManager->CreateComboBox(pTabVideo, ""));
     m_pFullscreenStyleCombo->SetPosition(CVector2D(vecTemp.fX + fIndentX + 5.0f, vecTemp.fY - 1.0f));
+    m_pFullscreenStyleCombo->GetPosition(vecTemp, false);
     m_pFullscreenStyleCombo->SetSize(CVector2D(200, 95.0f));
+    m_pFullscreenStyleCombo->GetSize(vecSize);
     m_pFullscreenStyleCombo->AddItem(_("Standard"))->SetData((void*)FULLSCREEN_STANDARD);
     m_pFullscreenStyleCombo->AddItem(_("Borderless window"))->SetData((void*)FULLSCREEN_BORDERLESS);
     m_pFullscreenStyleCombo->AddItem(_("Borderless keep res"))->SetData((void*)FULLSCREEN_BORDERLESS_KEEP_RES);
     m_pFullscreenStyleCombo->SetReadOnly(true);
-    vecTemp.fY += 4;
 
     m_pCheckBoxMipMapping = reinterpret_cast<CGUICheckBox*>(pManager->CreateCheckBox(pTabVideo, _("Mip Mapping"), true));
 #ifndef MIP_MAPPING_SETTING_APPEARS_TO_DO_SOMETHING
-    m_pCheckBoxMipMapping->SetPosition(CVector2D(vecTemp.fX + 340.0f, vecTemp.fY + 45.0f));
+    m_pCheckBoxMipMapping->SetPosition(CVector2D(vecTemp.fX + vecSize.fX, vecTemp.fY + 45.0f));
     m_pCheckBoxMipMapping->SetSize(CVector2D(224.0f, 16.0f));
     m_pCheckBoxMipMapping->SetVisible(false);
 #endif
+
+    m_pCheckBoxVSync = reinterpret_cast<CGUICheckBox*>(pManager->CreateCheckBox(pTabVideo, _("V-Sync"), true));
+    m_pCheckBoxVSync->SetPosition(CVector2D(vecTemp.fX + vecSize.fX + 10.0f, vecTemp.fY + 3.0f));
+    m_pCheckBoxVSync->AutoSize(NULL, 20.0f);
+
+    // Reset position to leftmost
+    m_pFullscreenStyleLabel->GetPosition(vecTemp, false);
 
     vecTemp.fY -= 5;
     m_pFieldOfViewLabel = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabVideo, _("FOV:")));
@@ -1508,6 +1585,7 @@ void CSettings::CreateGUI()
     /**
      * Webbrowser tab
      **/
+    const float browserListButtonWidth = 90.0f;
     const float browserMargin = 10.0f;
     const float availableBrowserWidth = std::max(0.0f, tabPanelSize.fX - browserMargin * 2.0f);
     float       browserColumnWidth = (availableBrowserWidth - kBrowserColumnSpacing) * 0.5f;
@@ -1540,6 +1618,10 @@ void CSettings::CreateGUI()
     m_pCheckBoxBrowserGPUEnabled->SetPosition(CVector2D(browserRightColumnX, vecTemp.fY - 25.0f));
     m_pCheckBoxBrowserGPUEnabled->AutoSize(NULL, 20.0f);
 
+    m_pCheckBoxBrowserVideoAccelEnabled = reinterpret_cast<CGUICheckBox*>(pManager->CreateCheckBox(m_pTabBrowser, _("Enable video acceleration"), true));
+    m_pCheckBoxBrowserVideoAccelEnabled->SetPosition(CVector2D(browserRightColumnX, vecTemp.fY));
+    m_pCheckBoxBrowserVideoAccelEnabled->AutoSize(NULL, 20.0f);
+
     m_pLabelBrowserCustomBlacklist = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(m_pTabBrowser, _("Custom blacklist")));
     m_pLabelBrowserCustomBlacklist->SetPosition(CVector2D(vecTemp.fX, vecTemp.fY + 30.0f));
     m_pLabelBrowserCustomBlacklist->GetPosition(vecTemp);
@@ -1549,7 +1631,7 @@ void CSettings::CreateGUI()
     m_pEditBrowserBlacklistAdd = reinterpret_cast<CGUIEdit*>(pManager->CreateEdit(m_pTabBrowser));
     m_pEditBrowserBlacklistAdd->SetPosition(CVector2D(vecTemp.fX, vecTemp.fY + 25.0f));
     m_pEditBrowserBlacklistAdd->GetPosition(vecTemp);
-    m_pEditBrowserBlacklistAdd->SetSize(CVector2D(browserColumnWidth, 22.0f));
+    m_pEditBrowserBlacklistAdd->SetSize(CVector2D(browserColumnWidth - browserListButtonWidth, 22.0f));
 
     m_pLabelBrowserBlacklistAdd = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(m_pEditBrowserBlacklistAdd, _("Enter a domain e.g. google.com")));
     m_pLabelBrowserBlacklistAdd->SetPosition(CVector2D(10.0f, 3.0f), false);
@@ -1569,7 +1651,9 @@ void CSettings::CreateGUI()
     const CVector2D blacklistGridPos = vecTemp;
     const float     browserBottomPadding = 32.0f;
     const float     browserButtonSpacing = 5.0f;
-    const CVector2D blacklistRemoveSize(140.0f, 22.0f);
+    const CVector2D blacklistRemoveSize(155.0f, 22.0f);
+    const CVector2D blacklistRemoveAllSize(155.0f, 22.0f);
+    const float     blacklistRemoveAllSpacing = 165.0f;
     const float     blacklistHeightAvailable = tabPanelSize.fY - blacklistGridPos.fY - blacklistRemoveSize.fY - browserButtonSpacing - browserBottomPadding;
     m_pGridBrowserBlacklist->SetSize(CVector2D(browserColumnWidth, std::max(80.0f, blacklistHeightAvailable)));
     m_pGridBrowserBlacklist->AddColumn(_("Domain"), 0.9f);
@@ -1578,6 +1662,11 @@ void CSettings::CreateGUI()
     m_pButtonBrowserBlacklistRemove->SetSize(blacklistRemoveSize);
     m_pButtonBrowserBlacklistRemove->SetPosition(
         CVector2D(blacklistGridPos.fX, blacklistGridPos.fY + m_pGridBrowserBlacklist->GetSize().fY + browserButtonSpacing));
+
+    m_pButtonBrowserBlacklistRemoveAll = reinterpret_cast<CGUIButton*>(pManager->CreateButton(m_pTabBrowser, _("Remove all")));
+    m_pButtonBrowserBlacklistRemoveAll->SetSize(blacklistRemoveAllSize);
+    m_pButtonBrowserBlacklistRemoveAll->SetPosition(
+        CVector2D(vecTemp.fX + blacklistRemoveAllSpacing, vecTemp.fY + m_pGridBrowserBlacklist->GetSize().fY + browserButtonSpacing));
 
     m_pLabelBrowserCustomBlacklist->GetPosition(vecTemp);  // Reset vecTemp
 
@@ -1590,7 +1679,7 @@ void CSettings::CreateGUI()
     m_pEditBrowserWhitelistAdd = reinterpret_cast<CGUIEdit*>(pManager->CreateEdit(m_pTabBrowser));
     m_pEditBrowserWhitelistAdd->SetPosition(CVector2D(vecTemp.fX, vecTemp.fY + 25.0f));
     m_pEditBrowserWhitelistAdd->GetPosition(vecTemp);
-    m_pEditBrowserWhitelistAdd->SetSize(CVector2D(browserColumnWidth, 22.0f));
+    m_pEditBrowserWhitelistAdd->SetSize(CVector2D(browserColumnWidth - browserListButtonWidth, 22.0f));
 
     m_pLabelBrowserWhitelistAdd = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(m_pEditBrowserWhitelistAdd, _("Enter a domain e.g. google.com")));
     m_pLabelBrowserWhitelistAdd->SetPosition(CVector2D(10.0f, 3.0f), false);
@@ -1608,7 +1697,9 @@ void CSettings::CreateGUI()
     m_pGridBrowserWhitelist->SetPosition(CVector2D(vecTemp.fX, vecTemp.fY + 32.0f));
     m_pGridBrowserWhitelist->GetPosition(vecTemp);
     const CVector2D whitelistGridPos = vecTemp;
-    const CVector2D whitelistRemoveSize(140.0f, 22.0f);
+    const CVector2D whitelistRemoveSize(155.0f, 22.0f);
+    const CVector2D whitelistRemoveAllSize(155.0f, 22.0f);
+    const float     whitelistRemoveAllSpacing = 165.0f;
     const float     whitelistHeightAvailable = tabPanelSize.fY - whitelistGridPos.fY - whitelistRemoveSize.fY - browserButtonSpacing - browserBottomPadding;
     m_pGridBrowserWhitelist->SetSize(CVector2D(browserColumnWidth, std::max(80.0f, whitelistHeightAvailable)));
     m_pGridBrowserWhitelist->AddColumn(_("Domain"), 0.9f);
@@ -1618,11 +1709,16 @@ void CSettings::CreateGUI()
     m_pButtonBrowserWhitelistRemove->SetPosition(
         CVector2D(whitelistGridPos.fX, whitelistGridPos.fY + m_pGridBrowserWhitelist->GetSize().fY + browserButtonSpacing));
 
+    m_pButtonBrowserWhitelistRemoveAll = reinterpret_cast<CGUIButton*>(pManager->CreateButton(m_pTabBrowser, _("Remove all")));
+    m_pButtonBrowserWhitelistRemoveAll->SetSize(whitelistRemoveAllSize);
+    m_pButtonBrowserWhitelistRemoveAll->SetPosition(
+        CVector2D(vecTemp.fX + whitelistRemoveAllSpacing, vecTemp.fY + m_pGridBrowserWhitelist->GetSize().fY + browserButtonSpacing));
+
     /**
      *  Advanced tab
      **/
     vecTemp = CVector2D(12.f, 12.f);
-    float fComboWidth = 170.f;
+    float fComboWidth;
     float fHeaderHeight = 20;
     float fLineHeight = 27;
 
@@ -1639,6 +1735,7 @@ void CSettings::CreateGUI()
                5.0f;
 
     vecTemp.fX += 10.0f;
+    fComboWidth = std::clamp(tabPanelSize.fX - vecTemp.fX - fIndentX - 15.0f, 100.0f, 170.0f);
 
     // Fast clothes loading
     m_pFastClothesLabel = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabAdvanced, _("Fast CJ clothes loading:")));
@@ -1784,33 +1881,6 @@ void CSettings::CreateGUI()
     vecTemp.fX = 22.f;
     vecTemp.fY += fLineHeight;
 
-    // Windows 8 compatibility
-    m_pWin8Label = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabAdvanced, _("Windows 8 compatibility:")));
-    m_pWin8Label->SetPosition(CVector2D(vecTemp.fX, vecTemp.fY));
-    m_pWin8Label->AutoSize();
-
-    m_pWin8ColorCheckBox = reinterpret_cast<CGUICheckBox*>(pManager->CreateCheckBox(pTabAdvanced, _("16-bit color")));
-    m_pWin8ColorCheckBox->SetPosition(CVector2D(vecTemp.fX + fIndentX, vecTemp.fY));
-    m_pWin8ColorCheckBox->AutoSize(NULL, 20.0f);
-    vecTemp.fX += 140;
-
-    m_pWin8MouseCheckBox = reinterpret_cast<CGUICheckBox*>(pManager->CreateCheckBox(pTabAdvanced, _("Mouse fix")));
-    m_pWin8MouseCheckBox->SetPosition(CVector2D(vecTemp.fX + fIndentX, vecTemp.fY));
-    m_pWin8MouseCheckBox->AutoSize(NULL, 20.0f);
-    vecTemp.fY += fLineHeight;
-    vecTemp.fX -= 140;
-
-    // Hide if not Win8
-    if (atoi(GetApplicationSetting("real-os-version")) != 8)
-    {
-#ifndef MTA_DEBUG  // Don't hide when debugging
-        m_pWin8Label->SetVisible(false);
-        m_pWin8ColorCheckBox->SetVisible(false);
-        m_pWin8MouseCheckBox->SetVisible(false);
-        vecTemp.fY -= fLineHeight;
-#endif
-    }
-
     // Cache path info
     m_pCachePathLabel = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabAdvanced, _("Client resource files:")));
     m_pCachePathLabel->SetPosition(CVector2D(vecTemp.fX, vecTemp.fY));
@@ -1870,29 +1940,40 @@ void CSettings::CreateGUI()
     m_pUpdateBuildTypeLabel->SetPosition(CVector2D(vecTemp.fX, vecTemp.fY));
     m_pUpdateBuildTypeLabel->AutoSize();
 
+    // Reserve space for "Check for update now" button on the same line
+    const float fButtonTextWidth = pManager->GetTextExtent(_("Check for update now"));
+    const float fUpdateButtonReserve = fButtonTextWidth + 35.0f;
+    const float fUpdateComboWidth = std::clamp(tabPanelSize.fX - (vecTemp.fX + fIndentX) - fUpdateButtonReserve, 100.0f, fComboWidth);
     m_pUpdateBuildTypeCombo = reinterpret_cast<CGUIComboBox*>(pManager->CreateComboBox(pTabAdvanced, ""));
     m_pUpdateBuildTypeCombo->SetPosition(CVector2D(vecTemp.fX + fIndentX, vecTemp.fY - 1.0f));
-    m_pUpdateBuildTypeCombo->SetSize(CVector2D(fComboWidth, 95.0f));
+    m_pUpdateBuildTypeCombo->SetSize(CVector2D(fUpdateComboWidth, 95.0f));
     m_pUpdateBuildTypeCombo->AddItem(_("Default"))->SetData((void*)0);
     m_pUpdateBuildTypeCombo->AddItem("Nightly")->SetData((void*)2);
     m_pUpdateBuildTypeCombo->SetReadOnly(true);
-    vecTemp.fX += fComboWidth + 15;
 
-    // Check for updates
+    // Check for updates (place to right of combo, clamped to tab boundary)
     m_pButtonUpdate = reinterpret_cast<CGUIButton*>(pManager->CreateButton(pTabAdvanced, _("Check for update now")));
-    m_pButtonUpdate->SetPosition(CVector2D(vecTemp.fX + fIndentX, vecTemp.fY));
+    m_pButtonUpdate->SetPosition(CVector2D(vecTemp.fX + fIndentX + fUpdateComboWidth + 15.0f, vecTemp.fY));
     m_pButtonUpdate->AutoSize(NULL, 20.0f, 8.0f);
+    {
+        // Ensure button doesn't extend beyond tab
+        CVector2D btnSize;
+        m_pButtonUpdate->GetSize(btnSize);
+        const float maxBtnX = tabPanelSize.fX - btnSize.fX - 4.0f;
+        if (vecTemp.fX + fIndentX + fUpdateComboWidth + 15.0f > maxBtnX)
+            m_pButtonUpdate->SetPosition(CVector2D(maxBtnX, vecTemp.fY));
+    }
     m_pButtonUpdate->SetClickHandler(GUI_CALLBACK(&CSettings::OnUpdateButtonClick, this));
     m_pButtonUpdate->SetZOrderingEnabled(false);
+
     vecTemp.fY += fLineHeight;
-    vecTemp.fX -= fComboWidth + 15;
 
     // Description label
     vecTemp.fY += 15.0f;
     m_pAdvancedSettingDescriptionLabel = reinterpret_cast<CGUILabel*>(pManager->CreateLabel(pTabAdvanced, ""));
     m_pAdvancedSettingDescriptionLabel->SetPosition(CVector2D(vecTemp.fX + 10.f, vecTemp.fY));
     m_pAdvancedSettingDescriptionLabel->SetFont("default-bold-small");
-    m_pAdvancedSettingDescriptionLabel->SetSize(CVector2D(500.0f, 95.0f));
+    m_pAdvancedSettingDescriptionLabel->SetSize(CVector2D(tabPanelSize.fX - 40.0f, 95.0f));
     m_pAdvancedSettingDescriptionLabel->SetHorizontalAlign(CGUI_ALIGN_HORIZONTALCENTER_WORDWRAP);
 
     // Set up the events
@@ -1937,16 +2018,20 @@ void CSettings::CreateGUI()
     m_pCheckBoxCustomizedSAFiles->SetClickHandler(GUI_CALLBACK(&CSettings::OnCustomizedSAFilesClick, this));
     m_pCheckBoxWindowed->SetClickHandler(GUI_CALLBACK(&CSettings::OnWindowedClick, this));
     m_pCheckBoxDPIAware->SetClickHandler(GUI_CALLBACK(&CSettings::OnDPIAwareClick, this));
+    m_pCheckBoxVSync->SetClickHandler(GUI_CALLBACK(&CSettings::OnVSyncClick, this));
     m_pCheckBoxShowUnsafeResolutions->SetClickHandler(GUI_CALLBACK(&CSettings::ShowUnsafeResolutionsClick, this));
     m_pButtonBrowserBlacklistAdd->SetClickHandler(GUI_CALLBACK(&CSettings::OnBrowserBlacklistAdd, this));
     m_pButtonBrowserBlacklistRemove->SetClickHandler(GUI_CALLBACK(&CSettings::OnBrowserBlacklistRemove, this));
+    m_pButtonBrowserBlacklistRemoveAll->SetClickHandler(GUI_CALLBACK(&CSettings::OnBrowserBlacklistRemoveAll, this));
     m_pEditBrowserBlacklistAdd->SetActivateHandler(GUI_CALLBACK(&CSettings::OnBrowserBlacklistDomainAddFocused, this));
     m_pEditBrowserBlacklistAdd->SetDeactivateHandler(GUI_CALLBACK(&CSettings::OnBrowserBlacklistDomainAddDefocused, this));
     m_pButtonBrowserWhitelistAdd->SetClickHandler(GUI_CALLBACK(&CSettings::OnBrowserWhitelistAdd, this));
     m_pButtonBrowserWhitelistRemove->SetClickHandler(GUI_CALLBACK(&CSettings::OnBrowserWhitelistRemove, this));
+    m_pButtonBrowserWhitelistRemoveAll->SetClickHandler(GUI_CALLBACK(&CSettings::OnBrowserWhitelistRemoveAll, this));
     m_pEditBrowserWhitelistAdd->SetActivateHandler(GUI_CALLBACK(&CSettings::OnBrowserWhitelistDomainAddFocused, this));
     m_pEditBrowserWhitelistAdd->SetDeactivateHandler(GUI_CALLBACK(&CSettings::OnBrowserWhitelistDomainAddDefocused, this));
     m_pProcessAffinityCheckbox->SetClickHandler(GUI_CALLBACK(&CSettings::OnAffinityClick, this));
+    m_pCheckboxVerticalAimSensitivity->SetClickHandler(GUI_CALLBACK(&CSettings::OnMouseAimingClick, this));
 
     // Set up the events for advanced description
     m_pPriorityLabel->SetMouseEnterHandler(GUI_CALLBACK(&CSettings::OnShowAdvancedSettingDescription, this));
@@ -2003,12 +2088,6 @@ void CSettings::CreateGUI()
     m_pUpdateBuildTypeCombo->SetMouseEnterHandler(GUI_CALLBACK(&CSettings::OnShowAdvancedSettingDescription, this));
     m_pUpdateBuildTypeCombo->SetMouseLeaveHandler(GUI_CALLBACK(&CSettings::OnHideAdvancedSettingDescription, this));
 
-    m_pWin8ColorCheckBox->SetMouseEnterHandler(GUI_CALLBACK(&CSettings::OnShowAdvancedSettingDescription, this));
-    m_pWin8ColorCheckBox->SetMouseLeaveHandler(GUI_CALLBACK(&CSettings::OnHideAdvancedSettingDescription, this));
-
-    m_pWin8MouseCheckBox->SetMouseEnterHandler(GUI_CALLBACK(&CSettings::OnShowAdvancedSettingDescription, this));
-    m_pWin8MouseCheckBox->SetMouseLeaveHandler(GUI_CALLBACK(&CSettings::OnHideAdvancedSettingDescription, this));
-
     m_pUpdateAutoInstallLabel->SetMouseEnterHandler(GUI_CALLBACK(&CSettings::OnShowAdvancedSettingDescription, this));
     m_pUpdateAutoInstallLabel->SetMouseLeaveHandler(GUI_CALLBACK(&CSettings::OnHideAdvancedSettingDescription, this));
 
@@ -2048,29 +2127,10 @@ void CSettings::DestroyGUI()
     ResetGuiPointers();
 }
 
-void RestartCallBack(void* ptr, unsigned int uiButton)
-{
-    CCore::GetSingleton().GetLocalGUI()->GetMainMenu()->GetQuestionWindow()->Reset();
-
-    if (uiButton == 1)
-    {
-        SetOnQuitCommand("restart");
-        CCore::GetSingleton().Quit();
-    }
-}
-
 void CSettings::ShowRestartQuestion()
 {
-    SString strMessage = _("Some settings will be changed when you next start MTA");
-    strMessage += _("\n\nDo you want to restart now?");
-    CQuestionBox* pQuestionBox = CCore::GetSingleton().GetLocalGUI()->GetMainMenu()->GetQuestionWindow();
-    pQuestionBox->Reset();
-    pQuestionBox->SetTitle(_("RESTART REQUIRED"));
-    pQuestionBox->SetMessage(strMessage);
-    pQuestionBox->SetButton(0, _("No"));
-    pQuestionBox->SetButton(1, _("Yes"));
-    pQuestionBox->SetCallback(RestartCallBack);
-    pQuestionBox->Show();
+    // Persist across Interface locale/skin rebuilds (they destroy MainMenu's QuestionBox)
+    CLocalGUI::GetSingleton().RequestRestartPrompt();
 }
 
 void DisconnectCallback(void* ptr, unsigned int uiButton)
@@ -2174,6 +2234,11 @@ void CSettings::UpdateVideoTab()
     GetVideoModeManager()->GetNextVideoMode(iNextVidMode, bNextWindowed, bNextFSMinimize, iNextFullscreenStyle);
 
     m_pCheckBoxMipMapping->SetSelected(gameSettings->IsMipMappingEnabled());
+
+    bool bVSync = true;
+    CVARS_GET("vsync", bVSync);
+    m_pCheckBoxVSync->SetSelected(bVSync);
+
     m_pCheckBoxWindowed->SetSelected(bNextWindowed);
     m_pCheckBoxMinimize->SetSelected(bNextFSMinimize);
     m_pDrawDistance->SetScrollPosition((gameSettings->GetDrawDistance() - 0.925f) / 0.8749f);
@@ -2206,14 +2271,14 @@ void CSettings::UpdateVideoTab()
     else if (FxQuality == 3)
         m_pComboFxQuality->SetText(_("Very high"));
 
-    unsigned int AntiAliasing = gameSettings->GetAntiAliasing();
-    if (AntiAliasing == 1)
+    unsigned int antiAliasing = gameSettings->GetAntiAliasing();
+    if (antiAliasing == 1)
         m_pComboAntiAliasing->SetText(_("Off"));
-    else if (AntiAliasing == 2)
+    else if (antiAliasing == 2)
         m_pComboAntiAliasing->SetText(_("1x"));
-    else if (AntiAliasing == 3)
+    else if (antiAliasing == 3)
         m_pComboAntiAliasing->SetText(_("2x"));
-    else if (AntiAliasing == 4)
+    else if (antiAliasing == 4)
         m_pComboAntiAliasing->SetText(_("3x"));
 
     // Aspect ratio
@@ -2322,6 +2387,15 @@ void CSettings::UpdateVideoTab()
     m_pPlayerMapImageCombo->SetSelectedItemByIndex(iVar);
 }
 
+struct ResolutionData
+{
+    int  width;
+    int  height;
+    int  depth;
+    int  vidMode;
+    bool isWidescreen;
+};
+
 //
 // PopulateResolutionComboBox
 //
@@ -2335,47 +2409,88 @@ void CSettings::PopulateResolutionComboBox()
     bool bShowUnsafeResolutions = m_pCheckBoxShowUnsafeResolutions->GetSelected();
 
     CGameSettings* gameSettings = CCore::GetSingleton().GetGame()->GetSettings();
+    if (!gameSettings)
+        return;
 
-    VideoMode vidModemInfo;
-    int       vidMode, numVidModes;
+    VideoMode                   vidModemInfo;
+    int                         vidMode, numVidModes;
+    std::vector<ResolutionData> resolutions;
+
+    if (!m_pComboResolution)
+        return;
 
     m_pComboResolution->Clear();
     numVidModes = gameSettings->GetNumVideoModes();
 
     for (vidMode = 0; vidMode < numVidModes; vidMode++)
     {
-        gameSettings->GetVideoModeInfo(&vidModemInfo, vidMode);
+        if (!gameSettings->GetVideoModeInfo(&vidModemInfo, vidMode))
+            continue;
 
         // Remove resolutions that will make the gui unusable
         if (vidModemInfo.width < 640 || vidModemInfo.height < 480)
-            continue;
-
-        // Check resolution hasn't already been added
-        bool bDuplicate = false;
-        for (int i = 1; i < vidMode; i++)
-        {
-            VideoMode info;
-            gameSettings->GetVideoModeInfo(&info, i);
-            if (info.width == vidModemInfo.width && info.height == vidModemInfo.height && info.depth == vidModemInfo.depth)
-                bDuplicate = true;
-        }
-        if (bDuplicate)
             continue;
 
         // Check resolution is below desktop res unless that is allowed
         if (gameSettings->IsUnsafeResolution(vidModemInfo.width, vidModemInfo.height) && !bShowUnsafeResolutions)
             continue;
 
-        SString strMode("%lu x %lu x %lu", vidModemInfo.width, vidModemInfo.height, vidModemInfo.depth);
+        if (!(vidModemInfo.flags & rwVIDEOMODEEXCLUSIVE))
+            continue;
 
-        if (vidModemInfo.flags & rwVIDEOMODEEXCLUSIVE)
-            m_pComboResolution->AddItem(strMode)->SetData((void*)vidMode);
+        ResolutionData resData;
+        resData.width = vidModemInfo.width;
+        resData.height = vidModemInfo.height;
+        resData.depth = vidModemInfo.depth;
+        resData.vidMode = vidMode;
+        resData.isWidescreen = (vidModemInfo.flags & rwVIDEOMODE_XBOX_WIDESCREEN) != 0;
 
-        VideoMode currentInfo;
-        gameSettings->GetVideoModeInfo(&currentInfo, iNextVidMode);
+        // Check resolution hasn't already been added
+        bool bDuplicate = false;
+        for (const auto& existing : resolutions)
+        {
+            if (existing.width == resData.width && existing.height == resData.height && existing.depth == resData.depth)
+            {
+                bDuplicate = true;
+                break;
+            }
+        }
 
-        if (currentInfo.width == vidModemInfo.width && currentInfo.height == vidModemInfo.height && currentInfo.depth == vidModemInfo.depth)
-            m_pComboResolution->SetText(strMode);
+        if (!bDuplicate)
+            resolutions.push_back(resData);
+    }
+
+    if (resolutions.empty())
+        return;
+
+    // Sort resolutions by width (descending), then by height, then by depth
+    std::sort(resolutions.begin(), resolutions.end(),
+              [](const ResolutionData& a, const ResolutionData& b)
+              {
+                  if (a.width != b.width)
+                      return a.width > b.width;
+                  if (a.height != b.height)
+                      return a.height > b.height;
+                  return a.depth > b.depth;
+              });
+
+    SString   selectedText;
+    VideoMode currentInfo;
+    if (gameSettings->GetVideoModeInfo(&currentInfo, iNextVidMode))
+    {
+        for (const auto& res : resolutions)
+        {
+            SString       strMode("%d x %d x %d", res.width, res.height, res.depth);
+            CGUIListItem* pItem = m_pComboResolution->AddItem(strMode);
+            if (pItem)
+                pItem->SetData((void*)res.vidMode);
+
+            if (currentInfo.width == res.width && currentInfo.height == res.height && currentInfo.depth == res.depth)
+                selectedText = strMode;
+        }
+
+        if (!selectedText.empty())
+            m_pComboResolution->SetText(selectedText);
     }
 }
 
@@ -2405,6 +2520,9 @@ void CSettings::ProcessJoypad()
     // Update from GUI
     GetJoystickManager()->SetDeadZone(atoi(m_pEditDeadzone->GetText().c_str()));
     GetJoystickManager()->SetSaturation(atoi(m_pEditSaturation->GetText().c_str()));
+    GetJoystickManager()->SetTriggerDeadZone(atoi(m_pEditTriggerDeadzone->GetText().c_str()));
+    GetJoystickManager()->SetTriggerSaturation(atoi(m_pEditTriggerSaturation->GetText().c_str()));
+    GetJoystickManager()->SetVibrationEnabled(m_pCheckBoxJoypadVibration->GetSelected());
 
     GetJoystickManager()->SaveToXML();
 }
@@ -2478,38 +2596,53 @@ void CSettings::UpdateJoypadTab()
 {
     CJoystickManagerInterface* JoyMan = GetJoystickManager();
 
-    // Has anything changed?
-    if (m_JoypadSettingsRevision == JoyMan->GetSettingsRevision())
+    const bool bSettingsChanged = m_JoypadSettingsRevision != JoyMan->GetSettingsRevision();
+    const bool bDeviceListChanged = m_JoypadDeviceListRevision != JoyMan->GetDeviceListRevision();
+
+    if (!bSettingsChanged && !bDeviceListChanged)
         return;
 
-    // Update the joystick name
-    string strJoystickName = JoyMan->IsJoypadConnected() ? JoyMan->GetControllerName() : _("Joypad not detected  -  Check connections and restart game");
+    if (bDeviceListChanged && m_pWindow->IsVisible() && m_pJoypadDeviceCombo && !m_pJoypadDeviceCombo->IsOpen())
+    {
+        m_bUpdatingJoypadCombo = true;
+        std::vector<SJoystickDeviceChoice> devices = JoyMan->GetAvailableControllers();
+        std::string                        strSelected = JoyMan->GetSelectedControllerId();
+        m_pJoypadDeviceCombo->Clear();
+        int iSelect = 0;
+        for (size_t i = 0; i < devices.size(); i++)
+        {
+            CGUIListItem* pItem = m_pJoypadDeviceCombo->AddItem(devices[i].strName.c_str());
+            if (pItem)
+                pItem->SetData(devices[i].strId.c_str());
+            if (devices[i].strId == strSelected)
+                iSelect = static_cast<int>(i);
+        }
+        if (!devices.empty())
+            m_pJoypadDeviceCombo->SetSelectedItemByIndex(iSelect);
+        m_bUpdatingJoypadCombo = false;
+        m_JoypadDeviceListRevision = JoyMan->GetDeviceListRevision();
+    }
 
-    m_pJoypadName->SetPosition(CVector2D(270, m_pJoypadName->GetPosition().fY));
-    m_pJoypadName->SetText(strJoystickName.c_str());
-    m_pJoypadName->AutoSize(strJoystickName.c_str());
-    m_pJoypadName->SetPosition(m_pJoypadName->GetPosition() - CVector2D(m_pJoypadName->GetSize().fX * 0.5, 0.0f));
+    if (!bSettingsChanged)
+        return;
 
-    // Joystick name underline
-    string strUnderline = "";
-    int    inumChars = m_pJoypadName->GetSize().fX / 7.f + 0.5f;
-    for (int i = 0; i < inumChars; i++)
-        strUnderline = strUnderline + "_";
-
-    m_pJoypadUnderline->SetPosition(CVector2D(270, m_pJoypadUnderline->GetPosition().fY));
-    m_pJoypadUnderline->SetText(strUnderline.c_str());
-    m_pJoypadUnderline->AutoSize(strUnderline.c_str());
-    m_pJoypadUnderline->SetPosition(m_pJoypadUnderline->GetPosition() - CVector2D(m_pJoypadUnderline->GetSize().fX * 0.5, 0.0f));
-    m_pJoypadUnderline->SetVisible(JoyMan->IsJoypadConnected());
+    if (m_pCheckBoxJoypadVibration)
+        m_pCheckBoxJoypadVibration->SetSelected(JoyMan->GetVibrationEnabled());
 
     // Update DeadZone and Saturation edit boxes
     char szDeadzone[32] = "";
     char szSaturation[32] = "";
+    char szTriggerDeadzone[32] = "";
+    char szTriggerSaturation[32] = "";
     snprintf(szDeadzone, 10, "%d", JoyMan->GetDeadZone());
     snprintf(szSaturation, 10, "%d", JoyMan->GetSaturation());
+    snprintf(szTriggerDeadzone, 10, "%d", JoyMan->GetTriggerDeadZone());
+    snprintf(szTriggerSaturation, 10, "%d", JoyMan->GetTriggerSaturation());
 
     m_pEditDeadzone->SetText(szDeadzone);
     m_pEditSaturation->SetText(szSaturation);
+    m_pEditTriggerDeadzone->SetText(szTriggerDeadzone);
+    m_pEditTriggerSaturation->SetText(szTriggerSaturation);
 
     // Update axes labels and buttons
     for (int i = 0; i < JoyMan->GetOutputCount() && i < (int)m_pJoypadButtons.size(); i++)
@@ -2535,10 +2668,35 @@ bool CSettings::OnJoypadTextChanged(CGUIElement* pElement)
     // Update from GUI
     GetJoystickManager()->SetDeadZone(atoi(m_pEditDeadzone->GetText().c_str()));
     GetJoystickManager()->SetSaturation(atoi(m_pEditSaturation->GetText().c_str()));
+    GetJoystickManager()->SetTriggerDeadZone(atoi(m_pEditTriggerDeadzone->GetText().c_str()));
+    GetJoystickManager()->SetTriggerSaturation(atoi(m_pEditTriggerSaturation->GetText().c_str()));
 
     // Dont immediately read back these settings
     m_JoypadSettingsRevision = GetJoystickManager()->GetSettingsRevision();
 
+    return true;
+}
+
+bool CSettings::OnJoypadDeviceChanged(CGUIElement* pElement)
+{
+    if (m_bUpdatingJoypadCombo || !m_pJoypadDeviceCombo)
+        return true;
+
+    CGUIListItem* pItem = m_pJoypadDeviceCombo->GetSelectedItem();
+    if (!pItem || !pItem->GetData())
+        return true;
+
+    GetJoystickManager()->SetSelectedControllerId(static_cast<const char*>(pItem->GetData()));
+    m_JoypadSettingsRevision = -1;
+    m_JoypadDeviceListRevision = -1;
+    UpdateJoypadTab();
+    return true;
+}
+
+bool CSettings::OnJoypadVibrationClick(CGUIElement* pElement)
+{
+    GetJoystickManager()->SetVibrationEnabled(m_pCheckBoxJoypadVibration->GetSelected());
+    m_JoypadSettingsRevision = GetJoystickManager()->GetSettingsRevision();
     return true;
 }
 
@@ -2682,6 +2840,7 @@ void CSettings::SetRadioVolume(float fVolume)
     fVolume = std::max(0.0f, std::min(fVolume, 1.0f));
 
     m_fRadioVolume = fVolume;
+    CVARS_SET("radiovolume", fVolume);
 
     CCore::GetSingleton().GetGame()->GetSettings()->SetRadioVolume(m_fRadioVolume * CVARS_GET_VALUE<float>("mastervolume") * 64.0f);
 }
@@ -2691,6 +2850,7 @@ void CSettings::SetSFXVolume(float fVolume)
     fVolume = std::max(0.0f, std::min(fVolume, 1.0f));
 
     m_fSFXVolume = fVolume;
+    CVARS_SET("sfxvolume", fVolume);
 
     CCore::GetSingleton().GetGame()->GetSettings()->SetSFXVolume(m_fSFXVolume * CVARS_GET_VALUE<float>("mastervolume") * 64.0f);
 }
@@ -2776,6 +2936,8 @@ bool CSettings::OnControlsDefaultClick(CGUIElement* pElement)
     m_pClassicControls->SetSelected(CVARS_GET_VALUE<bool>("classic_controls"));
     m_pMouseSensitivity->SetScrollPosition(gameSettings->GetMouseSensitivity());
     m_pVerticalAimSensitivity->SetScrollPosition(pController->GetVerticalAimSensitivity());
+    m_pCheckboxVerticalAimSensitivity->SetSelected(CVARS_GET_VALUE<bool>("use_mouse_sensitivity_for_aiming"));
+    m_pVerticalAimSensitivity->SetEnabled(!m_pCheckboxVerticalAimSensitivity->GetSelected());
 
     return true;
 }
@@ -3879,6 +4041,10 @@ void CSettings::LoadData()
     pController->SetVerticalAimSensitivityRawValue(CVARS_GET_VALUE<float>("vertical_aim_sensitivity"));
     m_pVerticalAimSensitivity->SetScrollPosition(pController->GetVerticalAimSensitivity());
 
+    CVARS_GET("use_mouse_sensitivity_for_aiming", bVar);
+    m_pCheckboxVerticalAimSensitivity->SetSelected(bVar);
+    m_pVerticalAimSensitivity->SetEnabled(!m_pCheckboxVerticalAimSensitivity->GetSelected());
+
     // Audio
     m_pCheckBoxAudioEqualizer->SetSelected(gameSettings->IsRadioEqualizerEnabled());
     m_pCheckBoxAudioAutotune->SetSelected(gameSettings->IsRadioAutotuneEnabled());
@@ -4004,14 +4170,6 @@ void CSettings::LoadData()
     else if (iVar == 1)
         m_pProgressAnimationCombo->SetText(_("Default"));
 
-    // Windows 8 16-bit color
-    iVar = GetApplicationSettingInt("Win8Color16");
-    m_pWin8ColorCheckBox->SetSelected(iVar != 0);
-
-    // Windows 8 mouse fix
-    iVar = GetApplicationSettingInt("Win8MouseFix");
-    m_pWin8MouseCheckBox->SetSelected(iVar != 0);
-
     // Save camera photos inside user documents folder
     CVARS_GET("photosaving", bVar);
     m_pPhotoSavingCheckbox->SetSelected(bVar);
@@ -4069,9 +4227,10 @@ void CSettings::LoadData()
     {
         CVARS_GET("chat_scale", strVar);
         stringstream ss(strVar);
-        m_pChatScaleX->SetText(SString("%1.1f", atof(strVar.c_str())));
         ss >> strVar;
-        m_pChatScaleY->SetText(SString("%1.1f", atof(strVar.c_str())));
+        m_pChatScaleX->SetText(strVar.c_str());
+        ss >> strVar;
+        m_pChatScaleY->SetText(strVar.c_str());
     }
     catch (...)
     {
@@ -4129,6 +4288,8 @@ void CSettings::LoadData()
     m_pCheckBoxRemoteJavascript->SetSelected(bVar);
     CVARS_GET("browser_enable_gpu", bVar);
     m_pCheckBoxBrowserGPUEnabled->SetSelected(bVar);
+    CVARS_GET("browser_enable_video_acceleration", bVar);
+    m_pCheckBoxBrowserVideoAccelEnabled->SetSelected(bVar);
 
     ReloadBrowserLists();
 }
@@ -4205,6 +4366,8 @@ void CSettings::SaveData()
     pController->SetClassicControls(m_pClassicControls->GetSelected());
     pController->SetVerticalAimSensitivity(m_pVerticalAimSensitivity->GetScrollPosition());
     CVARS_SET("vertical_aim_sensitivity", pController->GetVerticalAimSensitivityRawValue());
+    CVARS_SET("use_mouse_sensitivity_for_aiming", m_pCheckboxVerticalAimSensitivity->GetSelected());
+    pController->SetVerticalAimSensitivitySameAsHorizontal(m_pCheckboxVerticalAimSensitivity->GetSelected());
 
     // Video
     // get current
@@ -4450,12 +4613,6 @@ void CSettings::SaveData()
         CVARS_SET("progress_animation", iSelected);
     }
 
-    // Windows 8 16-bit color
-    SetApplicationSettingInt("Win8Color16", m_pWin8ColorCheckBox->GetSelected());
-
-    // Windows 8 mouse fix
-    SetApplicationSettingInt("Win8MouseFix", m_pWin8MouseCheckBox->GetSelected());
-
     // Save photos in documents folder
     bool photoSaving = m_pPhotoSavingCheckbox->GetSelected();
     CVARS_SET("photosaving", photoSaving);
@@ -4632,6 +4789,13 @@ void CSettings::SaveData()
     bool bBrowserGPUSettingChanged = (bBrowserGPUSetting != bBrowserGPUEnabled);
     CVARS_SET("browser_enable_gpu", bBrowserGPUSetting);
 
+    bool bBrowserVideoAccelEnabled = false;
+    CVARS_GET("browser_enable_video_acceleration", bBrowserVideoAccelEnabled);
+
+    bool bBrowserVideoAccelSetting = m_pCheckBoxBrowserVideoAccelEnabled->GetSelected();
+    bool bBrowserVideoAccelSettingChanged = (bBrowserVideoAccelSetting != bBrowserVideoAccelEnabled);
+    CVARS_SET("browser_enable_video_acceleration", bBrowserVideoAccelSetting);
+
     // Ensure CVARS ranges ok
     CClientVariables::GetSingleton().ValidateValues();
 
@@ -4641,7 +4805,8 @@ void CSettings::SaveData()
     gameSettings->Save();
 
     // Ask to restart?
-    if (bIsVideoModeChanged || bIsAntiAliasingChanged || bIsCustomizedSAFilesChanged || processsDPIAwareChanged || bBrowserGPUSettingChanged)
+    if (bIsVideoModeChanged || bIsAntiAliasingChanged || bIsCustomizedSAFilesChanged || processsDPIAwareChanged || bBrowserGPUSettingChanged ||
+        bBrowserVideoAccelSettingChanged)
         ShowRestartQuestion();
     else if (CModManager::GetSingleton().IsLoaded() && bBrowserSettingChanged)
         ShowDisconnectQuestion();
@@ -4924,22 +5089,22 @@ void CSettings::LoadSkins()
 
 void CSettings::LoadChatColorFromString(eChatColorType eType, const string& strColor)
 {
-    CColor       pColor;
     stringstream ss(strColor);
-    int          iR, iG, iB, iA;
 
-    try
-    {
-        ss >> iR >> iG >> iB >> iA;
-        pColor.R = static_cast<unsigned char>(iR);
-        pColor.G = static_cast<unsigned char>(iG);
-        pColor.B = static_cast<unsigned char>(iB);
-        pColor.A = static_cast<unsigned char>(iA);
-        SetChatColorValues(eType, pColor);
-    }
-    catch (...)
-    {
-    }
+    int iR, iG, iB;
+    if (!(ss >> iR >> iG >> iB))
+        return;
+
+    int iA;
+    if (!(ss >> iA))
+        iA = 255;
+
+    CColor pColor;
+    pColor.R = static_cast<unsigned char>(iR);
+    pColor.G = static_cast<unsigned char>(iG);
+    pColor.B = static_cast<unsigned char>(iB);
+    pColor.A = static_cast<unsigned char>(iA);
+    SetChatColorValues(eType, pColor);
 }
 
 int CSettings::GetMilliseconds(CGUIEdit* pEdit)
@@ -5340,20 +5505,30 @@ bool CSettings::OnMasterVolumeChanged(CGUIElement* pElement)
 
 bool CSettings::OnRadioVolumeChanged(CGUIElement* pElement)
 {
-    int iVolume = m_pAudioRadioVolume->GetScrollPosition() * 100.0f;
+    float fVolume = m_pAudioRadioVolume->GetScrollPosition();
+    int   iVolume = QuantizeVolumePercent(fVolume);
     m_pLabelRadioVolumeValue->SetText(SString("%i%%", iVolume).c_str());
 
-    SetRadioVolume(m_pAudioRadioVolume->GetScrollPosition());
+    if (std::abs(m_pAudioRadioVolume->GetScrollPosition() - fVolume) > 0.0001f)
+        m_pAudioRadioVolume->SetScrollPosition(fVolume);
+
+    CVARS_SET("radiovolume", fVolume);
+    SetRadioVolume(fVolume);
 
     return true;
 }
 
 bool CSettings::OnSFXVolumeChanged(CGUIElement* pElement)
 {
-    int iVolume = m_pAudioSFXVolume->GetScrollPosition() * 100.0f;
+    float fVolume = m_pAudioSFXVolume->GetScrollPosition();
+    int   iVolume = QuantizeVolumePercent(fVolume);
     m_pLabelSFXVolumeValue->SetText(SString("%i%%", iVolume).c_str());
 
-    SetSFXVolume(m_pAudioSFXVolume->GetScrollPosition());
+    if (std::abs(m_pAudioSFXVolume->GetScrollPosition() - fVolume) > 0.0001f)
+        m_pAudioSFXVolume->SetScrollPosition(fVolume);
+
+    CVARS_SET("sfxvolume", fVolume);
+    SetSFXVolume(fVolume);
 
     return true;
 }
@@ -5615,9 +5790,9 @@ static void ShowRichPresenceShareDataCallback(void* ptr, unsigned int uiButton)
 void CSettings::ShowRichPresenceShareDataQuestionBox() const
 {
     SStringX strMessage(
-        _("It seems that you have the Rich Presence connection option enabled."
-          "\nDo you want to allow servers to share their data?"
-          "\n\nThis includes yours unique ID identifier."));
+        _("Rich Presence is currently enabled."
+          "\nDo you want to allow data sharing with servers you connect to?"
+          "\n\nThis includes your Discord client ID, and game state info."));
     CQuestionBox* pQuestionBox = CCore::GetSingleton().GetLocalGUI()->GetMainMenu()->GetQuestionWindow();
     pQuestionBox->Reset();
     pQuestionBox->SetTitle(_("CONSENT TO ALLOW DATA SHARING"));
@@ -5721,6 +5896,15 @@ static void DPIAwareQuestionCallBack(void* userdata, unsigned int uiButton)
     }
 }
 
+//
+// OnVSyncClick
+//
+bool CSettings::OnVSyncClick(CGUIElement* pElement)
+{
+    CCore::GetSingleton().GetFPSLimiter()->SetDisplayVSync(m_pCheckBoxVSync->GetSelected());
+    return true;
+}
+
 static void CPUAffinityQuestionCallBack(void* userdata, unsigned int button)
 {
     CCore::GetSingleton().GetLocalGUI()->GetMainMenu()->GetQuestionWindow()->Reset();
@@ -5762,6 +5946,12 @@ bool CSettings::OnAffinityClick(CGUIElement* pElement)
     return true;
 }
 
+bool CSettings::OnMouseAimingClick(CGUIElement* pElement)
+{
+    m_pVerticalAimSensitivity->SetEnabled(!m_pCheckboxVerticalAimSensitivity->GetSelected());
+    return true;
+}
+
 bool CSettings::OnBrowserBlacklistAdd(CGUIElement* pElement)
 {
     SString strDomain = m_pEditBrowserBlacklistAdd->GetText();
@@ -5795,6 +5985,16 @@ bool CSettings::OnBrowserBlacklistRemove(CGUIElement* pElement)
         m_bBrowserListsChanged = true;
     }
 
+    return true;
+}
+
+bool CSettings::OnBrowserBlacklistRemoveAll(CGUIElement* pElement)
+{
+    if (m_pGridBrowserBlacklist->GetRowCount() > 0)
+    {
+        m_pGridBrowserBlacklist->Clear();
+        m_bBrowserListsChanged = true;
+    }
     return true;
 }
 
@@ -5841,6 +6041,17 @@ bool CSettings::OnBrowserWhitelistRemove(CGUIElement* pElement)
     if (iSelectedRow > -1)
     {
         m_pGridBrowserWhitelist->RemoveRow(iSelectedRow);
+        m_bBrowserListsChanged = true;
+    }
+
+    return true;
+}
+
+bool CSettings::OnBrowserWhitelistRemoveAll(CGUIElement* pElement)
+{
+    if (m_pGridBrowserWhitelist->GetRowCount() > 0)
+    {
+        m_pGridBrowserWhitelist->Clear();
         m_bBrowserListsChanged = true;
     }
 
@@ -5921,10 +6132,6 @@ bool CSettings::OnShowAdvancedSettingDescription(CGUIElement* pElement)
         strText = std::string(_("Auto updater:")) + " " + std::string(_("Select default unless you like filling out bug reports."));
     else if (pLabel && pLabel == m_pUpdateAutoInstallLabel || pComboBox && pComboBox == m_pUpdateAutoInstallCombo)
         strText = std::string(_("Auto updater:")) + " " + std::string(_("Select default to automatically install important updates."));
-    else if (pCheckBox && pCheckBox == m_pWin8ColorCheckBox)
-        strText = std::string(_("16-bit color:")) + " " + std::string(_("Enable 16 bit color modes - Requires MTA restart"));
-    else if (pCheckBox && pCheckBox == m_pWin8MouseCheckBox)
-        strText = std::string(_("Mouse fix:")) + " " + std::string(_("Mouse movement fix - May need PC restart"));
     else if (pCheckBox && pCheckBox == m_pProcessAffinityCheckbox)
         strText = std::string(_("CPU affinity:")) + " " + std::string(_("Only change if you're having stability issues."));
 

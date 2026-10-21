@@ -35,8 +35,8 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
         if (!BitStream.Read(ucTimeContext))
             return false;
 
-        // Only read this packet if it matches the current time context that
-        // player is in.
+        // Only read this packet if it matches the current time context
+        // Time context is validated for all players (alive and dead) to prevent stale packets
         if (!pSourcePlayer->CanUpdateSync(ucTimeContext))
         {
             return false;
@@ -61,9 +61,12 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
         pSourcePlayer->SetAkimboArmUp(flags.data.bAkimboTargetUp);
         pSourcePlayer->SetOnFire(flags.data.bIsOnFire);
         pSourcePlayer->SetStealthAiming(flags.data.bStealthAiming);
+        pSourcePlayer->SetReloadingWeapon(flags.data.isReloadingWeapon);
 
-        if (BitStream.Can(eBitStreamVersion::IsPedReloadingWeapon))
-            pSourcePlayer->SetReloadingWeapon(flags.data2.isReloadingWeapon);
+        if (flags.data.animInterrupted)
+            pSourcePlayer->SetAnimationData({});
+
+        pSourcePlayer->SetHanging(flags.data.hangingDuringClimb);
 
         // Contact element
         CElement* pContactElement = NULL;
@@ -182,14 +185,14 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
         SPlayerHealthSync health;
         if (!BitStream.Read(&health))
             return false;
-        float fHealth = health.data.fValue;
+        float fHealth = std::clamp(health.data.fValue, 0.0f, pSourcePlayer->GetMaxHealth());
 
         // Armor
         SPlayerArmorSync armor;
         if (!BitStream.Read(&armor))
             return false;
 
-        float fArmor = armor.data.fValue;
+        float fArmor = std::clamp(armor.data.fValue, 0.0f, 100.0f);
         float fOldArmor = pSourcePlayer->GetArmor();
         float fArmorLoss = fOldArmor - fArmor;
 
@@ -232,15 +235,16 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
             SWeaponSlotSync slot;
             if (!BitStream.Read(&slot))
                 return false;
-            unsigned int uiSlot = slot.data.uiSlot;
+            auto ucSlot = static_cast<unsigned char>(slot.data.uiSlot);
 
             // Set weapon slot
             if (bWeaponCorrect)
             {
-                if (uiSlot > 0xFF)
+                const unsigned int uiCurrSlot = slot.data.uiSlot;
+                if (uiCurrSlot > 0xFF)
                     return false;
 
-                pSourcePlayer->SetWeaponSlot(static_cast<unsigned char>(uiSlot));
+                pSourcePlayer->SetWeaponSlot(static_cast<unsigned char>(uiCurrSlot));
             }
             else
             {
@@ -249,14 +253,14 @@ bool CPlayerPuresyncPacket::Read(NetBitStreamInterface& BitStream)
                 slot.data.uiSlot = 0;
             }
 
-            if (CWeaponNames::DoesSlotHaveAmmo(uiSlot))
+            if (CWeaponNames::DoesSlotHaveAmmo(ucSlot))
             {
                 // Read out the ammo states
                 SWeaponAmmoSync ammo(ucUseWeaponType, true, true);
                 if (!BitStream.Read(&ammo))
                     return false;
 
-                float fWeaponRange = pSourcePlayer->GetWeaponRangeFromSlot(uiSlot);
+                float fWeaponRange = pSourcePlayer->GetWeaponRangeFromSlot(ucSlot);
 
                 // Read out the aim data
                 SWeaponAimSync sync(fWeaponRange, (ControllerState.RightShoulder1 || ControllerState.ButtonCircle));
@@ -380,9 +384,8 @@ bool CPlayerPuresyncPacket::Write(NetBitStreamInterface& BitStream) const
         flags.data.bHasAWeapon = (ucWeaponSlot != 0);
         flags.data.bSyncingVelocity = (!flags.data.bIsOnGround || pSourcePlayer->IsSyncingVelocity());
         flags.data.bStealthAiming = (pSourcePlayer->IsStealthAiming() == true);
-
-        if (pSourcePlayer->CanBitStream(eBitStreamVersion::IsPedReloadingWeapon))
-            flags.data2.isReloadingWeapon = pSourcePlayer->IsReloadingWeapon();
+        flags.data.isReloadingWeapon = pSourcePlayer->IsReloadingWeapon();
+        flags.data.hangingDuringClimb = pSourcePlayer->IsHanging();
 
         CVector vecPosition = pSourcePlayer->GetPosition();
         if (pContactElement)

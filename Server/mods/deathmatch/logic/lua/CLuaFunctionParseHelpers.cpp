@@ -78,6 +78,9 @@ ADD_ENUM(HUD_MONEY, "money")
 ADD_ENUM(HUD_VEHICLE_NAME, "vehicle_name")
 ADD_ENUM(HUD_AREA_NAME, "area_name")
 ADD_ENUM(HUD_RADAR, "radar")
+ADD_ENUM(HUD_RADAR_MAP, "radar_map")
+ADD_ENUM(HUD_RADAR_BLIPS, "radar_blips")
+ADD_ENUM(HUD_RADAR_ALTIMETER, "radar_altimeter")
 ADD_ENUM(HUD_CLOCK, "clock")
 ADD_ENUM(HUD_RADIO, "radio")
 ADD_ENUM(HUD_WANTED, "wanted")
@@ -313,12 +316,11 @@ CXMLNode* UserDataCast(CXMLNode* ptr, lua_State* luaState)
 //
 CLuaTimer* UserDataCast(CLuaTimer* ptr, lua_State* luaState)
 {
-    if (CLuaMain* luaMain = g_pGame->GetLuaManager()->GetVirtualMachine(luaState); luaMain != nullptr)
-    {
-        return luaMain->GetTimerManager()->GetTimerFromScriptID(reinterpret_cast<unsigned long>(ptr));
-    }
+    CLuaManager* luaManager = g_pGame->GetLuaManager();
+    if (!luaManager)
+        return nullptr;
 
-    return nullptr;
+    return luaManager->FindTimerGlobally(reinterpret_cast<unsigned long>(ptr));
 }
 
 //
@@ -385,38 +387,6 @@ CTextDisplay* UserDataCast(CTextDisplay* ptr, lua_State* luaState)
 CBan* UserDataCast(CBan* ptr, lua_State* luaState)
 {
     return g_pGame->GetBanManager()->GetBanFromScriptID(reinterpret_cast<unsigned long>(ptr));
-}
-
-//
-// CLuaVector2D from userdata
-//
-CLuaVector2D* UserDataCast(CLuaVector2D* ptr, lua_State* luaState)
-{
-    return CLuaVector2D::GetFromScriptID(reinterpret_cast<unsigned long>(ptr));
-}
-
-//
-// CLuaVector3D from userdata
-//
-CLuaVector3D* UserDataCast(CLuaVector3D* ptr, lua_State* luaState)
-{
-    return CLuaVector3D::GetFromScriptID(reinterpret_cast<unsigned long>(ptr));
-}
-
-//
-// CLuaVector4D from userdata
-//
-CLuaVector4D* UserDataCast(CLuaVector4D* ptr, lua_State* luaState)
-{
-    return CLuaVector4D::GetFromScriptID(reinterpret_cast<unsigned long>(ptr));
-}
-
-//
-// CLuaMatrix from userdata
-//
-CLuaMatrix* UserDataCast(CLuaMatrix* ptr, lua_State* luaState)
-{
-    return CLuaMatrix::GetFromScriptID(reinterpret_cast<unsigned long>(ptr));
 }
 
 //
@@ -518,14 +488,6 @@ SString GetUserDataClassName(void* ptr, lua_State* luaVM, bool bFindElementType)
         return GetClassTypeName(pVar);
     if (auto* pVar = UserDataCast((CTextDisplay*)ptr, luaVM))
         return GetClassTypeName(pVar);
-    if (auto* pVar = UserDataCast((CLuaVector2D*)ptr, luaVM))
-        return GetClassTypeName(pVar);
-    if (auto* pVar = UserDataCast((CLuaVector3D*)ptr, luaVM))
-        return GetClassTypeName(pVar);
-    if (auto* pVar = UserDataCast((CLuaVector4D*)ptr, luaVM))
-        return GetClassTypeName(pVar);
-    if (auto* pVar = UserDataCast((CLuaMatrix*)ptr, luaVM))
-        return GetClassTypeName(pVar);
     if (auto* pVar = UserDataCast((CRemoteCall*)ptr, luaVM))
         return GetClassTypeName(pVar);
 
@@ -593,7 +555,7 @@ void MinServerReqCheck(CScriptArgReader& argStream, const char* szVersionReq, co
         {
             if (pResource->GetMinServerRequirement() < szVersionReq)
             {
-#if MTASA_VERSION_TYPE == VERSION_TYPE_RELEASE
+#if MTASA_VERSION_TYPE >= VERSION_TYPE_UNTESTED
                 argStream.SetVersionWarning(szVersionReq, "server", szReason);
 #endif
             }

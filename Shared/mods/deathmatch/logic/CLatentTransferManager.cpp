@@ -415,9 +415,6 @@ bool DoStaticProcessPacket(unsigned char ucPacketID, NetPlayerID remoteId, NetBi
     if (ucPacketID != PACKET_ID_LUA_EVENT)
         return false;
 
-    // The 0xFFFF sentinel skips the resource ownership check. Clients must
-    // never use it - legitimate triggerLatentServerEvent calls always carry
-    // the resource net ID of the Lua VM that originated the call.
     if (usResourceNetId == 0xFFFF)
         return false;
 

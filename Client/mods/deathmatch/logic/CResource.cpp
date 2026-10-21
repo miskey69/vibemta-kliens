@@ -21,6 +21,7 @@ using namespace std;
 extern CClientGame* g_pClientGame;
 
 int CResource::m_iShowingCursor = 0;
+int CResource::m_iToggleControls = 0;
 
 CResource::CResource(unsigned short usNetID, const char* szResourceName, CClientEntity* pResourceEntity, CClientEntity* pResourceDynamicEntity,
                      const CMtaVersion& strMinServerReq, const CMtaVersion& strMinClientReq, bool bEnableOOP)
@@ -31,6 +32,7 @@ CResource::CResource(unsigned short usNetID, const char* szResourceName, CClient
     m_bStarting = true;
     m_bStopping = false;
     m_bShowingCursor = false;
+    m_bToggleControls = false;
     m_usRemainingNoClientCacheScripts = 0;
     m_bLoadAfterReceivingNoClientCacheScripts = false;
     m_strMinServerReq = strMinServerReq;
@@ -116,7 +118,23 @@ CResource::~CResource()
 
     // Remove all keybinds on this VM
     g_pClientGame->GetScriptKeyBinds()->RemoveAllKeys(m_pLuaVM);
-    g_pCore->GetKeyBinds()->SetAllCommandsActive(m_strResourceName, false);
+
+    // Remove all resource-specific command bindings while preserving user bindings
+    CKeyBindsInterface* pKeyBinds = g_pCore->GetKeyBinds();
+    pKeyBinds->SetAllCommandsActive(m_strResourceName, false);
+
+    // Additional cleanup: remove any remaining resource bindings that weren't caught by SetAllCommandsActive
+    for (auto& bind : *pKeyBinds)
+    {
+        if (bind->type == KeyBindType::COMMAND)
+        {
+            auto commandBind = static_cast<CCommandBind*>(bind.get());
+            if (commandBind->context == BindingContext::RESOURCE && commandBind->resource == m_strResourceName)
+            {
+                pKeyBinds->Remove(commandBind);
+            }
+        }
+    }
 
     // Destroy the txd root so all dff elements are deleted except those moved out
     g_pClientGame->GetElementDeleter()->DeleteRecursive(m_pResourceTXDRoot);
@@ -343,7 +361,7 @@ void CResource::Load()
             // Load the file
             std::vector<char> buffer;
             const bool        bLoaded = FileLoad(pResourceFile->GetName(), buffer);
-            const char* pBufferData = buffer.empty() ? nullptr : &buffer.at(0);
+            const char*       pBufferData = buffer.empty() ? nullptr : &buffer.at(0);
 
             DECLARE_PROFILER_SECTION(OnPreLoadScript)
             // Check the contents
@@ -388,14 +406,10 @@ void CResource::Load()
         NetBitStreamInterface* pBitStream = g_pNet->AllocateNetBitStream();
         if (pBitStream)
         {
-            if (pBitStream->Can(eBitStreamVersion::OnPlayerResourceStart))
-            {
-                // Write resource net ID
-                pBitStream->Write(GetNetID());
-
-                g_pNet->SendPacket(PACKET_ID_PLAYER_RESOURCE_START, pBitStream, PACKET_PRIORITY_HIGH, PACKET_RELIABILITY_RELIABLE_ORDERED);
-            }
-
+            // Write resource net ID
+            pBitStream->Write(GetNetID());
+            pBitStream->Write(GetStartCounter());
+            g_pNet->SendPacket(PACKET_ID_PLAYER_RESOURCE_START, pBitStream, PACKET_PRIORITY_HIGH, PACKET_RELIABILITY_RELIABLE_ORDERED);
             g_pNet->DeallocateNetBitStream(pBitStream);
         }
     }
@@ -472,11 +486,22 @@ void CResource::ShowCursor(bool bShow, bool bToggleControls)
 
         // Update our showing cursor state
         m_bShowingCursor = bShow;
-
-        // Show cursor if more than 0 resources wanting the cursor on
-        g_pCore->ForceCursorVisible(m_iShowingCursor > 0, bToggleControls);
-        g_pClientGame->SetCursorEventsEnabled(m_iShowingCursor > 0);
     }
+
+    bool bWantsToggle = m_bShowingCursor && bToggleControls;
+    if (bWantsToggle != m_bToggleControls)
+    {
+        if (bWantsToggle)
+            m_iToggleControls += 1;
+        else
+            m_iToggleControls -= 1;
+
+        m_bToggleControls = bWantsToggle;
+    }
+
+    // Always update cursor and controls state regardless of cursor visibility change
+    g_pCore->ForceCursorVisible(m_iShowingCursor > 0, m_iToggleControls > 0);
+    g_pClientGame->SetCursorEventsEnabled(m_iShowingCursor > 0);
 }
 
 SString CResource::GetResourceDirectoryPath(eAccessType accessType, const SString& strMetaPath)
@@ -575,8 +600,8 @@ void CResource::HandleDownloadedFileTrouble(CResourceFile* pResourceFile, bool b
     {
         SString strGotMd5 = ConvertDataToHexString(clientChecksum.md5.data, sizeof(MD5));
         SString strWantedMd5 = ConvertDataToHexString(pResourceFile->GetServerChecksum().md5.data, sizeof(MD5));
-        errorMessage = SString("Got CRC:%08lX MD5:%s, wanted CRC:%08lX MD5:%s", clientChecksum.ulCRC, *strGotMd5,
-                               pResourceFile->GetServerChecksum().ulCRC, *strWantedMd5);
+        errorMessage =
+            SString("Got CRC:%08lX MD5:%s, wanted CRC:%08lX MD5:%s", clientChecksum.ulCRC, *strGotMd5, pResourceFile->GetServerChecksum().ulCRC, *strWantedMd5);
     }
 
     SString strFilename = ExtractFilename(PathConform(pResourceFile->GetShortName()));

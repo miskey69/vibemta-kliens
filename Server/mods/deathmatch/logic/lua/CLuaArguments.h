@@ -44,6 +44,8 @@ class CLuaArguments;
 class CLuaArguments
 {
 public:
+    static constexpr unsigned int MaxBitStreamTableReadDepth = 64;
+
     CLuaArguments() {}
     CLuaArguments(const CLuaArguments& Arguments, CFastHashMap<CLuaArguments*, CLuaArguments*>* pKnownTables = NULL);
 
@@ -62,13 +64,14 @@ public:
     bool CallGlobal(class CLuaMain* pLuaMain, const char* szFunction, CLuaArguments* returnValues = NULL) const;
 
     void ReadTable(lua_State* luaVM, int iIndexBegin, CFastHashMap<const void*, CLuaArguments*>* pKnownTables = NULL);
-    void PushAsTable(lua_State* luaVM, CFastHashMap<CLuaArguments*, int>* pKnownTables = nullptr) const;
+    void PushAsTable(lua_State* luaVM, CFastHashMap<CLuaArguments*, int>* pKnownTables = nullptr, bool isArray = false) const;
 
     CLuaArgument* PushNil();
     CLuaArgument* PushBoolean(bool bBool);
     CLuaArgument* PushNumber(double dNumber);
     CLuaArgument* PushString(const std::string& string);
     CLuaArgument* PushString(const std::string_view& string);
+    CLuaArgument* PushString(const CStringName& string);
     CLuaArgument* PushString(const char* string);
     CLuaArgument* PushElement(CElement* pElement);
     CLuaArgument* PushBan(CBan* pBan);

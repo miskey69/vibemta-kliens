@@ -51,6 +51,12 @@ void  HOOK_CAEAmbienceTrackManager_CheckForPause();
 DWORD RETURN_CAESoundManager_RequestNewSound = 0x4EFB15;
 void  HOOK_CAESoundManager_RequestNewSound();
 
+#define HOOKPOS_CAESound_GetSlowMoFrequencyScalingFactor1 0x4F0718
+#define HOOKPOS_CAESound_GetSlowMoFrequencyScalingFactor2 0x4F0973
+#define HOOKSIZE_CAESound_GetSlowMoFrequencyScalingFactor 6
+void HOOK_CAESound_GetSlowMoFrequencyScalingFactor1();
+void HOOK_CAESound_GetSlowMoFrequencyScalingFactor2();
+
 CAudioEngineSA*           g_pAudioSA = NULL;
 extern CAESoundManagerSA* g_pAESoundManagerSA;
 
@@ -77,6 +83,10 @@ CAudioEngineSA::CAudioEngineSA(CAudioEngineSAInterface* pInterface)
     MemPut<BYTE>(0x4EFB15 + 5, 0x74);
     MemPut<BYTE>(0x4EFB29, 0xEB);  // Move jump forward one byte
     HookInstall(HOOKPOS_CAESoundManager_RequestNewSound, (DWORD)HOOK_CAESoundManager_RequestNewSound, 5);
+    HookInstall(HOOKPOS_CAESound_GetSlowMoFrequencyScalingFactor1, (DWORD)HOOK_CAESound_GetSlowMoFrequencyScalingFactor1,
+                HOOKSIZE_CAESound_GetSlowMoFrequencyScalingFactor);
+    HookInstall(HOOKPOS_CAESound_GetSlowMoFrequencyScalingFactor2, (DWORD)HOOK_CAESound_GetSlowMoFrequencyScalingFactor2,
+                HOOKSIZE_CAESound_GetSlowMoFrequencyScalingFactor);
 }
 
 void CAudioEngineSA::StopRadio()
@@ -473,32 +483,30 @@ void CAudioEngineSA::UpdateAmbientSoundSettings()
         MemPut<BYTE>(0x507814, 0x33);  // No gunfire
 }
 
-__declspec(noinline) bool _cdecl IsAmbientSoundGeneralEnabled()
+static bool IsAmbientSoundGeneralEnabled()
 {
-    if (pGame)
-    {
-        return pGame->GetAudioEngine()->IsAmbientSoundEnabled(AMBIENT_SOUND_GENERAL);
-    }
-    return false;
+    return pGame && pGame->GetAudioEngine()->IsAmbientSoundEnabled(AMBIENT_SOUND_GENERAL);
 }
 
 // Hook for manual ambient sound pause
-void _declspec(naked) HOOK_CAEAmbienceTrackManager_CheckForPause()
+static void __declspec(naked) HOOK_CAEAmbienceTrackManager_CheckForPause()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
-        // Hooked from 004D6E21  6 bytes
-        call IsAmbientSoundGeneralEnabled
-        test al, al
-        jnz skip
-        mov     dword ptr [esp+08h], 0      // Pause
-    skip:
+        pushad
+        call    IsAmbientSoundGeneralEnabled
+        test    al, al
+        popad
+        jnz     continueWithOriginalCode
+        mov     dword ptr [esp+8], 0      // Pause by setting 0.0f for the last argument to CAEAudioHardware::SetChannelFrequencyScalingFactor
 
-        // orig
-        mov     edi, [esp+08h]
+        continueWithOriginalCode:
+        mov     edi, [esp+8]
         xor     ecx, ecx
-        jmp     RETURN_CAEAmbienceTrackManager_CheckForPause  // 4D6E27
+        jmp     RETURN_CAEAmbienceTrackManager_CheckForPause
     }
     // clang-format on
 }
@@ -571,7 +579,7 @@ bool CAudioEngineSA::OnWorldSound(CAESound* pAESound)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 // Return false to skip sound
-__declspec(noinline) bool _cdecl On_CAESoundManager_RequestNewSound(CAESound* pAESound)
+static bool _cdecl OnRequestNewSound(CAESound* pAESound)
 {
     if (!IsValidWorldSoundRequest(pAESound) || !g_pAudioSA)
         return false;
@@ -579,29 +587,80 @@ __declspec(noinline) bool _cdecl On_CAESoundManager_RequestNewSound(CAESound* pA
     return g_pAudioSA->OnWorldSound(pAESound);
 }
 
-void _declspec(naked) HOOK_CAESoundManager_RequestNewSound()
+static void __declspec(naked) HOOK_CAESoundManager_RequestNewSound()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
         pushad
         push    [esp+32+4*1]
-        call    On_CAESoundManager_RequestNewSound
-        add     esp, 4*1
-        cmp     al, 0
-        jz      skip
+        call    OnRequestNewSound
+        add     esp, 4
+        test    al, al
         popad
+        jnz     continueWithOriginalCode
 
-        // Continue with standard code
+        // Skip playing sound
+        xor     eax, eax
+        retn    4
+
+        continueWithOriginalCode:
         push    esi
         push    edi
         xor     esi, esi
         jmp     RETURN_CAESoundManager_RequestNewSound
+    }
+    // clang-format on
+}
 
-skip:   // Skip playing sound
-        popad
-        xor     eax, eax
-        retn    4
+float fWorldSoundFrequencyScalingFactor = 1.0f;
+
+static void _cdecl ComputeWorldSoundFrequencyScalingFactor(const unsigned short* pEnvironmentFlags)
+{
+    constexpr unsigned short SOUND_FLAG_IS_PAUSABLE = 0x10;
+
+    const float fGameSpeed = *(float*)0xB7CB64;  // CTimer::ms_fTimeScale
+
+    if (fGameSpeed > 1.0f && !(*pEnvironmentFlags & SOUND_FLAG_IS_PAUSABLE))
+        fWorldSoundFrequencyScalingFactor = fGameSpeed;
+    else
+        fWorldSoundFrequencyScalingFactor = 1.0f;
+}
+
+void __declspec(naked) HOOK_CAESound_GetSlowMoFrequencyScalingFactor1()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
+    {
+        lea     eax, [edi+56h]      // CAESound::m_wEnvironmentFlags
+        push    eax
+        call    ComputeWorldSoundFrequencyScalingFactor
+        add     esp, 4
+        fld     fWorldSoundFrequencyScalingFactor
+        mov     eax, 0x4F071E        // fmuls 0x18(%esp)
+        jmp     eax
+    }
+    // clang-format on
+}
+
+void __declspec(naked) HOOK_CAESound_GetSlowMoFrequencyScalingFactor2()
+{
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
+    // clang-format off
+    __asm
+    {
+        lea     eax, [edi+5Ah]      // CAESound::m_wEnvironmentFlags
+        push    eax
+        call    ComputeWorldSoundFrequencyScalingFactor
+        add     esp, 4
+        fld     fWorldSoundFrequencyScalingFactor
+        mov     eax, 0x4F0979        // fmuls 0x18(%esp)
+        jmp     eax
     }
     // clang-format on
 }

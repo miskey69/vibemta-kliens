@@ -102,6 +102,8 @@ public:
     void OnPreScreenshot();
     void OnPostScreenshot();
 
+    void OnFPSLimitChange(std::uint16_t fps) override;
+
     bool SetGlobalAudioVolume(float fVolume);
 
     bool        UpdateListsFromMaster();
@@ -141,4 +143,9 @@ private:
     // Shouldn't be changed after init
     bool m_bGPUEnabled;
     bool m_bInitialised = false;  // Track if CefInitialize() succeeded
+
+    // ===== AUTH: IPC message validation =====
+public:
+    std::string m_AuthCode;  // Random 30-char code for validating browser IPC messages
+    // ===== END AUTH =====
 };

@@ -3,6 +3,7 @@ project "Loader Proxy"
 	kind "SharedLib"
 	targetname "mtasa"
 	targetdir(buildpath("mta"))
+	clangtidy "On"
 
 	filter "configurations:Debug"
 		targetsuffix "_d"
@@ -28,9 +29,6 @@ project "Loader Proxy"
 	includedirs {
 		"../../Shared/sdk",
 	}
-
-	filter "system:windows"
-		linkoptions { "/SAFESEH:NO" }
 
 	filter "architecture:not x86"
 		flags { "ExcludeFromBuild" }

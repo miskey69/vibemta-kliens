@@ -74,18 +74,19 @@ bool CSimKeysyncPacket::Read(NetBitStreamInterface& BitStream)
             SWeaponSlotSync slot;
             if (!BitStream.Read(&slot))
                 return false;
-            unsigned int uiSlot = slot.data.uiSlot;
+            auto ucSlot = static_cast<unsigned char>(slot.data.uiSlot);
 
             if (bWeaponCorrect)
             {
-                if (uiSlot > 0xFF)
+                const unsigned int uiCurrSlot = slot.data.uiSlot;
+                if (uiCurrSlot > 0xFF)
                     return false;
 
-                m_Cache.ucWeaponSlot = static_cast<unsigned char>(uiSlot);
+                m_Cache.ucWeaponSlot = static_cast<unsigned char>(uiCurrSlot);
             }
 
             // Did he have a weapon?
-            if (CWeaponNames::DoesSlotHaveAmmo(uiSlot))
+            if (CWeaponNames::DoesSlotHaveAmmo(ucSlot))
             {
                 // And ammo in clip
                 SWeaponAmmoSync ammo(ucUseWeaponType, false, true);

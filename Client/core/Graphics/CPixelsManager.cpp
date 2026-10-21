@@ -126,7 +126,8 @@ bool CPixelsManager::GetTexturePixels(IDirect3DBaseTexture9* pD3DBaseTexture, CP
             bResult = SetPlainDimensions(outPixels, uiPixelsWidth, uiPixelsHeight);
         }
     }
-    else if (Desc.Usage == 0)
+    // Handle any non-rendertarget usage so D3DUSAGE_DYNAMIC textures (e.g. CEF browsers since PR #4634) go through the lockable path.
+    else if ((Desc.Usage & D3DUSAGE_RENDERTARGET) == 0)
     {
         if (pixelsFormat != EPixelsFormat::PLAIN)
             return D3DXGetSurfacePixels(pD3DSurface, outPixels, pixelsFormat, renderFormat, bMipMaps, pRect);
@@ -204,7 +205,8 @@ bool CPixelsManager::SetTexturePixels(IDirect3DBaseTexture9* pD3DBaseTexture, co
             if (FAILED(D3DXLoadSurfaceFromSurface(pD3DSurface, NULL, NULL, pLockableSurface, NULL, NULL, D3DX_FILTER_NONE, 0)))
                 return false;
     }
-    else if (Desc.Usage == 0)
+    // Handle any non-rendertarget usage so D3DUSAGE_DYNAMIC textures (e.g. CEF browsers since PR #4634) go through the lockable path.
+    else if ((Desc.Usage & D3DUSAGE_RENDERTARGET) == 0)
     {
         if (Desc.Format == D3DFMT_A8R8G8B8 || Desc.Format == D3DFMT_X8R8G8B8 || Desc.Format == D3DFMT_R5G6B5)
         {
@@ -632,12 +634,12 @@ bool CPixelsManager::GetPixelsSize(const CPixels& pixels, uint& uiOutWidth, uint
     }
     else if (format == EPixelsFormat::JPEG)
     {
-        SString strError;
+        std::string strError;
         if (JpegGetDimensions(pixels.GetData(), pixels.GetSize(), uiOutWidth, uiOutHeight, &strError))
             return true;
 
         if (!strError.empty() && g_pCore)
-            g_pCore->DebugEchoColor(SString("JPEG error: %s", *strError), 255, 0, 0);
+            g_pCore->DebugEchoColor(("JPEG error: " + strError).c_str(), 255, 0, 0);
         return false;
     }
 
@@ -738,7 +740,7 @@ bool CPixelsManager::GetPlainDimensions(const CPixels& pixels, uint& uiOutWidth,
         const ushort* pPlainTail = (const ushort*)(pData + uiDataSize - SIZEOF_PLAIN_TAIL);
         uiOutWidth = pPlainTail[0];
         uiOutHeight = pPlainTail[1];
-        uint uiPlainByteSize = uiOutWidth * uiOutHeight * 4 + SIZEOF_PLAIN_TAIL;
+        const uint64_t uiPlainByteSize = static_cast<uint64_t>(uiOutWidth) * static_cast<uint64_t>(uiOutHeight) * 4ULL + SIZEOF_PLAIN_TAIL;
         if (uiDataSize == uiPlainByteSize)
             return true;
     }
@@ -775,12 +777,12 @@ bool CPixelsManager::ChangePixelsFormat(const CPixels& oldPixels, CPixels& newPi
 
         if (newFormat == EPixelsFormat::JPEG)
         {
-            SString strError;
+            std::string strError;
             if (JpegEncode(uiWidth, uiHeight, uiQuality, oldPixels.GetData(), oldPixels.GetSize() - 4, newPixels.buffer, &strError))
                 return true;
 
             if (!strError.empty() && g_pCore)
-                g_pCore->DebugEchoColor(SString("JPEG encode error: %s", *strError), 255, 0, 0);
+                g_pCore->DebugEchoColor(("JPEG encode error: " + strError).c_str(), 255, 0, 0);
             return false;
         }
         else if (newFormat == EPixelsFormat::PNG)
@@ -791,8 +793,8 @@ bool CPixelsManager::ChangePixelsFormat(const CPixels& oldPixels, CPixels& newPi
         // Decode
         if (oldFormat == EPixelsFormat::JPEG)
         {
-            uint    uiWidth, uiHeight;
-            SString strError;
+            uint        uiWidth, uiHeight;
+            std::string strError;
             if (JpegDecode(oldPixels.GetData(), oldPixels.GetSize(), &newPixels.buffer, uiWidth, uiHeight, &strError))
             {
                 newPixels.buffer.SetSize(uiWidth * uiHeight * 4 + SIZEOF_PLAIN_TAIL);
@@ -800,7 +802,7 @@ bool CPixelsManager::ChangePixelsFormat(const CPixels& oldPixels, CPixels& newPi
             }
 
             if (!strError.empty() && g_pCore)
-                g_pCore->DebugEchoColor(SString("JPEG decode error: %s", *strError), 255, 0, 0);
+                g_pCore->DebugEchoColor(("JPEG decode error: " + strError).c_str(), 255, 0, 0);
             return false;
         }
         else if (oldFormat == EPixelsFormat::PNG)

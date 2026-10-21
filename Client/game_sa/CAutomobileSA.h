@@ -1,6 +1,6 @@
 /*****************************************************************************
  *
- *  PROJECT:     Multi Theft Auto v1.0
+ *  PROJECT:     Multi Theft Auto
  *  LICENSE:     See LICENSE in the top level directory
  *  FILE:        game_sa/CAutomobileSA.h
  *  PURPOSE:     Header file for automobile vehicle entity class
@@ -47,14 +47,18 @@ public:
         return ((CObjectSAInterface * (__thiscall*)(CAutomobileSAInterface*, eCarNodes, eCarComponentCollisionTypes))0x6a8580)(this, nodeId, collType);
     }
 
+    void FixDoor(eCarNodes nodeId, eDoors door) { ((void(__thiscall*)(CAutomobileSAInterface*, eCarNodes, eDoors))0x6A35A0)(this, nodeId, door); }
+
+    void SetDoorDamage(eDoors door, bool quiet) { ((void(__thiscall*)(CAutomobileSAInterface*, eDoors, bool))0x6B1600)(this, door, quiet); }
+
     CDamageManagerSAInterface m_damageManager;
     CDoorSAInterface          m_doors[MAX_DOORS];
     RwFrame*                  m_aCarNodes[static_cast<std::size_t>(eCarNodes::NUM_NODES)];
     CBouncingPanelSAInterface m_panels[3];
     CDoorSAInterface          m_swingingChassis;
     CColPointSAInterface      m_wheelColPoint[MAX_WHEELS];
-    float                     m_wheelsDistancesToGround1[4];
-    float                     m_wheelsDistancesToGround2[4];
+    float                     m_wheelRatios[4];  // suspension compression, 0 = fully compressed, 1 = fully relaxed
+    float                     m_prevWheelRatios[4];
     float                     m_wheelCollisionState[4];
     float                     field_800;
     float                     field_804;
@@ -73,9 +77,8 @@ public:
     unsigned short            m_wVoodooSuspension;
     int                       m_dwBusDoorTimerEnd;
     int                       m_dwBusDoorTimerStart;
-    float                     field_878;
-    float                     wheelOffsetZ[4];
-    int                       field_88C[3];
+    float                     m_aSuspensionSpringLength[4];
+    float                     m_aSuspensionLineLength[4];
     float                     m_fFrontHeightAboveRoad;
     float                     m_fRearHeightAboveRoad;
     float                     m_fCarTraction;
@@ -123,8 +126,8 @@ public:
     float                     m_fForcedOrientation;
     float                     m_fUpDownLightAngle[2];
     unsigned char             m_nNumContactWheels;
-    unsigned char             m_nWheelsOnGround;
-    char                      field_962;
+    unsigned char             m_wheelsOnGround;
+    unsigned char             m_prevWheelsOnGround;
     char                      field_963;
     float                     field_964;
     int                       m_wheelFrictionState[4];
@@ -143,4 +146,7 @@ public:
     CAutomobileSA(CAutomobileSAInterface* pInterface);
 
     CAutomobileSAInterface* GetAutomobileInterface() { return reinterpret_cast<CAutomobileSAInterface*>(GetInterface()); }
+    CAutomobileSAInterface* GetAutomobileInterface() const { return reinterpret_cast<CAutomobileSAInterface*>(GetInterface()); }
+
+    bool IsAnyWheelTouchingGround() const override;
 };

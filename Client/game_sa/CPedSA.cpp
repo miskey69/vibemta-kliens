@@ -12,11 +12,13 @@
 #include "StdInc.h"
 #include "CGameSA.h"
 #include "CPedSA.h"
+#include "CVisibilityPluginsSA.h"
 #include "CPedModelInfoSA.h"
 #include "CPlayerInfoSA.h"
 #include "CStatsSA.h"
 #include "CTaskManagerSA.h"
 #include "CTasksSA.h"
+#include "TaskJumpFallSA.h"
 #include "CProjectileInfoSA.h"
 #include "CWeaponStatManagerSA.h"
 #include "CFireManagerSA.h"
@@ -25,6 +27,75 @@
 extern CGameSA* pGame;
 
 static bool g_onlyUpdateRotations = false;
+
+namespace
+{
+    constexpr std::uint8_t PED_NODE_HEAD = 2;
+
+    constexpr std::uintptr_t FUNC_CRealTimeShadowManager_ReturnRealTimeShadow = 0x705B30;
+    constexpr std::uintptr_t CLASS_CRealTimeShadowManager = 0xC40350;
+    constexpr std::uintptr_t FUNC_CShadows_StoreShadowForPedObject = 0x707B40;
+    constexpr std::uintptr_t CALL_CPed_PreRenderAfterTest_StoreShadowForPedObject = 0x5E6900;
+
+    void __cdecl StoreShadowForPedObject(CPedSAInterface* ped, float displacementX, float displacementY, float frontX, float frontY, float sideX, float sideY)
+    {
+        if (CVisibilityPluginsSA::GetClumpAlpha(ped->m_pRwObject) == 0)
+            return;
+
+        using StoreShadow = void(__cdecl*)(CPedSAInterface*, float, float, float, float, float, float);
+        reinterpret_cast<StoreShadow>(FUNC_CShadows_StoreShadowForPedObject)(ped, displacementX, displacementY, frontX, frontY, sideX, sideY);
+    }
+
+    constexpr std::uintptr_t FUNC_CTaskSimpleJetPack_RenderJetPack = 0x67F6A0;
+    constexpr std::uintptr_t CALL_CPed_Render_RenderJetPack = 0x5E793E;
+    constexpr std::uintptr_t FUNC_CVisibilityPlugins_RenderPedCB = 0x7335B0;
+    constexpr std::uintptr_t FUNC_FxSystem_c_ForAllParticles = 0x4AA930;
+
+    bool RenderJetPackAtomicAsPed(RpAtomic* atomic, void*)
+    {
+        atomic->renderCallback = reinterpret_cast<RpAtomicCallback>(FUNC_CVisibilityPlugins_RenderPedCB);
+        return true;
+    }
+
+    // Every flame particle carries its own colour multiplier (FxEmitterPrt_c, alpha at 0x2F),
+    // the renderer multiplies the keyframed alpha by it
+    void __cdecl SetParticleAlpha(void* particle, int, void** alpha)
+    {
+        *(static_cast<unsigned char*>(particle) + 0x2F) = static_cast<unsigned char>(reinterpret_cast<std::uintptr_t>(*alpha));
+    }
+
+    void SetFxSystemAlpha(FxSystem_c* fx, int alpha)
+    {
+        if (!fx)
+            return;
+
+        using ForAllParticles = int(__thiscall*)(FxSystem_c*, void(__cdecl*)(void*, int, void**), void*);
+        reinterpret_cast<ForAllParticles>(FUNC_FxSystem_c_ForAllParticles)(fx, SetParticleAlpha, reinterpret_cast<void*>(static_cast<std::uintptr_t>(alpha)));
+    }
+
+    // The jetpack is its own clump drawn with the default atomic renderer, so it ignores the alpha
+    // MTA puts on the ped clump. Give it the ped renderer and the ped's alpha right before it is drawn,
+    // and fade the thruster flames the same way
+    void __fastcall RenderJetPack(CTaskSimpleJetPackSAInterface* task, void*, CPedSAInterface* ped)
+    {
+        if (ped->m_pRwObject)
+        {
+            const int alpha = CVisibilityPluginsSA::GetClumpAlpha(ped->m_pRwObject);
+
+            if (task->m_pJetPackClump)
+            {
+                pGame->GetVisibilityPlugins()->SetClumpAlpha(task->m_pJetPackClump, alpha);
+                RpClumpForAllAtomics(task->m_pJetPackClump, RenderJetPackAtomicAsPed, nullptr);
+            }
+
+            SetFxSystemAlpha(task->m_pFxSysL, alpha);
+            SetFxSystemAlpha(task->m_pFxSysR, alpha);
+        }
+
+        using Render = void(__thiscall*)(CTaskSimpleJetPackSAInterface*, CPedSAInterface*);
+        reinterpret_cast<Render>(FUNC_CTaskSimpleJetPack_RenderJetPack)(task, ped);
+    }
+}
 
 CPedSA::~CPedSA()
 {
@@ -64,6 +135,10 @@ void CPedSA::Init()
 
 void CPedSA::SetModelIndex(std::uint32_t modelIndex)
 {
+    // CPed::SetModelIndex only creates a new RwObject. Destroy the current one first,
+    // otherwise the old clump (and its model and TXD references) is leaked
+    GetPedInterface()->DeleteRwObject();
+
     // char __thiscall CPed::SetModelIndex(void *this, int a2)
     ((char(__thiscall*)(CEntitySAInterface*, int))FUNC_SetModelIndex)(m_pInterface, modelIndex);
 
@@ -78,6 +153,20 @@ void CPedSA::SetModelIndex(std::uint32_t modelIndex)
 
     std::uint32_t type = modelInfo->pedType;
     GetPedInterface()->pedSound.m_bIsFemale = type == 5 || type == 22;
+}
+
+void CPedSA::SetVisible(bool visible)
+{
+    CEntitySA::SetVisible(visible);
+
+    CShadowDataSA* shadow = GetPedInterface()->m_pShadowData;
+    if (visible || !shadow)
+        return;
+
+    // Real-time shadows are owned separately from the ped. Return an existing
+    // shadow immediately so an invisible ped cannot leave it fading in-world.
+    using ReturnRealTimeShadow = void(__thiscall*)(void*, CShadowDataSA*);
+    reinterpret_cast<ReturnRealTimeShadow>(FUNC_CRealTimeShadowManager_ReturnRealTimeShadow)(reinterpret_cast<void*>(CLASS_CRealTimeShadowManager), shadow);
 }
 
 bool CPedSA::AddProjectile(eWeaponType weaponType, CVector origin, float force, CVector* target, CEntity* targetEntity)
@@ -213,8 +302,8 @@ void CPedSA::ClearWeapons()
 
 void CPedSA::RemoveWeaponModel(std::uint32_t model)
 {
-    // void __thiscall CPed::RemoveWeaponModel(CPed *this, int modelID)
-    ((void(__thiscall*)(CEntitySAInterface*, std::uint32_t))FUNC_RemoveWeaponModel)(m_pInterface, model);
+    if (auto* pedInterface = GetPedInterface())
+        pedInterface->RemoveWeaponModel(model);
 }
 
 void CPedSA::ClearWeapon(eWeaponType weaponType)
@@ -319,6 +408,32 @@ CVector* CPedSA::GetTransformedBonePosition(eBone bone, CVector* position)
         *position = *GetPosition();
 
     return position;
+}
+
+void CPedSA::UpdateRpHAnim()
+{
+    CEntitySA::UpdateRpHAnim();
+
+    const auto* pedInterface = GetPedInterface();
+    if (!pedInterface->pedFlags.bRemoveHead || pedInterface->bodyPartToRemove != PED_NODE_HEAD)
+        return;
+
+    RpClump*          clump = GetRpClump();
+    RpHAnimHierarchy* animHierarchy = clump ? GetAnimHierarchyFromSkinClump(clump) : nullptr;
+    if (!animHierarchy)
+        return;
+
+    constexpr eBone removedBones[] = {BONE_NECK, BONE_HEAD2, BONE_HEAD1, BONE_HEAD};
+    constexpr RwV3d hiddenScale{0.0f, 0.0f, 0.0f};
+
+    RwMatrix* boneMatrices = RpHAnimHierarchyGetMatrixArray(animHierarchy);
+
+    for (const auto boneId : removedBones)
+    {
+        const int matrixIndex = RpHAnimIDGetIndex(animHierarchy, boneId);
+        if (matrixIndex != -1)
+            RwMatrixScale(&boneMatrices[matrixIndex], &hiddenScale, TRANSFORM_BEFORE);
+    }
 }
 
 //
@@ -588,6 +703,83 @@ void CPedSA::GetAttachedSatchels(std::vector<SSatchelsData>& satchelsList) const
     }
 }
 
+void CPedSA::SetInWaterFlags(bool inWater)
+{
+    auto* physicalInterface = static_cast<CPhysicalSAInterface*>(m_pInterface);
+    if (!physicalInterface)
+        return;
+
+    physicalInterface->bTouchingWater = inWater;
+    physicalInterface->bSubmergedInWater = inWater;
+}
+
+void __fastcall CPedSA::RemoveWeaponWhenEnteringVehicle(CPedSAInterface* pedInterface, void*, int jetpack)
+{
+    if (!pedInterface)
+        return;
+
+    pedInterface->RemoveWeaponWhenEnteringVehicle(jetpack == 1);
+}
+
+void CPedSAInterface::RemoveWeaponWhenEnteringVehicle(bool jetpack)
+{
+    // Bugfix #3659 (allow switch weapons while using jetpack - see PR #3573)
+    if (!jetpack)
+    {
+        if (auto* playerData = pPlayerData)
+            playerData->m_bInVehicleDontAllowWeaponChange = true;
+    }
+
+    if (savedWeapon != eWeaponType::WEAPONTYPE_UNIDENTIFIED)
+        return;
+
+    eWeaponSlot newSlot = WEAPONSLOT_MAX;
+
+    if (IsPlayer())
+    {
+        auto* playerInfo = pGame->GetPlayerInfo();
+        if (playerInfo && playerInfo->CanDoDriveBy())
+        {
+            const auto& smg = Weapons[WEAPONSLOT_TYPE_SMG];
+            const auto& shotgun = Weapons[WEAPONSLOT_TYPE_SHOTGUN];
+            const auto& pistol = Weapons[WEAPONSLOT_TYPE_HANDGUN];
+
+            const bool hasSMG = (smg.m_eWeaponType == eWeaponType::WEAPONTYPE_MICRO_UZI || smg.m_eWeaponType == eWeaponType::WEAPONTYPE_TEC9 ||
+                                 (jetpack && smg.m_eWeaponType == eWeaponType::WEAPONTYPE_MP5)) &&
+                                smg.m_ammoTotal > 0;
+
+            const bool hasSawnoff = jetpack && shotgun.m_eWeaponType == eWeaponType::WEAPONTYPE_SAWNOFF_SHOTGUN && shotgun.m_ammoTotal > 0;
+
+            const bool hasPistol = jetpack && pistol.m_eWeaponType == eWeaponType::WEAPONTYPE_PISTOL && pistol.m_ammoTotal > 0;
+
+            if (hasSMG)
+            {
+                newSlot = WEAPONSLOT_TYPE_SMG;
+            }
+            else if (hasSawnoff)  // Bugfix - the default here was WEAPONSLOT_TYPE_HANDGUN
+            {
+                newSlot = WEAPONSLOT_TYPE_SHOTGUN;
+            }
+            else if (hasPistol)
+            {
+                newSlot = WEAPONSLOT_TYPE_HANDGUN;
+            }
+        }
+    }
+
+    if (newSlot != WEAPONSLOT_MAX)
+    {
+        savedWeapon = Weapons[bCurrentWeaponSlot].m_eWeaponType;
+        SetCurrentWeapon(newSlot);
+    }
+    else if (!jetpack)  // Bugfix #508 (weapons are invisible when wearing jetpack - see PR #3559)
+    {
+        auto weaponType = Weapons[bCurrentWeaponSlot].m_eWeaponType;
+        auto model = pGame->GetWeaponInfo(weaponType, eWeaponSkill::WEAPONSKILL_STD)->GetModel();
+        RemoveWeaponModel(model);
+    }
+}
+
 ////////////////////////////////////////////////////////////////
 //
 // CPed_PreRenderAfterTest
@@ -600,31 +792,33 @@ void CPedSA::GetAttachedSatchels(std::vector<SSatchelsData>& satchelsList) const
 #define HOOKSIZE_CPed_PreRenderAfterTest 15
 static constexpr std::uintptr_t RETURN_CPed_PreRenderAfterTest = 0x5E65AF;
 static constexpr std::uintptr_t RETURN_CPed_PreRenderAfterTestSkip = 0x5E6658;
-static void _declspec(naked)    HOOK_CPed_PreRenderAfterTest()
+static void __declspec(naked)   HOOK_CPed_PreRenderAfterTest()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
         // Replaced code
-        sub esp,70h
-        push ebx
-        push ebp
-        push esi
-        mov ebp, ecx
-        mov ecx, dword ptr [ebp+47Ch]
-        push edi
+        sub     esp, 70h
+        push    ebx
+        push    ebp
+        push    esi
+        mov     ebp, ecx
+        mov     ecx, dword ptr [ebp+47Ch]
+        push    edi
 
         // Check what to do
-        mov eax, [ebp+474h] // Load m_nThirdPedFlags
-        test eax, 400h // check bCalledPreRender flag
-        jnz skip_rotation_update
+        mov     eax, [ebp+474h] // Load m_nThirdPedFlags
+        test    eax, 400h // check bCalledPreRender flag
+        jnz     skip_rotation_update
 
         // Run code at start of CPed::PreRenderAfterTest
-        jmp RETURN_CPed_PreRenderAfterTest
+        jmp     RETURN_CPed_PreRenderAfterTest
 
-skip_rotation_update:
+        skip_rotation_update:
         // Skip code at start of CPed::PreRenderAfterTest
-        jmp RETURN_CPed_PreRenderAfterTestSkip
+        jmp     RETURN_CPed_PreRenderAfterTestSkip
     }
     // clang-format on
 }
@@ -641,24 +835,26 @@ skip_rotation_update:
 #define HOOKSIZE_CPed_PreRenderAfterTest_Mid 5
 static constexpr std::uintptr_t RETURN_CPed_PreRenderAfterTest_Mid = 0x5E666E;
 static constexpr std::uintptr_t RETURN_CPed_PreRenderAfterTest_MidSkip = 0x5E766F;
-static void _declspec(naked)    HOOK_CPed_PreRenderAfterTest_Mid()
+static void __declspec(naked)   HOOK_CPed_PreRenderAfterTest_Mid()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
         // Check what to do
-        movzx eax, byte ptr g_onlyUpdateRotations
-        test eax, eax
-        jnz skip_tail
+        movzx   eax, byte ptr g_onlyUpdateRotations
+        test    eax, eax
+        jnz     skip_tail
 
         // Replaced code
-        mov al, byte ptr ds:[00B7CB89h]
+        mov     al, byte ptr ds:[00B7CB89h]
         // Run code at mid of CPed::PreRenderAfterTest
-        jmp RETURN_CPed_PreRenderAfterTest_Mid
+        jmp     RETURN_CPed_PreRenderAfterTest_Mid
 
-skip_tail:
+        skip_tail:
         // Skip code at mid of CPed::PreRenderAfterTest
-        jmp RETURN_CPed_PreRenderAfterTest_MidSkip
+        jmp     RETURN_CPed_PreRenderAfterTest_MidSkip
     }
     // clang-format on
 }
@@ -672,4 +868,14 @@ void CPedSA::StaticSetHooks()
 {
     EZHookInstall(CPed_PreRenderAfterTest);
     EZHookInstall(CPed_PreRenderAfterTest_Mid);
+
+    // GTA's player-specific blob-shadow path assumes that the local player is
+    // always opaque. Do not enqueue it when MTA has made the clump invisible.
+    HookInstallCall(CALL_CPed_PreRenderAfterTest_StoreShadowForPedObject, reinterpret_cast<DWORD>(StoreShadowForPedObject));
+    HookInstallCall(CALL_CPed_Render_RenderJetPack, reinterpret_cast<DWORD>(RenderJetPack));
+
+    HookInstallCall(0x68025A, (DWORD)CPedSA::RemoveWeaponWhenEnteringVehicle);  // CTaskSimpleJetPack::ProcessPed
+    HookInstallCall(0x64DB4D, (DWORD)CPedSA::RemoveWeaponWhenEnteringVehicle);  // CTaskSimpleCarGetIn::ProcessPed
+    HookInstallCall(0x64BCA3, (DWORD)CPedSA::RemoveWeaponWhenEnteringVehicle);  // CTaskSimpleCarSetPedInAsDriver::ProcessPed
+    HookInstallCall(0x64B876, (DWORD)CPedSA::RemoveWeaponWhenEnteringVehicle);  // CTaskSimpleCarSetPedInAsPassenger::ProcessPed
 }

@@ -132,7 +132,7 @@ FuncPtr_t CDynamicLibrary::GetProcedureAddress(const char* szProcName)
         char* szError = NULL;
         dlerror();
 
-        FuncPtr_t pFunc = (FuncPtr_t)dlsym(m_hModule, szProcName);
+        auto pFunc = reinterpret_cast<FuncPtr_t>(dlsym(m_hModule, szProcName));
         if ((szError = dlerror()) != NULL)
         {
             return NULL;

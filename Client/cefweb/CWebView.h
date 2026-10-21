@@ -21,24 +21,27 @@
 #include <cef3/cef/include/cef_life_span_handler.h>
 #include <cef3/cef/include/cef_context_menu_handler.h>
 #include <cef3/cef/include/cef_resource_request_handler.h>
+#include <cef3/cef/include/cef_values.h>
 #include <SString.h>
 #include <audiopolicy.h>
-#include <condition_variable>
 #include <functional>
 #include <memory>
 #include <mmdeviceapi.h>
 #include <mutex>
 #include <cstdint>
+#include <chrono>
 #define GetNextSibling(hwnd) GetWindow(hwnd, GW_HWNDNEXT)  // Re-define the conflicting macro
 #define GetFirstChild(hwnd)  GetTopWindow(hwnd)
 
 #define MTA_CEF_USERAGENT "Multi Theft Auto: San Andreas Client " MTA_DM_BUILDTAG_LONG
 
-enum class ECefThreadState
+// Forward declaration for WebViewAuth namespace functions (defined in CWebViewAuth.h)
+class CWebView;
+namespace WebViewAuth
 {
-    Running = 0,  // CEF thread is currently running
-    Wait          // CEF thread is waiting for the main thread
-};
+    bool HandleTriggerLuaEvent(CWebView*, CefRefPtr<CefListValue>, const bool);
+    bool HandleInputFocus(CWebView*, CefRefPtr<CefListValue>, const bool);
+}
 
 class CWebView : public CWebViewInterface,
                  private CefClient,
@@ -52,6 +55,9 @@ class CWebView : public CWebViewInterface,
                  private CefDisplayHandler,
                  private CefContextMenuHandler
 {
+    friend bool WebViewAuth::HandleTriggerLuaEvent(CWebView*, CefRefPtr<CefListValue>, const bool);
+    friend bool WebViewAuth::HandleInputFocus(CWebView*, CefRefPtr<CefListValue>, const bool);
+
 public:
     CWebView(bool bIsLocal, CWebBrowserItem* pWebBrowserRenderItem, bool bTransparent = false);
     virtual ~CWebView();
@@ -59,6 +65,7 @@ public:
     void                  SetWebBrowserEvents(CWebBrowserEventsInterface* pInterface);
     void                  ClearWebBrowserEvents(CWebBrowserEventsInterface* pInterface);
     void                  CloseBrowser();
+    bool                  EnsureBrowserCreated();  // Lazy creation: creates browser on first use
     CefRefPtr<CefBrowser> GetCefBrowser() { return m_pWebView; };
 
     bool IsBeingDestroyed() { return m_bBeingDestroyed; }
@@ -74,12 +81,26 @@ public:
     void               Focus(bool state = true);
     IDirect3DTexture9* GetTexture() { return static_cast<IDirect3DTexture9*>(m_pWebBrowserRenderItem->m_pD3DTexture); }
     void               ClearTexture();
+    void               RestoreTexture();
 
     void UpdateTexture();
 
-    bool HasInputFocus() { return m_bHasInputFocus; }
+    bool                        HasInputFocus() { return m_bHasInputFocus; }
+    void                        SetInputFocus(bool bFocus) { m_bHasInputFocus = bFocus; }  // Setter for IPC handlers
+    CWebBrowserEventsInterface* GetEventsInterface() { return m_pEventsInterface; }        // Getter for IPC handlers
 
     void ExecuteJavascript(const SString& strJavascriptCode);
+
+    // A paused browser only gets frames when a script changed something.
+    // Two frames, the change may land in CEF after the first one
+    void RequestFrames() { m_uiFramesRequested.store(2, std::memory_order_relaxed); }
+    bool TakeFrameRequest()
+    {
+        if (m_uiFramesRequested.load(std::memory_order_relaxed) == 0)
+            return false;
+        m_uiFramesRequested.fetch_sub(1, std::memory_order_relaxed);
+        return true;
+    }
 
     bool SetProperty(const SString& strKey, const SString& strValue);
     bool GetProperty(const SString& strKey, SString& outProperty);
@@ -197,7 +218,6 @@ public:
                                      CefRefPtr<CefMenuModel> model) override;
 
 private:
-    void ResumeCefThread();
     void QueueBrowserEvent(const char* name, std::function<void(CWebBrowserEventsInterface*)>&& fn);
 
     struct FEventTarget
@@ -256,29 +276,38 @@ private:
     CefRefPtr<CefBrowser> m_pWebView;
     CWebBrowserItem*      m_pWebBrowserRenderItem;
 
-    std::atomic_bool              m_bBeingDestroyed;
-    bool                          m_bIsLocal;
-    bool                          m_bIsRenderingPaused;
-    bool                          m_bIsTransparent;
-    POINT                         m_vecMousePosition;
-    bool                          m_mouseButtonStates[3];
-    SString                       m_CurrentTitle;
-    float                         m_fVolume;
-    std::map<SString, SString>    m_Properties;
-    bool                          m_bHasInputFocus;
-    std::set<std::string>         m_AjaxHandlers;
-    std::shared_ptr<FEventTarget> m_pEventTarget;
+    std::atomic_bool                      m_bBeingDestroyed;
+    std::atomic<unsigned int>             m_uiFramesRequested{0};
+    bool                                  m_bIsLocal;
+    bool                                  m_bIsRenderingPaused;
+    bool                                  m_bIsTransparent;
+    bool                                  m_bBrowserCreated = false;  // Lazy creation: tracks if CEF browser has been created
+    SString                               m_strPendingURL;            // Lazy creation: URL to load when browser is ready
+    bool                                  m_bPendingURLFilterEnabled = true;
+    SString                               m_strPendingPostData;
+    bool                                  m_bPendingURLEncoded = true;
+    POINT                                 m_vecMousePosition;
+    POINT                                 m_vecPendingMousePosition;       // Pending position for throttled mouse move
+    bool                                  m_bHasPendingMouseMove = false;  // Whether there's a pending throttled mouse move
+    std::chrono::steady_clock::time_point m_lastMouseMoveTime;             // For mouse move throttling
+    bool                                  m_mouseButtonStates[3];
+    SString                               m_CurrentTitle;
+    float                                 m_fVolume;
+    std::map<SString, SString>            m_Properties;
+    bool                                  m_bHasInputFocus;
+    std::set<std::string>                 m_AjaxHandlers;
+    std::shared_ptr<FEventTarget>         m_pEventTarget;
 
     struct
     {
-        bool                    changed = false;
-        std::mutex              dataMutex;
-        ECefThreadState         cefThreadState = ECefThreadState::Running;
-        std::condition_variable cefThreadCv;
+        bool       changed = false;
+        std::mutex dataMutex;
 
-        const void*                buffer;
-        int                        width, height;
-        CefRenderHandler::RectList dirtyRects;
+        // Main frame buffer - we now own this buffer (copied in OnPaint)
+        std::unique_ptr<byte[]> buffer;
+        size_t                  bufferSize = 0;
+        int                     width = 0;
+        int                     height = 0;
 
         CefRect                 popupRect;
         bool                    popupShown = false;

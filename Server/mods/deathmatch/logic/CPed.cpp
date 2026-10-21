@@ -369,14 +369,12 @@ bool CPed::HasWeaponType(unsigned char ucWeaponType)
 
 float CPed::GetMaxHealth()
 {
-    // TODO: Verify this formula
-
     // Grab his player health stat
     float fStat = GetPlayerStat(24 /*MAX_HEALTH*/);
 
     // Do a linear interpolation to get how much health this would allow
-    // Assumes: 100 health = 569 stat, 200 health = 1000 stat.
-    float fMaxHealth = 100.0f + (100.0f / 431.0f * (fStat - 569.0f));
+    // Assumes: 100 health = 569 stat, 176 health = 1000 stat.
+    float fMaxHealth = fStat * 0.176f;
 
     // Return the max health. Make sure it can't be below 1
     if (fMaxHealth < 1.0f)
@@ -386,7 +384,7 @@ float CPed::GetMaxHealth()
 
 const char* CPed::GetBodyPartName(unsigned char ucID)
 {
-    if (ucID <= NUMELMS(BodyPartNames))
+    if (ucID < NUMELMS(BodyPartNames))
     {
         return BodyPartNames[ucID].szName;
     }
@@ -484,11 +482,11 @@ void CPed::SetSyncer(CPlayer* pPlayer)
                 if (uiOccupiedSeat > 0xFF)
                     break;
 
-                const unsigned char ucOccupiedSeat = static_cast<unsigned char>(uiOccupiedSeat);
-                if (pVehicle && (this == pVehicle->GetOccupant(ucOccupiedSeat)))
+                const unsigned char occupiedSeat = static_cast<unsigned char>(uiOccupiedSeat);
+                if (pVehicle && (this == pVehicle->GetOccupant(occupiedSeat)))
                 {
                     // Warp us into vehicle
-                    CStaticFunctionDefinitions::WarpPedIntoVehicle(this, pVehicle, ucOccupiedSeat);
+                    CStaticFunctionDefinitions::WarpPedIntoVehicle(this, pVehicle, occupiedSeat);
                 }
             }
 
@@ -499,8 +497,8 @@ void CPed::SetSyncer(CPlayer* pPlayer)
                 if (uiOccupiedSeat > 0xFF)
                     break;
 
-                const unsigned char ucOccupiedSeat = static_cast<unsigned char>(uiOccupiedSeat);
-                if (pVehicle && (this == pVehicle->GetOccupant(ucOccupiedSeat)))
+                const unsigned char occupiedSeat = static_cast<unsigned char>(uiOccupiedSeat);
+                if (pVehicle && (this == pVehicle->GetOccupant(occupiedSeat)))
                 {
                     // Warp us out of vehicle
                     CStaticFunctionDefinitions::RemovePedFromVehicle(this);
@@ -539,26 +537,4 @@ void CPed::SetJackingVehicle(CVehicle* pVehicle)
 
     if (m_pJackingVehicle)
         m_pJackingVehicle->SetJackingPed(this);
-}
-
-void CPed::SetHasJetPack(bool bHasJetPack)
-{
-    if (m_bHasJetPack == bHasJetPack)
-        return;
-
-    m_bHasJetPack = bHasJetPack;
-
-    if (!bHasJetPack)
-        return;
-
-    // Set weapon slot to 0 if weapon is disabled with jetpack to avoid HUD and audio bugs
-    eWeaponType weaponType = static_cast<eWeaponType>(GetWeaponType(GetWeaponSlot()));
-    if (weaponType <= WEAPONTYPE_UNARMED)
-        return;
-
-    bool weaponEnabled;
-    CStaticFunctionDefinitions::GetJetpackWeaponEnabled(weaponType, weaponEnabled);
-
-    if (!weaponEnabled)
-        CStaticFunctionDefinitions::SetPedWeaponSlot(this, 0);
 }

@@ -17,6 +17,7 @@
 #include <cef3/cef/include/cef_parser.h>
 #include "WebBrowserHelpers.h"
 #include "CWebApp.h"
+#include "CWebAppAuth.h"  // For GenerateAuthCode()
 #include <algorithm>
 #include <ranges>
 #include <filesystem>
@@ -53,6 +54,9 @@ CWebCore::CWebCore()
     m_iWhitelistRevision = 0;
     m_iBlacklistRevision = 0;
 
+    // Initialize auth code BEFORE CefInitialize (ensures webCore->m_AuthCode populated early)
+    m_AuthCode = WebAppAuth::GenerateAuthCode();
+
     MakeSureXMLNodesExist();
     InitialiseWhiteAndBlacklist();
 
@@ -62,11 +66,12 @@ CWebCore::CWebCore()
 
 CWebCore::~CWebCore()
 {
-    for (const auto& pWebView : m_WebViews)
-    {
-        if (pWebView) [[likely]]
-            pWebView->CloseBrowser();
-    }
+    std::ranges::for_each(m_WebViews,
+                          [](const auto& pWebView)
+                          {
+                              if (pWebView) [[likely]]
+                                  pWebView->CloseBrowser();
+                          });
     m_WebViews.clear();
     CefClearSchemeHandlerFactories();
 
@@ -130,7 +135,8 @@ bool CWebCore::Initialise(bool gpuEnabled)
 #endif
 
     // Read GTA path from registry to pass to CEF subprocess
-    const SString strGTAPath = GetCommonRegistryValue("", "GTA:SA Path");
+    int           iRegistryResult = 0;
+    const SString strGTAPath = GetCommonRegistryValue("", "GTA:SA Path", &iRegistryResult);
 
     // Check if process is running with elevated privileges
     // CEF subprocesses may have communication issues when running elevated
@@ -434,7 +440,25 @@ void CWebCore::DoEventQueuePulse()
         event.callback();
     }
 
-    // Invoke paint method if necessary on the main thread
+    // Request new frames from CEF using external begin frame scheduling
+    // This synchronizes CEF rendering with MTA's render loop, eliminating
+    // the previous 250ms blocking wait in OnPaint
+    for (auto& view : m_WebViews)
+    {
+        if (view->IsBeingDestroyed())
+            continue;
+
+        // Paused browsers still get a frame after a script changed them, so the texture never goes stale
+        const bool bFrameRequested = view->TakeFrameRequest();
+        if (view->GetRenderingPaused() && !bFrameRequested)
+            continue;
+
+        auto browser = view->GetCefBrowser();
+        if (browser)
+            browser->GetHost()->SendExternalBeginFrame();
+    }
+
+    // Copy rendered data to D3D textures on the main thread
     for (auto& view : m_WebViews)
     {
         view->UpdateTexture();
@@ -477,18 +501,16 @@ void CWebCore::RemoveWebViewTasks(CWebView* webView)
 {
     std::scoped_lock lock(m_TaskQueueMutex);
 
-    // C++17-compatible erase-remove idiom (std::erase_if is C++20)
-    m_TaskQueue.erase(std::remove_if(m_TaskQueue.begin(), m_TaskQueue.end(),
-                                     [webView](TaskEntry& entry)
-                                     {
-                                         if (entry.webView == webView)
-                                         {
-                                             entry.task(true);
-                                             return true;
-                                         }
-                                         return false;
-                                     }),
-                      m_TaskQueue.end());
+    std::erase_if(m_TaskQueue,
+                  [webView](TaskEntry& entry)
+                  {
+                      if (entry.webView == webView)
+                      {
+                          entry.task(true);
+                          return true;
+                      }
+                      return false;
+                  });
 }
 
 void CWebCore::DoTaskQueuePulse()
@@ -770,7 +792,20 @@ void CWebCore::OnPostScreenshot()
     // Re-draw textures
     for (auto& pWebView : m_WebViews)
     {
-        pWebView->GetCefBrowser()->GetHost()->Invalidate(CefBrowserHost::PaintElementType::PET_VIEW);
+        pWebView->RestoreTexture();
+
+        if (auto browser = pWebView->GetCefBrowser(); browser)
+            browser->GetHost()->Invalidate(CefBrowserHost::PaintElementType::PET_VIEW);
+    }
+}
+
+void CWebCore::OnFPSLimitChange(std::uint16_t fps)
+{
+    dassert(g_pCore->GetNetwork() != nullptr);  // Ensure network module is loaded
+    for (auto& webView : m_WebViews)
+    {
+        if (auto browser = webView->GetCefBrowser(); browser) [[likely]]
+            browser->GetHost()->SetWindowlessFrameRate(fps);
     }
 }
 

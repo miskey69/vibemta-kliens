@@ -34,9 +34,11 @@ static void InitializeGrenadeColModel()
 
 #define HOOKPOS_CTempColModels__Initialise  0x5BB87D
 #define HOOKSIZE_CTempColModels__Initialise 0x6
-static const unsigned int    RETURN_CTempColModels__Initialise = 0x5BB883;
-static void _declspec(naked) HOOK_CTempColModels__Initialise()
+static const unsigned int     RETURN_CTempColModels__Initialise = 0x5BB883;
+static void __declspec(naked) HOOK_CTempColModels__Initialise()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -51,9 +53,11 @@ static void _declspec(naked) HOOK_CTempColModels__Initialise()
 
 #define HOOKPOS_CFileLoader__LoadWeaponObject  0x5B401E
 #define HOOKSIZE_CFileLoader__LoadWeaponObject 0x5
-static const unsigned int    RETURN_CFileLoader__LoadWeaponObject = 0x5B4023;
-static void _declspec(naked) HOOK_CFileLoader__LoadWeaponObject()
+static const unsigned int     RETURN_CFileLoader__LoadWeaponObject = 0x5B4023;
+static void __declspec(naked) HOOK_CFileLoader__LoadWeaponObject()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {

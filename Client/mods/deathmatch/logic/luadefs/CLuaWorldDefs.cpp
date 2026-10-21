@@ -688,11 +688,11 @@ int CLuaWorldDefs::GetGarageSize(lua_State* luaVM)
         float fWidth;
         float fHeight;
 
-        if (CStaticFunctionDefinitions::GetGarageSize(iGarageID, fHeight, fWidth, fDepth))
+        if (CStaticFunctionDefinitions::GetGarageSize(static_cast<unsigned char>(iGarageID), fHeight, fWidth, fDepth))
         {
-            lua_pushnumber(luaVM, fHeight);
             lua_pushnumber(luaVM, fWidth);
             lua_pushnumber(luaVM, fDepth);
+            lua_pushnumber(luaVM, fHeight);
             return 3;
         }
     }
@@ -718,7 +718,7 @@ int CLuaWorldDefs::GetGarageBoundingBox(lua_State* luaVM)
         float fFront;
         float fBack;
 
-        if (CStaticFunctionDefinitions::GetGarageBoundingBox(iGarageID, fLeft, fRight, fFront, fBack))
+        if (CStaticFunctionDefinitions::GetGarageBoundingBox(static_cast<unsigned char>(iGarageID), fLeft, fRight, fFront, fBack))
         {
             lua_pushnumber(luaVM, fLeft);
             lua_pushnumber(luaVM, fRight);
@@ -1081,7 +1081,7 @@ int CLuaWorldDefs::SetGarageOpen(lua_State* luaVM)
 
     if (!argStream.HasErrors())
     {
-        if (CStaticFunctionDefinitions::SetGarageOpen(iGarageID, bOpen))
+        if (CStaticFunctionDefinitions::SetGarageOpen(static_cast<unsigned char>(iGarageID), bOpen))
         {
             lua_pushboolean(luaVM, true);
             return 1;
@@ -1138,7 +1138,8 @@ int CLuaWorldDefs::RemoveWorldBuilding(lua_State* luaVM)
             if (pResource)
             {
                 uint uiAmount;
-                CStaticFunctionDefinitions::RemoveWorldBuilding(iModelToRemove, fRadius, vecPosition.fX, vecPosition.fY, vecPosition.fZ, cInterior, uiAmount);
+                CStaticFunctionDefinitions::RemoveWorldBuilding(static_cast<unsigned short>(iModelToRemove), fRadius, vecPosition.fX, vecPosition.fY,
+                                                                vecPosition.fZ, cInterior, uiAmount);
 
                 lua_pushboolean(luaVM, true);
                 lua_pushnumber(luaVM, uiAmount);
@@ -1194,7 +1195,8 @@ int CLuaWorldDefs::RestoreWorldBuilding(lua_State* luaVM)
             if (pResource)
             {
                 uint uiAmount;
-                CStaticFunctionDefinitions::RestoreWorldBuilding(iModelToRestore, fRadius, vecPosition.fX, vecPosition.fY, vecPosition.fZ, cInterior, uiAmount);
+                CStaticFunctionDefinitions::RestoreWorldBuilding(static_cast<unsigned short>(iModelToRestore), fRadius, vecPosition.fX, vecPosition.fY,
+                                                                 vecPosition.fZ, cInterior, uiAmount);
 
                 lua_pushboolean(luaVM, true);
                 lua_pushnumber(luaVM, uiAmount);
@@ -1288,9 +1290,6 @@ bool CLuaWorldDefs::SetWorldSpecialPropertyEnabled(const WorldSpecialProperty pr
     if (!m_pClientGame->SetWorldSpecialProperty(property, enabled))
         return false;
 
-    if (!g_pNet->CanServerBitStream(eBitStreamVersion::WorldSpecialPropertyEvent))
-        return true;
-
     if (auto stream = g_pNet->AllocateNetBitStream())
     {
         stream->WriteString(EnumToString(property));
@@ -1372,7 +1371,7 @@ int CLuaWorldDefs::SetTrafficLightState(lua_State* luaVM)
 
         if (!argStream.HasErrors())
         {
-            if (CStaticFunctionDefinitions::SetTrafficLightState(iState))
+            if (CStaticFunctionDefinitions::SetTrafficLightState(static_cast<unsigned char>(iState)))
             {
                 lua_pushboolean(luaVM, true);
                 return 1;
@@ -1867,7 +1866,8 @@ int CLuaWorldDefs::SetSunColor(lua_State* luaVM)
 
     if (!argStream.HasErrors())
     {
-        g_pMultiplayer->SetSunColor(iCoreRed, iCoreGreen, iCoreBlue, iCoronaRed, iCoronaGreen, iCoronaBlue);
+        g_pMultiplayer->SetSunColor(static_cast<unsigned char>(iCoreRed), static_cast<unsigned char>(iCoreGreen), static_cast<unsigned char>(iCoreBlue),
+                                    static_cast<unsigned char>(iCoronaRed), static_cast<unsigned char>(iCoronaGreen), static_cast<unsigned char>(iCoronaBlue));
     }
     else
         m_pScriptDebugging->LogCustom(luaVM, argStream.GetFullErrorMessage());
@@ -2015,21 +2015,19 @@ int CLuaWorldDefs::ResetMoonSize(lua_State* luaVM)
 int CLuaWorldDefs::SetFPSLimit(lua_State* luaVM)
 {
     // bool setFPSLimit ( int fpsLimit )
-    int iLimit;
+    std::uint16_t fps;
 
-    CScriptArgReader argStream(luaVM);
-    argStream.ReadNumber(iLimit);
+    CScriptArgReader argReader(luaVM);
+    argReader.ReadNumber(fps);
 
-    if (!argStream.HasErrors())
+    if (!argReader.HasErrors())
     {
-        if (CStaticFunctionDefinitions::SetFPSLimit(iLimit))
-        {
-            lua_pushboolean(luaVM, true);
-            return 1;
-        }
+        CStaticFunctionDefinitions::SetClientFPSLimit(fps);
+        lua_pushboolean(luaVM, true);
+        return 1;
     }
     else
-        m_pScriptDebugging->LogCustom(luaVM, argStream.GetFullErrorMessage());
+        m_pScriptDebugging->LogCustom(luaVM, argReader.GetFullErrorMessage());
 
     lua_pushboolean(luaVM, false);
     return 1;
@@ -2037,14 +2035,12 @@ int CLuaWorldDefs::SetFPSLimit(lua_State* luaVM)
 
 int CLuaWorldDefs::GetFPSLimit(lua_State* luaVM)
 {
-    int iLimit;
-    if (CStaticFunctionDefinitions::GetFPSLimit(iLimit))
-    {
-        lua_pushnumber(luaVM, iLimit);
-        return 1;
-    }
+    // int getFPSLimit ()
+    std::uint16_t fps;
 
-    lua_pushboolean(luaVM, false);
+    CStaticFunctionDefinitions::GetFPSLimit(fps);
+
+    lua_pushnumber(luaVM, fps);
     return 1;
 }
 
@@ -2107,7 +2103,7 @@ bool CLuaWorldDefs::ResetCoronaReflectionsEnabled()
     return true;
 }
 
-std::variant<bool, float, CLuaMultiReturn<float, float, float>> CLuaWorldDefs::GetWorldProperty(WorldProperty property)
+std::variant<bool, float, CLuaMultiReturn<float, float, float>> CLuaWorldDefs::GetWorldProperty(WorldProperty::Enum property)
 {
     switch (property)
     {
@@ -2175,7 +2171,7 @@ std::variant<bool, float, CLuaMultiReturn<float, float, float>> CLuaWorldDefs::G
     return false;
 }
 
-bool CLuaWorldDefs::SetWorldProperty(WorldProperty property, float arg1, std::optional<float> arg2, std::optional<float> arg3)
+bool CLuaWorldDefs::SetWorldProperty(WorldProperty::Enum property, float arg1, std::optional<float> arg2, std::optional<float> arg3)
 {
     if (arg2.has_value() && arg3.has_value())
     {
@@ -2240,7 +2236,7 @@ bool CLuaWorldDefs::SetWorldProperty(WorldProperty property, float arg1, std::op
     return false;
 }
 
-bool CLuaWorldDefs::ResetWorldProperty(WorldProperty property)
+bool CLuaWorldDefs::ResetWorldProperty(WorldProperty::Enum property)
 {
     switch (property)
     {
@@ -2377,6 +2373,7 @@ CLuaMultiReturn<bool, CClientEntity*, int, float, float, float, float, float, fl
     CEntity* entity = g_pGame->GetWorld()->TestSphereAgainstWorld(
         sphereCenter, radius, ignoredEntity.has_value() ? ignoredEntity.value()->GetGameEntity() : nullptr, checkBuildings.value_or(true),
         checkVehicles.value_or(true), checkPeds.value_or(true), checkObjects.value_or(true), checkDummies.value_or(true), cameraIgnore.value_or(false), result);
+
     if (entity)
         collidedEntity = reinterpret_cast<CClientEntity*>(entity->GetStoredPointer());
 

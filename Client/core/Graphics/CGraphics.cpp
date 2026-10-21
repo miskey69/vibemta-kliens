@@ -27,6 +27,40 @@ extern std::atomic<bool> g_bInMTAScene;
 
 using namespace std;
 
+namespace
+{
+    // Convert a straight-alpha ARGB tint into its premultiplied form:
+    //
+    //     (R, G, B, A)  ->  (R*A/255, G*A/255, B*A/255, A)
+    //
+    // Needed when routing a translucent draw onto the (ONE, INVSRCALPHA)
+    // pipeline. That pipeline computes
+    //
+    //     out.rgb = src.rgb + dst.rgb * (1 - src.a)
+    //
+    // with src.rgb = tex.rgb * diff.rgb and src.a = tex.a * diff.a, so
+    // diff.a never enters the source rgb term. For a PM texel tex.rgb =
+    // R*A_tex, that leaves
+    //
+    //     out.rgb = R * A_tex * diff.rgb + dst.rgb * (1 - A_tex * diff.a)
+    //
+    // which is brighter than the correct PM composite by a factor of
+    // 1/diff.a during a fade. Premultiplying the diffuse here
+    // (diff.rgb *= diff.a) restores the missing factor and the equation
+    // reduces exactly to the PM "over" operator.
+    inline SColor PremultiplyAlpha(SColor c) noexcept
+    {
+        if (c.A == 0xFF)
+            return c;
+
+        const uint a = c.A;
+        c.R = static_cast<unsigned char>((c.R * a + 127) / 255);
+        c.G = static_cast<unsigned char>((c.G * a + 127) / 255);
+        c.B = static_cast<unsigned char>((c.B * a + 127) / 255);
+        return c;
+    }
+}  // namespace
+
 template <>
 CGraphics* CSingleton<CGraphics>::m_pSingleton = NULL;
 
@@ -54,25 +88,25 @@ CGraphics::CGraphics(CLocalGUI* pGUI)
     m_CurDrawMode = EDrawMode::NONE;
     m_CurBlendMode = EBlendMode::BLEND;
     m_bSkipMTARenderThisFrame = false;
-    std::unique_ptr<CRenderItemManager>          renderItemManager(new CRenderItemManager());
-    std::unique_ptr<CTileBatcher>                tileBatcher(new CTileBatcher());
-    std::unique_ptr<CLine3DBatcher>              line3DPreGUI(new CLine3DBatcher(true));
-    std::unique_ptr<CLine3DBatcher>              line3DPostFX(new CLine3DBatcher(true));
-    std::unique_ptr<CLine3DBatcher>              line3DPostGUI(new CLine3DBatcher(false));
-    std::unique_ptr<CMaterialLine3DBatcher>      materialLinePreGUI(new CMaterialLine3DBatcher(true));
-    std::unique_ptr<CMaterialLine3DBatcher>      materialLinePostFX(new CMaterialLine3DBatcher(true));
-    std::unique_ptr<CMaterialLine3DBatcher>      materialLinePostGUI(new CMaterialLine3DBatcher(false));
-    std::unique_ptr<CPrimitive3DBatcher>         primitive3DPreGUI(new CPrimitive3DBatcher(true));
-    std::unique_ptr<CPrimitive3DBatcher>         primitive3DPostFX(new CPrimitive3DBatcher(true));
-    std::unique_ptr<CPrimitive3DBatcher>         primitive3DPostGUI(new CPrimitive3DBatcher(false));
-    std::unique_ptr<CMaterialPrimitive3DBatcher> materialPrimitivePreGUI(new CMaterialPrimitive3DBatcher(true, this));
-    std::unique_ptr<CMaterialPrimitive3DBatcher> materialPrimitivePostFX(new CMaterialPrimitive3DBatcher(true, this));
-    std::unique_ptr<CMaterialPrimitive3DBatcher> materialPrimitivePostGUI(new CMaterialPrimitive3DBatcher(false, this));
-    std::unique_ptr<CPrimitiveBatcher>           primitiveBatcher(new CPrimitiveBatcher());
-    std::unique_ptr<CPrimitiveMaterialBatcher>   primitiveMaterialBatcher(new CPrimitiveMaterialBatcher(this));
-    std::unique_ptr<CScreenGrabberInterface>     screenGrabber(NewScreenGrabber());
-    std::unique_ptr<CPixelsManagerInterface>     pixelsManager(NewPixelsManager());
-    std::unique_ptr<CAspectRatioConverter>       aspectRatioConverter(new CAspectRatioConverter());
+    auto renderItemManager = std::make_unique<CRenderItemManager>();
+    auto tileBatcher = std::make_unique<CTileBatcher>();
+    auto line3DPreGUI = std::make_unique<CLine3DBatcher>(true);
+    auto line3DPostFX = std::make_unique<CLine3DBatcher>(true);
+    auto line3DPostGUI = std::make_unique<CLine3DBatcher>(false);
+    auto materialLinePreGUI = std::make_unique<CMaterialLine3DBatcher>(true);
+    auto materialLinePostFX = std::make_unique<CMaterialLine3DBatcher>(true);
+    auto materialLinePostGUI = std::make_unique<CMaterialLine3DBatcher>(false);
+    auto primitive3DPreGUI = std::make_unique<CPrimitive3DBatcher>(true);
+    auto primitive3DPostFX = std::make_unique<CPrimitive3DBatcher>(true);
+    auto primitive3DPostGUI = std::make_unique<CPrimitive3DBatcher>(false);
+    auto materialPrimitivePreGUI = std::make_unique<CMaterialPrimitive3DBatcher>(true, this);
+    auto materialPrimitivePostFX = std::make_unique<CMaterialPrimitive3DBatcher>(true, this);
+    auto materialPrimitivePostGUI = std::make_unique<CMaterialPrimitive3DBatcher>(false, this);
+    auto primitiveBatcher = std::make_unique<CPrimitiveBatcher>();
+    auto primitiveMaterialBatcher = std::make_unique<CPrimitiveMaterialBatcher>(this);
+    auto screenGrabber = std::unique_ptr<CScreenGrabberInterface>(NewScreenGrabber());
+    auto pixelsManager = std::unique_ptr<CPixelsManagerInterface>(NewPixelsManager());
+    auto aspectRatioConverter = std::make_unique<CAspectRatioConverter>();
 
     m_pRenderItemManager = renderItemManager.release();
     m_pTileBatcher = tileBatcher.release();
@@ -426,6 +460,19 @@ void CGraphics::SetBlendModeRenderStates(EBlendModeType blendMode)
 
             m_pDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
             m_pDevice->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+
+            // When drawing into a render target, use separate alpha blend to prevent double-premultiplication.
+            // Color blend stays SRC_ALPHA/INV_SRC_ALPHA; alpha channel uses ONE/INV_SRC_ALPHA so coverage accumulates correctly.
+            if (m_pRenderItemManager && m_pRenderItemManager->IsCustomRenderTargetActive())
+            {
+                m_pDevice->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
+                m_pDevice->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ONE);
+                m_pDevice->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_INVSRCALPHA);
+            }
+            else
+            {
+                m_pDevice->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+            }
         }
         break;
 
@@ -496,6 +543,34 @@ void CGraphics::SetBlendModeRenderStates(EBlendModeType blendMode)
             m_pDevice->SetRenderState(D3DRS_SHADEMODE, D3DSHADE_GOURAUD);
             m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
             m_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+            m_pDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
+
+            m_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+            m_pDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+            m_pDevice->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+            m_pDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
+            m_pDevice->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+            m_pDevice->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
+
+            m_pDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+            m_pDevice->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+        }
+        break;
+
+        case EBlendMode::RT_TEXTURE:
+        {
+            // Draw a render target texture to screen. The RT stores premultiplied-alpha RGB, so use ONE/INV_SRC_ALPHA
+            // to avoid applying alpha a second time (which would cause double-premultiplication).
+            m_pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+            m_pDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+            m_pDevice->SetRenderState(D3DRS_SHADEMODE, D3DSHADE_GOURAUD);
+            m_pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+            m_pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+            m_pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+            m_pDevice->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+            m_pDevice->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+            m_pDevice->SetRenderState(D3DRS_ALPHAREF, 0x01);
+            m_pDevice->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
             m_pDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
 
             m_pDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
@@ -1080,6 +1155,15 @@ void CGraphics::DrawMaterialPrimitiveQueued(std::vector<PrimitiveMaterialVertice
     sDrawQueueItem Item;
     Item.eType = QUEUE_PRIMITIVEMATERIAL;
     Item.blendMode = m_ActiveBlendMode;
+    // Same PM auto-route as DrawTextureQueued, so dxDrawMaterialPrimitive
+    // composites SVG (premultiplied) textures correctly under default blend.
+    if (Item.blendMode == EBlendMode::BLEND && pMaterial && pMaterial->m_bPremultipliedAlpha)
+    {
+        Item.blendMode = EBlendMode::ADD;
+        // See PremultiplyAlpha for the diffuse premultiply rationale (#3828).
+        for (auto& vert : *pVecVertices)
+            vert.Color = PremultiplyAlpha(vert.Color);
+    }
     Item.PrimitiveMaterial.eType = eType;
     Item.PrimitiveMaterial.pMaterial = pMaterial;
     Item.PrimitiveMaterial.pVecVertices = pVecVertices;
@@ -1134,6 +1218,16 @@ void CGraphics::DrawTextureQueued(float fX, float fY, float fWidth, float fHeigh
     // Set up a queue item
     sDrawQueueItem Item;
     Item.blendMode = m_ActiveBlendMode;
+    // Premultiplied-alpha textures (SVG) need the (ONE, INVSRCALPHA) pipeline,
+    // not the straight-alpha BLEND mode. Route the default blend to ADD when
+    // the script hasn't asked for a specific mode (issue #4891), and convert
+    // the diffuse tint to PM so a translucent dxDrawImage call still fades
+    // correctly through that pipeline (issue #3828).
+    if (Item.blendMode == EBlendMode::BLEND && pMaterial && pMaterial->m_bPremultipliedAlpha)
+    {
+        Item.blendMode = EBlendMode::ADD;
+        ulColor = PremultiplyAlpha(ulColor);
+    }
     Item.Texture.fX = fX;
     Item.Texture.fY = fY;
     Item.Texture.fWidth = fWidth;
@@ -1929,7 +2023,11 @@ void CGraphics::DrawQueueItem(const sDrawQueueItem& Item)
                 const D3DXVECTOR2* pRotationCenter = Item.Texture.fRotation ? &rotationCenter : NULL;
                 D3DXMATRIX         matrix;
                 D3DXMatrixTransformation2D(&matrix, NULL, 0.0f, &scaling, pRotationCenter, DegreesToRadians(Item.Texture.fRotation), &position);
-                CheckModes(EDrawMode::DX_SPRITE, Item.blendMode);
+                // Render target textures store premultiplied-alpha RGB; use RT_TEXTURE blend to avoid double-premultiplication.
+                EBlendModeType effectiveBlend = Item.blendMode;
+                if (effectiveBlend == EBlendMode::BLEND && DynamicCast<CRenderTargetItem>(pTexture) != nullptr)
+                    effectiveBlend = EBlendMode::RT_TEXTURE;
+                CheckModes(EDrawMode::DX_SPRITE, effectiveBlend);
                 m_pDXSprite->SetTransform(&matrix);
                 m_pDXSprite->Draw((IDirect3DTexture9*)pTexture->m_pD3DTexture, &cutImagePos, NULL, NULL,
                                   /*ModifyColorForBlendMode (*/ Item.Texture.ulColor /*, Item.blendMode )*/);

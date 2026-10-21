@@ -13,9 +13,10 @@
 
 #include <array>
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
+#include <format>
 #include <optional>
+#include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -30,12 +31,7 @@ namespace StackTraceHelpers
         PFUNCTION_TABLE_ACCESS_ROUTINE64 functionTableAccess = nullptr;
         PGET_MODULE_BASE_ROUTINE64       moduleBase = nullptr;
 
-        bool operator==(const StackWalkRoutines& other) const noexcept
-        {
-            return readMemory == other.readMemory && functionTableAccess == other.functionTableAccess && moduleBase == other.moduleBase;
-        }
-
-        bool operator!=(const StackWalkRoutines& other) const noexcept { return !(*this == other); }
+        bool operator==(const StackWalkRoutines&) const noexcept = default;
     };
 
     inline BOOL __stdcall LocalReadProcessMemory(HANDLE /*process*/, DWORD64 baseAddress, PVOID buffer, DWORD size, LPDWORD bytesRead) noexcept
@@ -57,8 +53,10 @@ namespace StackTraceHelpers
         __try
         {
             const auto srcAddr = static_cast<std::uint32_t>(baseAddress);
-            const auto srcPtr = reinterpret_cast<const char*>(static_cast<std::uintptr_t>(srcAddr));
-            std::memcpy(buffer, srcPtr, size);
+            const auto srcPtr = reinterpret_cast<const std::byte*>(static_cast<std::uintptr_t>(srcAddr));
+            const auto dest = std::span{reinterpret_cast<std::byte*>(buffer), size};
+            const auto srcSpan = std::span{srcPtr, size};
+            std::ranges::copy(srcSpan, dest.begin());
             if (bytesRead)
                 *bytesRead = size;
             return TRUE;
@@ -90,21 +88,12 @@ namespace StackTraceHelpers
 
     [[nodiscard]] inline StackWalkRoutines MakeStackWalkRoutines(bool useDbgHelp) noexcept
     {
-        StackWalkRoutines routines{};
-        routines.readMemory = &LocalReadProcessMemory;
-
         if (useDbgHelp)
         {
-            routines.functionTableAccess = SymFunctionTableAccess64;
-            routines.moduleBase = SymGetModuleBase64;
-        }
-        else
-        {
-            routines.functionTableAccess = nullptr;
-            routines.moduleBase = &LocalGetModuleBase;
+            return StackWalkRoutines{.readMemory = &LocalReadProcessMemory, .functionTableAccess = SymFunctionTableAccess64, .moduleBase = SymGetModuleBase64};
         }
 
-        return routines;
+        return StackWalkRoutines{.readMemory = &LocalReadProcessMemory, .functionTableAccess = nullptr, .moduleBase = &LocalGetModuleBase};
     }
 
     struct ModuleAddressInfo
@@ -112,9 +101,7 @@ namespace StackTraceHelpers
         std::string name;
         DWORD64     base;
 
-        bool operator==(const ModuleAddressInfo& other) const noexcept { return name == other.name && base == other.base; }
-
-        bool operator!=(const ModuleAddressInfo& other) const noexcept { return !(*this == other); }
+        bool operator==(const ModuleAddressInfo&) const noexcept = default;
     };
 
     [[nodiscard]] inline std::optional<ModuleAddressInfo> DescribeModule(DWORD64 address)
@@ -150,41 +137,42 @@ namespace StackTraceHelpers
         const auto             lastSlash = modulePathView.find_last_of("\\/");
         const std::string_view moduleName = (lastSlash != std::string_view::npos) ? modulePathView.substr(lastSlash + 1) : modulePathView;
 
-        ModuleAddressInfo info;
-        info.name = std::string{moduleName};
-        info.base = static_cast<DWORD64>(reinterpret_cast<std::uintptr_t>(mbi.AllocationBase));
+        ModuleAddressInfo info{.name = std::string{moduleName}, .base = static_cast<DWORD64>(reinterpret_cast<std::uintptr_t>(mbi.AllocationBase))};
         return info;
     }
 
     [[nodiscard]] inline std::string FormatAddressWithModule(DWORD64 address)
     {
-        std::array<char, 512> buffer{};
-
-        if (const auto moduleInfo = DescribeModule(address))
+        try
         {
-            const auto& name = moduleInfo->name;
-            const auto  base = moduleInfo->base;
-
-            if (address < base)
+            if (const auto moduleInfo = DescribeModule(address)) [[likely]]
             {
-                _snprintf_s(buffer.data(), buffer.size(), _TRUNCATE, "0x%llX", address);
-                return std::string{buffer.data()};
+                const auto& [name, base] = *moduleInfo;
+
+                if (address < base) [[unlikely]]
+                    return std::format("0x{:X}", address);
+
+                const DWORD64 offset = address - base;
+                return std::format("{}+0x{:X}", name, offset);
             }
 
-            const DWORD64 offset = address - base;
-            _snprintf_s(buffer.data(), buffer.size(), _TRUNCATE, "%s+0x%llX", name.c_str(), offset);
-            return std::string{buffer.data()};
+            return std::format("0x{:X}", address);
         }
-
-        _snprintf_s(buffer.data(), buffer.size(), _TRUNCATE, "0x%llX", address);
-        return std::string{buffer.data()};
+        catch (const std::format_error&)
+        {
+            return "<format_error>";
+        }
     }
 
     [[nodiscard]] inline std::string FormatAddressWithModuleAndAbsolute(DWORD64 address)
     {
-        std::array<char, 512> buffer{};
-        const auto            moduleStr = FormatAddressWithModule(address);
-        _snprintf_s(buffer.data(), buffer.size(), _TRUNCATE, "%s [0x%llX]", moduleStr.c_str(), address);
-        return std::string{buffer.data()};
+        try
+        {
+            return std::format("{} [0x{:X}]", FormatAddressWithModule(address), address);
+        }
+        catch (const std::format_error&)
+        {
+            return "<format_error>";
+        }
     }
 }  // namespace StackTraceHelpers

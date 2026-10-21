@@ -46,9 +46,11 @@ void OnMY_Rtl_fopen_Post(FILE* fh, DWORD calledFrom, const char* szFilename, con
 // Hook info
 #define HOOKPOS_Rtl_fopen  0x8232D8
 #define HOOKSIZE_Rtl_fopen 6
-DWORD                 RETURN_Rtl_fopen = 0x8232DE;
-void _declspec(naked) HOOK_Rtl_fopen()
+DWORD                         RETURN_Rtl_fopen = 0x8232DE;
+static void __declspec(naked) HOOK_Rtl_fopen()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {
@@ -92,9 +94,11 @@ void OnMY_Rtl_fclose(DWORD calledFrom, FILE* fh)
 // Hook info
 #define HOOKPOS_Rtl_fclose  0x82318B
 #define HOOKSIZE_Rtl_fclose 6
-DWORD                 RETURN_Rtl_fclose = 0x823192;
-void _declspec(naked) HOOK_Rtl_fclose()
+DWORD                         RETURN_Rtl_fclose = 0x823192;
+static void __declspec(naked) HOOK_Rtl_fclose()
 {
+    MTA_VERIFY_HOOK_LOCAL_SIZE;
+
     // clang-format off
     __asm
     {

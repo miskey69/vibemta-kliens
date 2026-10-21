@@ -102,8 +102,8 @@ public:
     int                               GetBackupAmount() { return m_iBackupAmount; }
     void                              NotifyDidBackup();
     bool                              ShouldCompactInternalDatabases();
-    unsigned short                    GetFPSLimit() { return m_usFPSLimit; };
-    bool                              SetFPSLimit(unsigned short usFPS, bool bSave);
+    std::uint16_t                     GetFPSLimit() const noexcept { return m_fpsLimit; };
+    bool                              SetFPSLimit(std::uint16_t fps, bool save);
     int                               GetPendingWorkToDoSleepTime();
     int                               GetNoWorkToDoSleepTime();
     int                               GetServerLogicFpsLimit() { return m_iServerLogicFpsLimit; };
@@ -147,9 +147,11 @@ public:
     void                            OnTickRateChange();
     void                            OnAseSettingChange();
     void                            OnPlayerTriggeredEventIntervalChange();
+    void                            OnAllowMultiCommandHandlersChange();
 
     int GetPlayerTriggeredEventInterval() const { return m_iPlayerTriggeredEventIntervalMs; }
     int GetMaxPlayerTriggeredEventsPerInterval() const { return m_iMaxPlayerTriggeredEventsPerInterval; }
+    int GetAllowMultiCommandHandlers() const noexcept { return m_allowMultiCommandHandlers; }
     int GetVoicePacketsInterval() const noexcept { return m_voicePacketsInterval; }
     int GetMaxVoicePacketsPerInterval() const noexcept { return m_maxVoicePacketsPerInterval; }
     int GetMaxVoiceBufferSize() const noexcept { return m_maxVoiceBufferSize; }
@@ -194,7 +196,7 @@ private:
     unsigned int               m_uiScriptDebugLogLevel;
     std::string                m_strAccessControlListFile;
     bool                       m_bVerifySerials;
-    unsigned short             m_usFPSLimit;
+    std::uint16_t              m_fpsLimit;
     int                        m_bDontBroadcastLan;
     std::set<SString>          m_DisableComboACMap;
     std::map<SString, SString> m_RulesForASEMap;
@@ -238,6 +240,7 @@ private:
     bool                       m_elementDataWhitelisted;
     bool                       m_checkDuplicateSerials;
     int                        m_checkResourceClientFiles;
+    int                        m_allowMultiCommandHandlers;
     int                        m_voicePacketsInterval{};
     int                        m_maxVoicePacketsPerInterval{};
     int                        m_maxVoiceBufferSize{};

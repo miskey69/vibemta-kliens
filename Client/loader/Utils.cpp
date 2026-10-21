@@ -809,7 +809,7 @@ ePathResult GetGamePath(SString& strOutResult, bool bFindIfMissing)
     if (strlen(pathList[0].c_str()))
     {
         // Check for replacement characters (?), to see if there are any (unsupported) unicode characters
-        if (strchr(pathList[0].c_str(), '?') > 0)
+        if (strchr(pathList[0].c_str(), '?') != nullptr)
             return GAME_PATH_UNICODE_CHARS;
     }
 
@@ -2280,16 +2280,17 @@ SString PadLeft(const SString& strText, uint uiNumSpaces, char cCharacter)
 //////////////////////////////////////////////////////////
 BOOL CALLBACK MyEnumWindowsProc(HWND hwnd, LPARAM lParam)
 {
-    WINDOWINFO windowInfo;
+    WINDOWINFO windowInfo{sizeof(WINDOWINFO)};
     if (GetWindowInfo(hwnd, &windowInfo))
     {
-        if (windowInfo.atomWindowType == reinterpret_cast<uint>(WC_DIALOG))
+        if (windowInfo.atomWindowType == static_cast<ATOM>(reinterpret_cast<ULONG_PTR>(WC_DIALOG)))
         {
             DWORD dwWindowProcessId = 0;
             GetWindowThreadProcessId(hwnd, &dwWindowProcessId);
             if (lParam == dwWindowProcessId)
             {
-                SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                // Match the topmost splash so GTA's device selection remains visible above it.
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
                 return false;
             }
         }
@@ -2300,6 +2301,22 @@ BOOL CALLBACK MyEnumWindowsProc(HWND hwnd, LPARAM lParam)
 bool IsDeviceSelectionDialogOpen(DWORD processID)
 {
     return !EnumWindows(MyEnumWindowsProc, processID);
+}
+
+BOOL CALLBACK FindVisibleGameWindow(HWND hwnd, LPARAM lParam)
+{
+    DWORD windowProcessId = 0;
+    GetWindowThreadProcessId(hwnd, &windowProcessId);
+    if (windowProcessId != static_cast<DWORD>(lParam) || !IsWindowVisible(hwnd))
+        return true;
+
+    WINDOWINFO windowInfo{sizeof(WINDOWINFO)};
+    return !GetWindowInfo(hwnd, &windowInfo) || windowInfo.atomWindowType == static_cast<ATOM>(reinterpret_cast<ULONG_PTR>(WC_DIALOG));
+}
+
+bool IsGameWindowOpen(DWORD processID)
+{
+    return !EnumWindows(FindVisibleGameWindow, processID);
 }
 
 //////////////////////////////////////////////////////////
@@ -2621,11 +2638,32 @@ WerCrashInfo QueryWerCrashInfo(DWORD targetExceptionCode)
 
     WerCrashInfo result;
 
-    const char* werArchivePath = "C:\\ProgramData\\Microsoft\\Windows\\WER\\ReportArchive";
-    SString     searchPattern = PathJoin(werArchivePath, "AppCrash_gta_sa.exe_*");
+    // WER stores reports in two locations:
+    // 1. User profile: %LOCALAPPDATA%\Microsoft\Windows\WER\ReportArchive (no admin needed)
+    // 2. System-wide: C:\ProgramData\Microsoft\Windows\WER\ReportArchive (needs admin)
+    // Check user profile first as it's more likely to have reports without admin privileges
+    std::vector<SString> werArchivePaths;
 
-    auto reportDirs = FindFiles(searchPattern, false, true, true);
-    if (reportDirs.empty())
+    char localAppData[MAX_PATH];
+    if (GetEnvironmentVariableA("LOCALAPPDATA", localAppData, MAX_PATH) > 0)
+    {
+        werArchivePaths.push_back(PathJoin(localAppData, "Microsoft\\Windows\\WER\\ReportArchive"));
+    }
+    werArchivePaths.push_back("C:\\ProgramData\\Microsoft\\Windows\\WER\\ReportArchive");
+
+    // Collect all report directories from both paths
+    std::vector<std::pair<SString, SString>> allReportDirs;  // <archivePath, reportDir>
+    for (const SString& werArchivePath : werArchivePaths)
+    {
+        SString searchPattern = PathJoin(werArchivePath, "AppCrash_gta_sa.exe_*");
+        auto    reportDirs = FindFiles(searchPattern, false, true, true);
+        for (const SString& dir : reportDirs)
+        {
+            allReportDirs.push_back({werArchivePath, dir});
+        }
+    }
+
+    if (allReportDirs.empty())
         return result;
 
     FILETIME ftNow;
@@ -2634,9 +2672,10 @@ WerCrashInfo QueryWerCrashInfo(DWORD targetExceptionCode)
     uliNow.LowPart = ftNow.dwLowDateTime;
     uliNow.HighPart = ftNow.dwHighDateTime;
 
-    for (auto it = reportDirs.rbegin(); it != reportDirs.rend(); ++it)
+    for (auto it = allReportDirs.rbegin(); it != allReportDirs.rend(); ++it)
     {
-        const SString& reportDir = *it;
+        const SString& werArchivePath = it->first;
+        const SString& reportDir = it->second;
         SString        reportPath = PathJoin(werArchivePath, reportDir, "Report.wer");
 
         HANDLE hFile = CreateFileA(reportPath, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -2658,7 +2697,7 @@ WerCrashInfo QueryWerCrashInfo(DWORD targetExceptionCode)
         if (uliNow.QuadPart < uliWrite.QuadPart || uliNow.QuadPart - uliWrite.QuadPart > maxAge)
         {
             CloseHandle(hFile);
-            break;
+            continue;  // Skip stale reports but check others from different paths
         }
 
         wchar_t wbuffer[8192]{};

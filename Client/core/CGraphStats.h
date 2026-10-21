@@ -8,8 +8,7 @@
  *
  *****************************************************************************/
 
-#ifndef CGRAPHSTATS_H
-#define CGRAPHSTATS_H
+#pragma once
 
 #define TIMING_GRAPH(name) GetGraphStats()->AddTimingPoint(name);
 
@@ -29,5 +28,3 @@ public:
 };
 
 CGraphStatsInterface* GetGraphStats();
-
-#endif  // CGRAPHSTATS_H
