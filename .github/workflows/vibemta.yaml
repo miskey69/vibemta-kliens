@@ -57,15 +57,25 @@ jobs:
           }
 
       - name: Build win32 (client)
-        run: win-build.bat release win32
-        shell: cmd
+        run: |
+          cmd /c "win-build.bat release win32" 2>&1 | Tee-Object -FilePath build-win32.log
+          if ($LASTEXITCODE -ne 0 -or (Select-String -Path build-win32.log -Pattern ' error [A-Z]+[0-9]+' -Quiet)) {
+            Select-String -Path build-win32.log -Pattern ' error [A-Z]+[0-9]+|fatal error' | Select-Object -First 25 | ForEach-Object { Write-Output ("::error::" + $_.Line.Trim()) }
+            exit 1
+          }
+        shell: powershell
         env:
           DXSDK_DIR: './utils/DXFiles/'
           CI: 'true'
 
       - name: Build x64 (server)
-        run: win-build.bat release x64
-        shell: cmd
+        run: |
+          cmd /c "win-build.bat release x64" 2>&1 | Tee-Object -FilePath build-x64.log
+          if ($LASTEXITCODE -ne 0 -or (Select-String -Path build-x64.log -Pattern ' error [A-Z]+[0-9]+' -Quiet)) {
+            Select-String -Path build-x64.log -Pattern ' error [A-Z]+[0-9]+|fatal error' | Select-Object -First 25 | ForEach-Object { Write-Output ("::error::" + $_.Line.Trim()) }
+            exit 1
+          }
+        shell: powershell
         env:
           DXSDK_DIR: './utils/DXFiles/'
           CI: 'true'
@@ -102,7 +112,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build
-        run: ./linux-build.sh --arch=x64
+        shell: bash
+        run: |
+          set -o pipefail
+          ./linux-build.sh --arch=x64 2>&1 | tee build.log
+          rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+            grep -E "error|Error|ERROR|undefined reference" build.log | head -25 | while IFS= read -r l; do echo "::error::$l"; done
+            tail -15 build.log | while IFS= read -r l; do echo "::warning::$l"; done
+          fi
+          exit $rc
 
       - name: Data + fork net module
         shell: bash
