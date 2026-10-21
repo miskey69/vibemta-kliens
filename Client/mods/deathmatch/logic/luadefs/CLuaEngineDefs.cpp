@@ -2609,11 +2609,7 @@ eModelLoadState CLuaEngineDefs::EngineStreamingGetModelLoadState(std::uint16_t m
     if (modelId >= g_pGame->GetCountOfAllFileIDs())
         throw std::invalid_argument("Expected a valid model ID at argument 1");
 
-    auto* pStreamingInfo = g_pGame->GetStreaming()->GetStreamingInfo(modelId);
-    if (!pStreamingInfo)
-        return eModelLoadState::LOADSTATE_NOT_LOADED;
-
-    return pStreamingInfo->loadState;
+    return g_pGame->GetStreaming()->GetStreamingInfo(modelId)->loadState;
 }
 
 void CLuaEngineDefs::EnginePreloadWorldArea(CVector position, std::optional<PreloadAreaOption> option)

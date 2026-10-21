@@ -14,7 +14,6 @@
 #include <vector>
 #include <string>
 #include <tuple>
-#include <unordered_set>
 
 class CClientEntityBase;
 class CD3DDUMMY;
@@ -46,8 +45,8 @@ struct SReplacementTextures
 
     std::vector<RwTexture*> textures;              // List of textures we want to inject into TXD's
     std::vector<SPerTxd>    perTxdList;            // TXD's which have been modified
-    std::unordered_set<unsigned short> usedInTxdIds;   // O(1) contains/erase for streaming hot path
-    std::unordered_set<unsigned short> usedInModelIds; // O(1) contains/erase for streaming hot path
+    std::vector<unsigned short> usedInTxdIds;
+    std::vector<unsigned short> usedInModelIds;
     bool                    bHasRequestedSpace = false;
 };
 
@@ -131,7 +130,4 @@ public:
     virtual void RwMatrixSetPosition(RwMatrix& rwInOutMatrix, const CVector& vecPosition) = 0;
     virtual void RwMatrixGetScale(const RwMatrix& rwMatrix, CVector& vecOutScale) = 0;
     virtual void RwMatrixSetScale(RwMatrix& rwInOutMatrix, const CVector& vecScale) = 0;
-
-    // New methods MUST be added at the end to preserve vtable order.
-    virtual void RebindClumpTexturesToTxd(RpClump* pClump, unsigned short usTxdId) = 0;
 };

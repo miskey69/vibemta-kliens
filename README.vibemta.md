@@ -1,7 +1,7 @@
 # VibeMTA kliens
 
 A VibeMTA szerver saját kliense: a [Multi Theft Auto: San Andreas](https://github.com/multitheftauto/mtasa-blue)
-fő (`master`, 1.7) ágának (a 2026.01.06-i `a6897991` állapot – ehhez illik a forkoknak adott netc.dll) módosított változata, GPLv3 licenc alatt (lásd `LICENSE`).
+fő (`master`, 1.7) ágának (a 2025.12.04-i `5c60c448` állapot (r25982) – ehhez illik a forkoknak adott netc.dll) módosított változata, GPLv3 licenc alatt (lásd `LICENSE`).
 
 A módosítások a `VIBEMTA` makró alatt vannak (`Shared/sdk/vibemta.h`):
 - indításkor egyből a VibeMTA szerverre csatlakozik, nincs MTA főmenü / szerverböngésző

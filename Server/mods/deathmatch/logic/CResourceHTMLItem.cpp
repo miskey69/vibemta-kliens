@@ -136,17 +136,7 @@ HttpStatusCode CResourceHTMLItem::Request(HttpRequest* ipoHttpRequest, HttpRespo
         args.CallGlobal(m_pVM, "renderPage");
         // g_pGame->Unlock(); // release the mutex
 
-        try
-        {
-            ipoHttpResponse->SetBody(m_strPageBuffer.c_str(), m_strPageBuffer.size());
-        }
-        catch (const std::bad_alloc&)
-        {
-            m_strPageBuffer.clear();
-            ipoHttpResponse->SetBody("Server out of memory", strlen("Server out of memory"));
-            m_bIsBeingRequested = false;
-            return HTTP_STATUS_CODE_500_INTERNAL_SERVER_ERROR;
-        }
+        ipoHttpResponse->SetBody(m_strPageBuffer.c_str(), m_strPageBuffer.size());
         m_strPageBuffer.clear();
     }
     else
@@ -156,39 +146,14 @@ HttpStatusCode CResourceHTMLItem::Request(HttpRequest* ipoHttpRequest, HttpRespo
         if (file)
         {
             fseek(file, 0, SEEK_END);
-            long lBufferLength = ftell(file);
+            long  lBufferLength = ftell(file);
+            char* pBuffer = new char[lBufferLength];
             rewind(file);
-
-            if (lBufferLength < 0)
-            {
-                fclose(file);
-                ipoHttpResponse->SetBody("Failed to determine file size", strlen("Failed to determine file size"));
-                m_bIsBeingRequested = false;
-                return HTTP_STATUS_CODE_500_INTERNAL_SERVER_ERROR;
-            }
-
-            char* pBuffer = nullptr;
-            try
-            {
-                pBuffer = new char[lBufferLength];
-                size_t bytesRead = fread(pBuffer, 1, lBufferLength, file);
-                fclose(file);
-                file = nullptr;
-
-                ipoHttpResponse->oResponseHeaders["content-type"] = m_strMime;
-                ipoHttpResponse->SetBody(pBuffer, static_cast<int>(bytesRead));
-                delete[] pBuffer;
-            }
-            catch (const std::bad_alloc&)
-            {
-                delete[] pBuffer;
-                if (file)
-                    fclose(file);
-
-                ipoHttpResponse->SetBody("Server out of memory", strlen("Server out of memory"));
-                m_bIsBeingRequested = false;
-                return HTTP_STATUS_CODE_500_INTERNAL_SERVER_ERROR;
-            }
+            fread(pBuffer, 1, lBufferLength, file);
+            fclose(file);
+            ipoHttpResponse->oResponseHeaders["content-type"] = m_strMime;
+            ipoHttpResponse->SetBody(pBuffer, lBufferLength);
+            delete[] pBuffer;
         }
         else
         {

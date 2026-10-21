@@ -77,17 +77,13 @@ bool CClientIMGManager::Exists(CClientIMG* pIMG)
 
 CClientIMG* CClientIMGManager::GetElementThatLinked(unsigned int uiModel)
 {
-    auto* pStreamingInfo = g_pGame->GetStreaming()->GetStreamingInfo(uiModel);
-    if (!pStreamingInfo)
-        return nullptr;
-
-    uchar ucArhiveID = pStreamingInfo->archiveId;
+    uchar ucArhiveID = g_pGame->GetStreaming()->GetStreamingInfo(uiModel)->archiveId;
     return GetElementFromArchiveID(ucArhiveID);
 }
 
 bool CClientIMGManager::IsLinkableModel(unsigned int uiModel)
 {
-    return uiModel < g_pGame->GetCountOfAllFileIDs();
+    return uiModel <= 26316;            // StreamModelInfoSize
 }
 
 bool CClientIMGManager::RestoreModel(unsigned int uiModel)

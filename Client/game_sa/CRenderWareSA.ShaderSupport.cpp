@@ -194,18 +194,8 @@ void CRenderWareSA::PulseWorldTextureWatch()
             for (std::vector<RwTexture*>::iterator iter = textureList.begin(); iter != textureList.end(); iter++)
             {
                 RwTexture*  texture = *iter;
-                
-                // Check texture pointer - TXD could have been unloaded between GetTxdTextures and now,
-                // leaving us with a dangling pointer that could contain garbage data
-                if (!texture || !SharedUtil::IsReadablePointer(texture, sizeof(RwTexture)))
-                    continue;
-                
                 const char* szTextureName = texture->name;
-                
-                // Check raster pointer
-                CD3DDUMMY*  pD3DData = (texture->raster && SharedUtil::IsReadablePointer(texture->raster, sizeof(RwRaster)))
-                    ? (CD3DDUMMY*)texture->raster->renderResource : NULL;
-                
+                CD3DDUMMY*  pD3DData = texture->raster ? (CD3DDUMMY*)texture->raster->renderResource : NULL;
                 if (!MapContains(m_SpecialTextures, texture))
                     StreamingAddedTexture(action.usTxdId, szTextureName, pD3DData);
             }
@@ -234,10 +224,6 @@ void CRenderWareSA::PulseWorldTextureWatch()
 ////////////////////////////////////////////////////////////////
 void CRenderWareSA::StreamingAddedTexture(ushort usTxdId, const SString& strTextureName, CD3DDUMMY* pD3DData)
 {
-    // Skip textures without valid D3D data or name - shader matching requires both
-    if (!pD3DData || strTextureName.empty())
-        return;
-
     STexInfo* pTexInfo = CreateTexInfo(usTxdId, strTextureName, pD3DData);
     OnTextureStreamIn(pTexInfo);
 }
@@ -274,50 +260,6 @@ void CRenderWareSA::StreamingRemovedTxd(ushort usTxdId)
 
 ////////////////////////////////////////////////////////////////
 //
-// CRenderWareSA::RemoveStreamingTexture
-//
-// Remove a single texture that was added via StreamingAddedTexture.
-// Finds the texture by matching TXD ID and D3D data pointer.
-//
-////////////////////////////////////////////////////////////////
-void CRenderWareSA::RemoveStreamingTexture(unsigned short usTxdId, CD3DDUMMY* pD3DData)
-{
-    if (!pD3DData)
-        return;
-
-    typedef std::multimap<ushort, STexInfo*>::iterator IterType;
-    std::pair<IterType, IterType> range = m_TexInfoMap.equal_range(usTxdId);
-    for (IterType iter = range.first; iter != range.second;)
-    {
-        STexInfo* pTexInfo = iter->second;
-        if (pTexInfo && pTexInfo->pD3DData == pD3DData)
-        {
-            OnTextureStreamOut(pTexInfo);
-            DestroyTexInfo(pTexInfo);
-            m_TexInfoMap.erase(iter++);
-            return;  // Only one entry per D3D data
-        }
-        else
-            ++iter;
-    }
-}
-
-////////////////////////////////////////////////////////////////
-//
-// CRenderWareSA::IsTexInfoRegistered
-//
-// Check if a D3D data pointer is already registered in the shader system.
-//
-////////////////////////////////////////////////////////////////
-bool CRenderWareSA::IsTexInfoRegistered(CD3DDUMMY* pD3DData) const
-{
-    if (!pD3DData)
-        return false;
-    return MapContains(m_D3DDataTexInfoMap, pD3DData);
-}
-
-////////////////////////////////////////////////////////////////
-//
 // CRenderWareSA::ScriptAddedTxd
 //
 // Called when a TXD is loaded outside of streaming
@@ -327,28 +269,13 @@ bool CRenderWareSA::IsTexInfoRegistered(CD3DDUMMY* pD3DData) const
 void CRenderWareSA::ScriptAddedTxd(RwTexDictionary* pTxd)
 {
     TIMING_CHECKPOINT("+ScriptAddedTxd");
-
-    // Validate TXD pointer before iterating
-    if (!pTxd || !SharedUtil::IsReadablePointer(pTxd, sizeof(RwTexDictionary)))
-    {
-        TIMING_CHECKPOINT("-ScriptAddedTxd");
-        return;
-    }
-
     std::vector<RwTexture*> textureList;
     GetTxdTextures(textureList, pTxd);
     for (std::vector<RwTexture*>::iterator iter = textureList.begin(); iter != textureList.end(); iter++)
     {
         RwTexture*  texture = *iter;
-        if (!texture || !SharedUtil::IsReadablePointer(texture, sizeof(RwTexture)))
-            continue;
-
         const char* szTextureName = texture->name;
-        CD3DDUMMY*  pD3DData = (texture->raster && SharedUtil::IsReadablePointer(texture->raster, sizeof(RwRaster)))
-            ? (CD3DDUMMY*)texture->raster->renderResource : NULL;
-
-        if (!pD3DData || !szTextureName[0])
-            continue;
+        CD3DDUMMY*  pD3DData = texture->raster ? (CD3DDUMMY*)texture->raster->renderResource : NULL;
 
         // Added texture
         STexInfo* pTexInfo = CreateTexInfo(texture, szTextureName, pD3DData);
@@ -393,21 +320,12 @@ void CRenderWareSA::ScriptRemovedTexture(RwTexture* pTex)
 ////////////////////////////////////////////////////////////////
 void CRenderWareSA::SpecialAddedTexture(RwTexture* texture, const char* szTextureName)
 {
-    if (!texture || !SharedUtil::IsReadablePointer(texture, sizeof(RwTexture)))
-        return;
-
     if (!szTextureName)
         szTextureName = texture->name;
-    if (!szTextureName || !szTextureName[0])
-        return;
-
-    CD3DDUMMY* pD3DData = (texture->raster && SharedUtil::IsReadablePointer(texture->raster, sizeof(RwRaster)))
-        ? (CD3DDUMMY*)texture->raster->renderResource : NULL;
-
-    if (!pD3DData)
-        return;
 
     OutputDebug(SString("Adding special texture %s", szTextureName));
+
+    CD3DDUMMY* pD3DData = texture->raster ? (CD3DDUMMY*)texture->raster->renderResource : NULL;
 
     // Added texture
     STexInfo* pTexInfo = CreateTexInfo(texture, szTextureName, pD3DData);
@@ -486,14 +404,8 @@ STexInfo* CRenderWareSA::CreateTexInfo(const STexTag& texTag, const SString& str
 void CRenderWareSA::DestroyTexInfo(STexInfo* pTexInfo)
 {
     // Remove from D3DData lookup map
-    // Always remove if the current entry matches this pTexInfo to prevent dangling pointers.
-    // Multiple STexInfo objects could reference the same D3D data (e.g., same texture in different TXDs),
-    // so we only remove if this specific STexInfo is the registered one.
-    STexInfo* pCurrentEntry = MapFindRef(m_D3DDataTexInfoMap, pTexInfo->pD3DData);
-    if (pCurrentEntry == pTexInfo)
-    {
+    if (MapFindRef(m_D3DDataTexInfoMap, pTexInfo->pD3DData) == pTexInfo)
         MapRemove(m_D3DDataTexInfoMap, pTexInfo->pD3DData);
-    }
 
     delete pTexInfo;
 }
