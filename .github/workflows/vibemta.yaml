@@ -105,15 +105,27 @@ jobs:
         run: ./linux-build.sh --arch=x64
 
       - name: Data + fork net module
+        shell: bash
         run: |
-          utils/premake5 install_data
-          if curl -fsSL "$BDATA/fork-support/net_64.so" -o /tmp/net_64.so; then
-            cp /tmp/net_64.so Bin/server/x64/net.so
-            cp /tmp/net_64.so Bin/server/x64/net_d.so
-            echo "fork-support server net module installed"
+          set -uo pipefail
+          note() { echo "::notice::$*"; echo "$*"; }
+          fail() { echo "::error::$*"; exit 1; }
+          get() { curl -fsSL "$1" -o "$2" 2>/dev/null || wget -q "$1" -O "$2" 2>/dev/null; }
+          ls -la Bin Bin/server Bin/server/x64 2>&1 | head -60
+          mkdir -p Bin/server/x64 Bin/server/mods/deathmatch
+          # configok (mtaserver.conf, acl.xml, ...)
+          cp -n Server/mods/deathmatch/*.conf Server/mods/deathmatch/*.xml Bin/server/mods/deathmatch/ 2>/dev/null || true
+          cp -n Server/mods/deathmatch/mtaserver.conf.template Bin/server/mods/deathmatch/ 2>/dev/null || true
+          # szerver net modul: fork-support, különben a sima fejlesztői
+          if get "$BDATA/fork-support/net_64.so" Bin/server/x64/net.so; then
+            note "fork-support net_64.so installed"
+          elif get "$BDATA/1.6/net_64.so" Bin/server/x64/net.so; then
+            echo "::warning::No fork-support net_64.so on the mirror, using the regular developer server net module"
           else
-            echo "::warning::No fork-support net_64.so on the mirror, keeping the regular developer server net module"
+            fail "could not download any server net module"
           fi
+          cp Bin/server/x64/net.so Bin/server/x64/net_d.so
+          ls -la Bin/server Bin/server/x64
 
       - name: Package
         run: |
