@@ -489,6 +489,11 @@ void SetMTASAPathSource(bool bReadFromRegistry)
 
         // Save to a temp registry key
         SetRegistryValue("", "Last Run Location", strLaunchPath);
+#ifdef VIBEMTA
+        // netc.dll (closed source) has its own GetMTASABaseDir that reads 'Last Run Location' from the stock
+        // major-version branch (e.g. ...\San Andreas All\1.7), not the VibeMTA branch -> U01 if missing.
+        SetVersionRegistryValue(GetMajorVersionString(), "", "Last Run Location", strLaunchPath);
+#endif
         g_strMTASAPath = strLaunchPath;
     }
 }
