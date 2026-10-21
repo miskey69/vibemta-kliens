@@ -239,9 +239,6 @@ void CInstallManager::InitSequencer()
 //////////////////////////////////////////////////////////
 void CInstallManager::SetMTASAPathSource(const SString& strCommandLineIn)
 {
-    // Update some settings which are used by ReportLog
-    UpdateSettingsForReportLog();
-
     InitSequencer();
     RestoreSequencerFromSnapshot(strCommandLineIn);
 
@@ -250,6 +247,10 @@ void CInstallManager::SetMTASAPathSource(const SString& strCommandLineIn)
         ::SetMTASAPathSource(true);
     else
         ::SetMTASAPathSource(false);
+
+    // Update some settings which are used by ReportLog. Must run after the path source is resolved (as upstream does):
+    // it loads netc.dll (UpdateMTAVersionApplicationSetting), which needs 'Last Run Location' to be set already (else U01).
+    UpdateSettingsForReportLog();
 }
 
 //////////////////////////////////////////////////////////
