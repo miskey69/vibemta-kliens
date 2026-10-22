@@ -180,9 +180,30 @@ jobs:
           name: linux
           path: out/
 
+  launcher:
+    name: Launcher (telepito)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: launcher
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build installer
+        run: |
+          npm install --no-audit --no-fund
+          npm run dist
+          dir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher
+          path: launcher/dist/VibeMTA-Telepito.exe
+
   release:
     name: Release
-    needs: [windows, linux]
+    needs: [windows, linux, launcher]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

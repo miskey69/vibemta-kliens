@@ -1,0 +1,56 @@
+{
+  "name": "vibemta-launcher",
+  "productName": "VibeMTA",
+  "version": "1.3.0",
+  "description": "VibeMTA launcher",
+  "main": "src/main.js",
+  "author": "VibeMTA",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "extract-zip": "^2.0.1"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "build": {
+    "appId": "hu.vibemta.launcher",
+    "productName": "VibeMTA",
+    "copyright": "VibeMTA",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.png",
+      "artifactName": "VibeMTA-Telepito.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "VibeMTA",
+      "uninstallDisplayName": "VibeMTA",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

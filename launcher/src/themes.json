@@ -1,0 +1,7 @@
+[
+  { "id": "vibe", "name": "Vibe", "accent": "#ff4586", "accent2": "#d9336e", "bg": "#0e0c12", "panel": "#18141e", "text": "#f1eef4", "muted": "#9a93a4", "glow1": "#ff4586", "glow2": "#7b3cff" },
+  { "id": "ejfel", "name": "Éjfél", "accent": "#4c8dff", "accent2": "#2f63d6", "bg": "#0a0d14", "panel": "#121826", "text": "#eef2fa", "muted": "#8d97ab", "glow1": "#2f6bff", "glow2": "#00c2d1" },
+  { "id": "naplemente", "name": "Naplemente", "accent": "#ff8a3d", "accent2": "#e0602a", "bg": "#110c0a", "panel": "#1d1512", "text": "#f7efe9", "muted": "#a69589", "glow1": "#ff7a2e", "glow2": "#ff3d6e" },
+  { "id": "smaragd", "name": "Smaragd", "accent": "#2fd08a", "accent2": "#1fa56b", "bg": "#090f0d", "panel": "#121b17", "text": "#ecf6f1", "muted": "#8aa196", "glow1": "#1fbf7a", "glow2": "#2a7bff" },
+  { "id": "grafit", "name": "Grafit", "accent": "#e8e8ec", "accent2": "#b9b9c2", "bg": "#0c0c0e", "panel": "#17171a", "text": "#f2f2f4", "muted": "#94949c", "glow1": "#5a5a66", "glow2": "#34343c" }
+]

@@ -1,0 +1,23 @@
+{
+  "serverName": "VibeMTA",
+  "servers": [
+    {
+      "id": "main",
+      "label": "Fő szerver",
+      "host": "212.73.137.40",
+      "port": 22314
+    },
+    {
+      "id": "local",
+      "label": "Localhost",
+      "host": "127.0.0.1",
+      "port": 22003
+    }
+  ],
+  "host": "212.73.137.40",
+  "port": 22314,
+  "defaultClientDir": "C:\\VibeMTA",
+  "releaseApi": "https://api.github.com/repos/miskey69/vibemta-kliens/releases/latest",
+  "clientAsset": "VibeMTA-Kliens.zip",
+  "newsUrl": ""
+}

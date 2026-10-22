@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>VibeMTA</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="bg">
+    <div class="glow g1"></div><div class="glow g2"></div><div class="grid"></div>
+  </div>
+
+  <header class="titlebar">
+    <div class="tb-left"><img src="logo_crop.png" alt=""><span>VibeMTA</span></div>
+    <div class="tb-right">
+      <button class="tb-btn" id="btnSettings" title="Beállítások"><svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      <button class="tb-btn" id="btnMin" title="Kis méret"><svg viewBox="0 0 12 12"><path d="M2 6.5h8" /></svg></button>
+      <button class="tb-btn close" id="btnClose" title="Bezárás"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="hero">
+      <img class="hero-logo" src="logo_crop.png" alt="VibeMTA">
+      <div class="hero-sub">San Andreas · Multiplayer</div>
+
+      <div class="servers" id="servers"></div>
+
+      <div class="progress hidden" id="progress">
+        <div class="pr-top">
+          <span id="prPhase">Kliens letöltése</span>
+          <span id="prPct">0%</span>
+        </div>
+        <div class="pr-bar"><div class="pr-fill" id="prFill"></div></div>
+        <div class="pr-bottom">
+          <span id="prInfo">Kapcsolódás...</span>
+          <button class="link" id="btnCancel">Mégse</button>
+        </div>
+      </div>
+      <div class="note" id="playNote"></div>
+    </section>
+
+    <aside class="news">
+      <div class="news-head">Hírek</div>
+      <div class="news-list" id="newsList"></div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <span id="clientInfo">Kliens keresése...</span>
+    <span id="verInfo"></span>
+  </footer>
+
+  <!-- beállítások -->
+  <div class="overlay hidden" id="settings">
+    <div class="sheet">
+      <div class="sheet-head">
+        <span>Beállítások</span>
+        <button class="tb-btn round" id="btnSettingsClose" title="Bezárás"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg></button>
+      </div>
+
+      <div class="sec">
+        <div class="sec-title">Téma</div>
+        <div class="themes" id="themeList"></div>
+        <div class="sec-hint">Saját témát a témák mappába tehetsz (JSON). <button class="link" id="btnThemeDir">Témák mappa megnyitása</button></div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-title">Kliens mappa</div>
+        <div class="path-row">
+          <div class="path" id="clientDir"></div>
+          <button class="btn" id="btnPickDir">Módosítás</button>
+          <button class="btn ghost" id="btnOpenDir">Megnyitás</button>
+        </div>
+        <div class="sec-hint" id="dirHint"></div>
+      </div>
+
+      <div class="sec">
+        <label class="toggle">
+          <input type="checkbox" id="optClose">
+          <span class="tg"></span>
+          <span>A launcher bezárása a játék indításakor</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
