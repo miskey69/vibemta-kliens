@@ -849,11 +849,15 @@ void CMainMenu::SetVisible(bool bVisible, bool bOverlay, bool bFrameDelay)
         m_pFiller->SetVisible(true);
         m_pFiller2->SetVisible(true);
 #ifdef VIBEMTA
+        // VibeMTA: before joining only the branded loading background shows. In game (Esc menu) only the menu items
+        // show over a dimmed game: the big branded background/logo would overlap the server's own UI.
         m_pCanvas->SetVisible(m_bIsIngame);
+        m_pLogo->SetVisible(!m_bIsIngame);
+        m_pBackground->SetVisible(!m_bIsIngame);
 #else
         m_pCanvas->SetVisible(true);
-#endif
         m_pBackground->SetVisible(true);
+#endif
     }
 
     m_bHideGame = !bOverlay;
@@ -880,9 +884,7 @@ void CMainMenu::SetIsIngame(bool bIsIngame)
         {
 #ifdef VIBEMTA
             m_iMoveTargetPos = m_iFirstItemCentre;
-            m_bVibeSession = true;
-            if (m_ucFade != FADE_INVISIBLE)
-                m_pCanvas->SetVisible(true);
+            m_bVibeSession = true;            // the menu items only appear when the player opens the menu (Esc)
 #else
             m_iMoveTargetPos = m_iSecondItemCentre;
 #endif
