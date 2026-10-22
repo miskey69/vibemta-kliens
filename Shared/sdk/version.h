@@ -46,7 +46,7 @@
 #define MTASA_VERSION_MINOR       7
 #define MTASA_VERSION_MAINTENANCE 0
 #define MTASA_VERSION_TYPE        VERSION_TYPE_UNSTABLE   // VibeMTA: public fork release (see note above)
-#define MTASA_VERSION_BUILD       25982                   // VibeMTA: build number of the fork-support net modules
+#define MTASA_VERSION_BUILD       25984                   // VibeMTA: build number reported by the fork-support netc (server log: 1.7.0-5.25984.0)
 
 #include "../build_overrides.h"
 
