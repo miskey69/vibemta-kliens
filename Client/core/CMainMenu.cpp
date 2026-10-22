@@ -323,7 +323,7 @@ CMainMenu::CMainMenu(CGUI* pManager)
     if (CXMLNode* pOldNode = pConfig->FindSubNode(CONFIG_NODE_SERVER_INT))
         pConfig->DeleteSubNode(pOldNode);
 
-#ifdef CI_BUILD
+#if defined(CI_BUILD) && !defined(VIBEMTA)            // VibeMTA: no red "feature-branch build" bar
     // Add feature branch alert
     m_pFeatureBranchAlertTexture.reset(reinterpret_cast<CGUITexture*>(m_pManager->CreateTexture()));
     std::int32_t buffer = 0xFFFF0000;
