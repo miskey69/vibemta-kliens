@@ -149,6 +149,25 @@ jobs:
           cp Bin/server/x64/net.so Bin/server/x64/net_d.so
           ls -la Bin/server Bin/server/x64
 
+      - name: Bundle MySQL client library (hosting containers have no libmysqlclient21)
+        shell: bash
+        run: |
+          set -euo pipefail
+          (apt-get update -qq && apt-get install -y -qq patchelf) >/dev/null 2>&1 || true
+          cd Bin/server/x64
+          ldd dbconmy.so || true
+          # libmysqlclient + a nem-glibc függőségei a dbconmy.so mellé
+          for lib in libmysqlclient.so.21 libssl.so.3 libcrypto.so.3 libzstd.so.1; do
+            src=$(ldd dbconmy.so | awk -v l="$lib" '$1==l {print $3}')
+            if [ -z "$src" ]; then src=$(ldconfig -p | awk -v l="$lib" '$1==l && /x86-64/ {print $NF; exit}'); fi
+            if [ -n "$src" ] && [ -f "$src" ]; then cp -L "$src" "./$lib"; echo "bundled $lib <- $src"; else echo "::warning::$lib not found"; fi
+          done
+          # a dbconmy.so és a libmysqlclient a saját mappájában keresse a könyvtárakat
+          patchelf --set-rpath '$ORIGIN' dbconmy.so
+          [ -f libmysqlclient.so.21 ] && patchelf --set-rpath '$ORIGIN' libmysqlclient.so.21
+          readelf -d dbconmy.so | grep -iE 'runpath|rpath'
+          ls -la
+
       - name: Package
         run: |
           mkdir -p out
